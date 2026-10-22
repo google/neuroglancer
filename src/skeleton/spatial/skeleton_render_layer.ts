@@ -55,7 +55,7 @@ import {
   type SkeletonFragmentSource,
   type SkeletonNode,
 } from "#src/skeleton/api.js";
-import type { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import type { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   DEFAULT_FRAGMENT_MAIN,
   getSkeletonNodeDiameter,
@@ -209,7 +209,7 @@ export interface SpatiallyIndexedSkeletonLayerOptions {
   readonly displayState: SpatiallyIndexedSkeletonLayerDisplayState & {
     readonly localPosition: WatchableValueInterface<Float32Array>;
   };
-  readonly editState: SpatialSkeletonState;
+  readonly editSession: SpatialSkeletonEditSession;
   readonly nodeSelection: SkeletonNodeHighlightSelection;
   readonly overlaySegments: SkeletonOverlaySegments;
 }
@@ -318,7 +318,7 @@ export class SpatiallyIndexedSkeletonLayer
   >;
   readonly chunkManager: ChunkManager;
   readonly displayState: SpatiallyIndexedSkeletonLayerOptions["displayState"];
-  readonly editState: SpatialSkeletonState;
+  readonly editSession: SpatialSkeletonEditSession;
   readonly provisionalSegmentIds: Uint64Set;
   readonly sources: SpatiallyIndexedSkeletonSourceEntry[];
   readonly source: SpatiallyIndexedSkeletonSource;
@@ -387,14 +387,14 @@ export class SpatiallyIndexedSkeletonLayer
     const {
       multiscaleSource,
       displayState,
-      editState,
+      editSession,
       nodeSelection,
       overlaySegments,
     } = options;
     this.chunkManager = multiscaleSource.chunkManager;
     this.displayState = displayState;
-    this.editState = editState;
-    this.provisionalSegmentIds = editState.provisionalSegmentIds;
+    this.editSession = editSession;
+    this.provisionalSegmentIds = editSession.provisionalSegmentIds;
     this.fragmentSource = multiscaleSource.fragmentSource;
     this.editableSource = multiscaleSource.editableSource;
     this.registerDisposer(() => {
@@ -431,7 +431,7 @@ export class SpatiallyIndexedSkeletonLayer
       new SkeletonNodeHighlight({
         displayState,
         nodeSelection,
-        editState,
+        editSession,
         getBaseSegmentColor: (segmentId) =>
           getBaseObjectColor(displayState, segmentId) as vec3,
       }),
@@ -441,7 +441,7 @@ export class SpatiallyIndexedSkeletonLayer
       displayState.hiddenObjectAlpha.changed.add(this.redrawNeeded.dispatch),
     );
     this.registerDisposer(
-      editState.pendingNodePositionVersion.changed.add(
+      editSession.pendingNodePositionVersion.changed.add(
         this.redrawNeeded.dispatch,
       ),
     );
@@ -472,7 +472,8 @@ export class SpatiallyIndexedSkeletonLayer
         hasSegmentDefaultColor:
           colorGroupState.segmentDefaultColor.value !== undefined ||
           DEBUG_SPATIAL_SKELETON_CHUNKS,
-        hasProvisionalSegmentColors: editState.provisionalSegmentIds.size !== 0,
+        hasProvisionalSegmentColors:
+          editSession.provisionalSegmentIds.size !== 0,
         hoverHighlight: displayState.hoverHighlight.value,
         spatialChunkCulling: false,
       };
@@ -496,7 +497,7 @@ export class SpatiallyIndexedSkeletonLayer
       displayState.hoverHighlight.changed.add(updateSkeletonShaderParameters),
     );
     this.registerDisposer(
-      editState.spatialSkeletonPresentation.changed.add(() => {
+      editSession.spatialSkeletonDisplay.changed.add(() => {
         updateSkeletonShaderParameters();
         this.redrawNeeded.dispatch();
       }),
@@ -517,7 +518,7 @@ export class SpatiallyIndexedSkeletonLayer
       fallbackShaderParameters: this.fallbackShaderParameters,
       displayState,
       skeletonShaderParameters: this.browsePassSkeletonShaderParameters,
-      provisionalSegmentIds: editState.provisionalSegmentIds,
+      provisionalSegmentIds: editSession.provisionalSegmentIds,
     };
     this.gpuBrowseExcludedSegmentsHashTable = this.registerDisposer(
       GPUHashTable.get(
@@ -671,11 +672,11 @@ export class SpatiallyIndexedSkeletonLayer
   readonly hasPickableNodes = true;
 
   get nodesChanged() {
-    return this.editState.spatialSkeletonPresentation.changed;
+    return this.editSession.spatialSkeletonDisplay.changed;
   }
 
   getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined {
-    return this.editState.getCachedSegmentNodes(segmentId);
+    return this.editSession.getCachedSegmentNodes(segmentId);
   }
 
   get parentsInferred() {
@@ -686,7 +687,7 @@ export class SpatiallyIndexedSkeletonLayer
 
   getNode(nodeId: bigint): SkeletonNode | undefined {
     if (nodeId === 0n) return undefined;
-    return this.editState.getDisplayedNode(nodeId);
+    return this.editSession.getDisplayedNode(nodeId);
   }
 
   private beginSkeletonRenderPass(
@@ -915,7 +916,7 @@ export class SpatiallyIndexedSkeletonLayer
   ) {
     const override = getPendingNodeOverride(
       overlayChunk.nodeIndex,
-      this.editState,
+      this.editSession,
     );
     const overrideVertexIndex = override?.vertexIndex ?? -1;
     const overridePosition = override?.position ?? kZeroVec;
@@ -1106,7 +1107,7 @@ function updateSpatiallyIndexedSkeletonMouseState(
   const pickedNode = resolveSpatiallyIndexedSkeletonNodePick(
     geometry,
     pickedOffset,
-    base.editState,
+    base.editSession,
   );
   if (pickedNode === undefined) return;
   mouseState.pickedSpatialSkeleton = pickedNode;

@@ -25,7 +25,7 @@ export type SpatialSkeletonInspectionRequiredReason =
 
 /**
  * An edit admission preflight could not find its required node in a current,
- * complete projected skeleton snapshot.
+ * complete previewed skeleton snapshot.
  */
 export class SpatialSkeletonInspectionRequiredError extends Error {
   readonly requirement: SpatialSkeletonQueueInputRequirement;
@@ -65,21 +65,21 @@ export class SpatialSkeletonEditConflictError extends Error {
   }
 }
 
-export class SpatialSkeletonOptimisticQueueCapacityError extends Error {
+export class SpatialSkeletonEditQueueCapacityError extends Error {
   constructor(limit: number) {
     super(
       `Optimistic edit queue has reached its ${limit}-edit safety limit. Wait for the skeleton source to confirm some edits.`,
     );
-    this.name = "SpatialSkeletonOptimisticQueueCapacityError";
+    this.name = "SpatialSkeletonEditQueueCapacityError";
   }
 }
 
-export function isSpatialSkeletonOutdatedStateError(error: unknown) {
+export function isSpatialSkeletonEditConflictError(error: unknown) {
   return error instanceof SpatialSkeletonEditConflictError;
 }
 
-export function isSpatialSkeletonOptimisticQueueCapacityError(error: unknown) {
-  return error instanceof SpatialSkeletonOptimisticQueueCapacityError;
+export function isSpatialSkeletonEditQueueCapacityError(error: unknown) {
+  return error instanceof SpatialSkeletonEditQueueCapacityError;
 }
 
 export function isSpatialSkeletonInspectionRequiredError(error: unknown) {
@@ -90,13 +90,13 @@ export function getSpatialSkeletonActionErrorMessage(
   action: string,
   error: unknown,
 ) {
-  if (isSpatialSkeletonOutdatedStateError(error)) {
+  if (isSpatialSkeletonEditConflictError(error)) {
     return {
       message: `Failed to ${action} due to outdated state. Refresh the page to sync.`,
       requiresDismissal: true,
     };
   }
-  if (isSpatialSkeletonOptimisticQueueCapacityError(error)) {
+  if (isSpatialSkeletonEditQueueCapacityError(error)) {
     return {
       message: error.message,
       requiresDismissal: false,

@@ -15,20 +15,18 @@
  */
 
 import type { SpatialSkeletonIntentKind } from "#src/skeleton/edit_queue/edit_intent_journal.js";
-import {
-  type SpatialSkeletonOptimisticAuthorityPresentation,
-  type SpatialSkeletonOptimisticEditActivityEntry,
-  type SpatialSkeletonOptimisticEditQueueEntry,
-  type SpatialSkeletonOptimisticIntentLifecycle,
+import type {
+  SpatialSkeletonAuthorityLabels,
+  SpatialSkeletonEditActivityEntry,
+  SpatialSkeletonEditQueueEntry,
+  SpatialSkeletonIntentLifecycle,
 } from "#src/skeleton/edit_queue/types.js";
 import { formatErrorMessage } from "#src/util/error.js";
 import { HttpError } from "#src/util/http_request.js";
 
 const ACTIVITY_REASON_LIMIT = 240;
 
-export function formatSpatialSkeletonOptimisticEditFailureReason(
-  error: unknown,
-) {
+export function formatSpatialSkeletonEditFailureReason(error: unknown) {
   let reason: string;
   if (error instanceof HttpError) {
     reason = `Request failed with HTTP ${error.status}${error.statusText === "" ? "" : ` (${error.statusText})`}.`;
@@ -48,37 +46,33 @@ export function formatSpatialSkeletonOptimisticEditFailureReason(
 }
 
 /** Fields needed to derive the public queue read models from canonical state. */
-export interface SpatialSkeletonOptimisticEngineReadModelEntry {
+export interface SpatialSkeletonEditQueueRow {
   readonly sequence: number;
   readonly kind: SpatialSkeletonIntentKind;
-  readonly lifecycle: SpatialSkeletonOptimisticIntentLifecycle;
+  readonly lifecycle: SpatialSkeletonIntentLifecycle;
   readonly terminal: boolean;
   readonly rejectionReason: unknown;
   readonly canceledLaterIntentCount?: number;
   readonly metadata: {
     readonly kind: string;
     readonly commandLabel?: string;
-    readonly authorityPresentation?: SpatialSkeletonOptimisticAuthorityPresentation;
+    readonly authorityLabels?: SpatialSkeletonAuthorityLabels;
   };
 }
 
-function getRejectedActivityReason(
-  entry: SpatialSkeletonOptimisticEngineReadModelEntry,
-) {
+function getRejectedActivityReason(entry: SpatialSkeletonEditQueueRow) {
   if (entry.rejectionReason === undefined) return undefined;
-  const reason = formatSpatialSkeletonOptimisticEditFailureReason(
-    entry.rejectionReason,
-  );
+  const reason = formatSpatialSkeletonEditFailureReason(entry.rejectionReason);
   return entry.canceledLaterIntentCount !== undefined &&
     entry.lifecycle.authorityReason === "not-started"
     ? `The edit could not be submitted: ${reason}`
     : reason;
 }
 
-export function projectSpatialSkeletonOptimisticQueueSnapshot(
-  entries: readonly SpatialSkeletonOptimisticEngineReadModelEntry[],
+export function buildSpatialSkeletonEditQueueRows(
+  entries: readonly SpatialSkeletonEditQueueRow[],
   queueInstanceId: number,
-): readonly SpatialSkeletonOptimisticEditQueueEntry[] {
+): readonly SpatialSkeletonEditQueueEntry[] {
   return entries.map((entry) => {
     const reason = getRejectedActivityReason(entry);
     return {
@@ -88,7 +82,7 @@ export function projectSpatialSkeletonOptimisticQueueSnapshot(
       lifecycle: entry.lifecycle,
       intent: entry.kind,
       commandLabel: entry.metadata.commandLabel,
-      authorityPresentation: entry.metadata.authorityPresentation,
+      authorityLabels: entry.metadata.authorityLabels,
       ...(reason === undefined ? {} : { reason }),
       ...(entry.canceledLaterIntentCount === undefined
         ? {}
@@ -100,10 +94,10 @@ export function projectSpatialSkeletonOptimisticQueueSnapshot(
   });
 }
 
-export function projectSpatialSkeletonOptimisticRecentActivity(
-  entries: readonly SpatialSkeletonOptimisticEngineReadModelEntry[],
+export function buildSpatialSkeletonEditRecentActivity(
+  entries: readonly SpatialSkeletonEditQueueRow[],
   capacity: number,
-): readonly SpatialSkeletonOptimisticEditActivityEntry[] {
+): readonly SpatialSkeletonEditActivityEntry[] {
   return entries
     .filter((entry) => entry.terminal)
     .sort((first, second) => second.sequence - first.sequence)

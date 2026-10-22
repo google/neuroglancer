@@ -16,7 +16,7 @@
 
 import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 
-export type CompleteSkeletonSnapshotKind =
+export type CompleteSkeletonKind =
   | "base"
   | "patch"
   | "split-view"
@@ -47,9 +47,9 @@ export interface CompleteSkeletonNodeOverride {
   readonly changes: CompleteSkeletonNodeChanges;
 }
 
-export interface CompleteSkeletonSnapshotMergeComponent {
+export interface CompleteSkeletonMergeComponent {
   /** A complete snapshot or a complete membership view of one. */
-  readonly snapshot: CompleteSkeletonSnapshotHandle;
+  readonly snapshot: CompleteSkeleton;
   /**
    * Lazily substitutes the segment id for this entire component.  This is
    * substantially smaller than storing one node patch per node in the losing
@@ -58,23 +58,23 @@ export interface CompleteSkeletonSnapshotMergeComponent {
   readonly segmentId?: bigint;
 }
 
-export interface CompleteSkeletonSnapshotSplit {
-  /** Nodes whose ids were supplied to `splitCompleteSkeletonSnapshot`. */
-  readonly selected: CompleteSkeletonSnapshotHandle;
+export interface CompleteSkeletonSplit {
+  /** Nodes whose ids were supplied to `splitCompleteSkeleton`. */
+  readonly selected: CompleteSkeleton;
   /** Every other node in the source snapshot. */
-  readonly remainder: CompleteSkeletonSnapshotHandle;
+  readonly remainder: CompleteSkeleton;
 }
 
-interface SnapshotProjection {
+interface SnapshotNodeView {
   readonly nodeCount: number;
   getNode(nodeId: bigint): SkeletonNode | undefined;
   forEachNode(callback: (node: SkeletonNode) => void): void;
 }
 
 /** Private implementation bound, independent of queue and history limits. */
-const COMPLETE_SKELETON_PROJECTION_REBASE_DEPTH = 64;
+const COMPLETE_SKELETON_NODE_VIEW_REBASE_DEPTH = 64;
 
-export interface CompleteSkeletonSnapshotRemapping {
+export interface CompleteSkeletonRemapping {
   /** Physical node-id substitutions. Parent references are remapped too. */
   readonly nodeIds?: ReadonlyMap<bigint, bigint>;
   /** Physical segment-id substitutions. */
@@ -111,7 +111,7 @@ function updateNode(
   });
 }
 
-class BaseSnapshotProjection implements SnapshotProjection {
+class BaseSnapshotNodeView implements SnapshotNodeView {
   readonly nodeCount: number;
   readonly nodes: readonly SkeletonNode[];
   private readonly nodeById = new Map<bigint, SkeletonNode>();
@@ -142,7 +142,7 @@ class BaseSnapshotProjection implements SnapshotProjection {
 }
 
 /** Indexed flat storage which reuses an already-frozen materialized array. */
-class FlatSnapshotProjection implements SnapshotProjection {
+class FlatSnapshotNodeView implements SnapshotNodeView {
   readonly nodeCount: number;
   private readonly nodeById = new Map<bigint, SkeletonNode>();
 
@@ -167,7 +167,7 @@ class FlatSnapshotProjection implements SnapshotProjection {
   }
 }
 
-class PatchSnapshotProjection implements SnapshotProjection {
+class PatchSnapshotNodeView implements SnapshotNodeView {
   readonly nodeCount: number;
   private readonly patchedNodeById = new Map<
     bigint,
@@ -176,7 +176,7 @@ class PatchSnapshotProjection implements SnapshotProjection {
   private readonly insertedNodeIds: readonly bigint[];
 
   constructor(
-    private readonly source: SnapshotProjection,
+    private readonly source: SnapshotNodeView,
     patches: readonly CompleteSkeletonNodePatch[],
   ) {
     const insertedNodeIds: bigint[] = [];
@@ -258,11 +258,11 @@ interface MembershipPartition {
   readonly selectedNodeIds: ReadonlySet<bigint>;
 }
 
-class MembershipSnapshotProjection implements SnapshotProjection {
+class MembershipSnapshotNodeView implements SnapshotNodeView {
   readonly nodeCount: number;
 
   constructor(
-    private readonly source: SnapshotProjection,
+    private readonly source: SnapshotNodeView,
     private readonly partition: MembershipPartition,
     private readonly selectMembers: boolean,
   ) {
@@ -293,7 +293,7 @@ class MembershipSnapshotProjection implements SnapshotProjection {
  * the handle can be published, but it does not clone nodes or construct a
  * concrete node array. Remapped node objects are created only when requested.
  */
-class RemapSnapshotProjection implements SnapshotProjection {
+class RemapSnapshotNodeView implements SnapshotNodeView {
   readonly nodeCount: number;
   private readonly sourceNodeIdByRemappedNodeId = new Map<bigint, bigint>();
   private readonly remappedNodeBySourceNodeId = new Map<bigint, SkeletonNode>();
@@ -301,8 +301,8 @@ class RemapSnapshotProjection implements SnapshotProjection {
   private readonly segmentIdRemappings: ReadonlyMap<bigint, bigint>;
 
   constructor(
-    private readonly source: SnapshotProjection,
-    remappings: CompleteSkeletonSnapshotRemapping,
+    private readonly source: SnapshotNodeView,
+    remappings: CompleteSkeletonRemapping,
   ) {
     // Copy even ReadonlyMaps: callers can still hold a mutable Map reference,
     // while complete snapshot handles must remain immutable after creation.
@@ -367,12 +367,12 @@ class RemapSnapshotProjection implements SnapshotProjection {
 }
 
 interface NormalizedMergeComponent {
-  readonly projection: SnapshotProjection;
+  readonly nodeView: SnapshotNodeView;
   readonly segmentId?: bigint;
   readonly remappedNodeById: Map<bigint, SkeletonNode>;
 }
 
-class MergeSnapshotProjection implements SnapshotProjection {
+class MergeSnapshotNodeView implements SnapshotNodeView {
   readonly nodeCount: number;
   private readonly componentIndexByNodeId = new Map<bigint, number>();
 
@@ -381,8 +381,8 @@ class MergeSnapshotProjection implements SnapshotProjection {
   ) {
     let nodeCount = 0;
     components.forEach((component, componentIndex) => {
-      nodeCount += component.projection.nodeCount;
-      component.projection.forEachNode((node) => {
+      nodeCount += component.nodeView.nodeCount;
+      component.nodeView.forEachNode((node) => {
         if (this.componentIndexByNodeId.has(node.nodeId)) {
           throw new Error(
             `Cannot merge complete skeleton snapshots containing duplicate node ${node.nodeId}.`,
@@ -409,13 +409,13 @@ class MergeSnapshotProjection implements SnapshotProjection {
     const componentIndex = this.componentIndexByNodeId.get(nodeId);
     if (componentIndex === undefined) return undefined;
     const component = this.components[componentIndex];
-    const node = component.projection.getNode(nodeId);
+    const node = component.nodeView.getNode(nodeId);
     return node === undefined ? undefined : this.resolveNode(component, node);
   }
 
   forEachNode(callback: (node: SkeletonNode) => void) {
     for (const component of this.components) {
-      component.projection.forEachNode((node) =>
+      component.nodeView.forEachNode((node) =>
         callback(this.resolveNode(component, node)),
       );
     }
@@ -425,25 +425,25 @@ class MergeSnapshotProjection implements SnapshotProjection {
 /**
  * Immutable view of a complete skeleton.
  *
- * Derived handles retain projections rather than concrete arrays. Calling
+ * Derived handles retain node views rather than concrete arrays. Calling
  * `materialize` constructs at most one array for this handle. Deriving beyond
  * the private depth bound may materialize and flatten the boundary source;
  * unchanged node objects and any previously returned array remain shared.
  */
-export class CompleteSkeletonSnapshotHandle {
-  readonly kind: CompleteSkeletonSnapshotKind;
+export class CompleteSkeleton {
+  readonly kind: CompleteSkeletonKind;
   private materializedNodes: readonly SkeletonNode[] | undefined;
   private materializationBuildCountValue = 0;
-  private projectionDepth: number;
+  private nodeViewDepth: number;
 
   private constructor(
-    private projection: SnapshotProjection,
-    kind: CompleteSkeletonSnapshotKind,
-    projectionDepth: number,
+    private nodeView: SnapshotNodeView,
+    kind: CompleteSkeletonKind,
+    nodeViewDepth: number,
     materializedNodes?: readonly SkeletonNode[],
   ) {
     this.kind = kind;
-    this.projectionDepth = projectionDepth;
+    this.nodeViewDepth = nodeViewDepth;
     if (materializedNodes !== undefined) {
       this.materializedNodes = materializedNodes;
       this.materializationBuildCountValue = 1;
@@ -451,46 +451,41 @@ export class CompleteSkeletonSnapshotHandle {
   }
 
   static create(nodes: readonly SkeletonNode[]) {
-    const projection = new BaseSnapshotProjection(nodes);
-    return new CompleteSkeletonSnapshotHandle(
-      projection,
-      "base",
-      0,
-      projection.nodes,
-    );
+    const nodeView = new BaseSnapshotNodeView(nodes);
+    return new CompleteSkeleton(nodeView, "base", 0, nodeView.nodes);
   }
 
   /**
-   * A boundary source must be flat before another lazy projection captures it.
+   * A boundary source must be flat before another lazy node view captures it.
    * This keeps every newly-created chain bounded even when callers never
    * explicitly materialize their intermediate handles.
    */
   private prepareForDerivation() {
-    if (this.projectionDepth >= COMPLETE_SKELETON_PROJECTION_REBASE_DEPTH) {
+    if (this.nodeViewDepth >= COMPLETE_SKELETON_NODE_VIEW_REBASE_DEPTH) {
       this.materialize();
     }
   }
 
   static patch(
-    source: CompleteSkeletonSnapshotHandle,
+    source: CompleteSkeleton,
     patches: readonly CompleteSkeletonNodePatch[],
   ) {
     source.prepareForDerivation();
-    return new CompleteSkeletonSnapshotHandle(
-      new PatchSnapshotProjection(source.projection, patches),
+    return new CompleteSkeleton(
+      new PatchSnapshotNodeView(source.nodeView, patches),
       "patch",
-      source.projectionDepth + 1,
+      source.nodeViewDepth + 1,
     );
   }
 
   static split(
-    source: CompleteSkeletonSnapshotHandle,
+    source: CompleteSkeleton,
     selectedNodeIds: Iterable<bigint>,
-  ): CompleteSkeletonSnapshotSplit {
+  ): CompleteSkeletonSplit {
     source.prepareForDerivation();
     const selectedNodeIdSet = new Set(selectedNodeIds);
     for (const nodeId of selectedNodeIdSet) {
-      if (source.projection.getNode(nodeId) === undefined) {
+      if (source.nodeView.getNode(nodeId) === undefined) {
         throw new Error(
           `Cannot select missing complete skeleton node ${nodeId} for a split view.`,
         );
@@ -500,21 +495,21 @@ export class CompleteSkeletonSnapshotHandle {
       selectedNodeIds: selectedNodeIdSet,
     };
     return {
-      selected: new CompleteSkeletonSnapshotHandle(
-        new MembershipSnapshotProjection(source.projection, partition, true),
+      selected: new CompleteSkeleton(
+        new MembershipSnapshotNodeView(source.nodeView, partition, true),
         "split-view",
-        source.projectionDepth + 1,
+        source.nodeViewDepth + 1,
       ),
-      remainder: new CompleteSkeletonSnapshotHandle(
-        new MembershipSnapshotProjection(source.projection, partition, false),
+      remainder: new CompleteSkeleton(
+        new MembershipSnapshotNodeView(source.nodeView, partition, false),
         "split-view",
-        source.projectionDepth + 1,
+        source.nodeViewDepth + 1,
       ),
     };
   }
 
   static merge(
-    components: readonly CompleteSkeletonSnapshotMergeComponent[],
+    components: readonly CompleteSkeletonMergeComponent[],
     options: {
       overrides?: readonly CompleteSkeletonNodeOverride[];
     } = {},
@@ -526,17 +521,17 @@ export class CompleteSkeletonSnapshotHandle {
     }
     for (const { snapshot } of components) snapshot.prepareForDerivation();
     const normalizedComponents = components.map(({ snapshot, segmentId }) => ({
-      projection: snapshot.projection,
+      nodeView: snapshot.nodeView,
       segmentId,
       remappedNodeById: new Map<bigint, SkeletonNode>(),
     }));
-    let projection: SnapshotProjection = new MergeSnapshotProjection(
+    let nodeView: SnapshotNodeView = new MergeSnapshotNodeView(
       normalizedComponents,
     );
     const overrides = options.overrides ?? [];
     if (overrides.length !== 0) {
-      projection = new PatchSnapshotProjection(
-        projection,
+      nodeView = new PatchSnapshotNodeView(
+        nodeView,
         overrides.map(({ nodeId, changes }) => ({
           kind: "update" as const,
           nodeId,
@@ -544,29 +539,29 @@ export class CompleteSkeletonSnapshotHandle {
         })),
       );
     }
-    return new CompleteSkeletonSnapshotHandle(
-      projection,
+    return new CompleteSkeleton(
+      nodeView,
       "merge",
-      Math.max(...components.map(({ snapshot }) => snapshot.projectionDepth)) +
+      Math.max(...components.map(({ snapshot }) => snapshot.nodeViewDepth)) +
         1 +
         (overrides.length === 0 ? 0 : 1),
     );
   }
 
   static remap(
-    source: CompleteSkeletonSnapshotHandle,
-    remappings: CompleteSkeletonSnapshotRemapping,
+    source: CompleteSkeleton,
+    remappings: CompleteSkeletonRemapping,
   ) {
     source.prepareForDerivation();
-    return new CompleteSkeletonSnapshotHandle(
-      new RemapSnapshotProjection(source.projection, remappings),
+    return new CompleteSkeleton(
+      new RemapSnapshotNodeView(source.nodeView, remappings),
       "remap",
-      source.projectionDepth + 1,
+      source.nodeViewDepth + 1,
     );
   }
 
   get nodeCount() {
-    return this.projection.nodeCount;
+    return this.nodeView.nodeCount;
   }
 
   /** Number of concrete arrays ever built for this handle (always 0 or 1). */
@@ -576,12 +571,12 @@ export class CompleteSkeletonSnapshotHandle {
 
   /** Resolves a node without constructing a concrete snapshot array. */
   getNode(nodeId: bigint) {
-    return this.projection.getNode(nodeId);
+    return this.nodeView.getNode(nodeId);
   }
 
-  /** Iterates this projection without constructing a concrete snapshot array. */
+  /** Iterates this node view without constructing a concrete snapshot array. */
   forEachNode(callback: (node: SkeletonNode) => void) {
-    this.projection.forEachNode(callback);
+    this.nodeView.forEachNode(callback);
   }
 
   /**
@@ -590,56 +585,56 @@ export class CompleteSkeletonSnapshotHandle {
   materialize(): readonly SkeletonNode[] {
     if (this.materializedNodes === undefined) {
       const nodes: SkeletonNode[] = [];
-      this.projection.forEachNode((node) => nodes.push(node));
-      if (nodes.length !== this.projection.nodeCount) {
+      this.nodeView.forEachNode((node) => nodes.push(node));
+      if (nodes.length !== this.nodeView.nodeCount) {
         throw new Error(
-          `Complete skeleton projection expected ${this.projection.nodeCount} nodes but produced ${nodes.length}.`,
+          `Complete skeleton node view expected ${this.nodeView.nodeCount} nodes but produced ${nodes.length}.`,
         );
       }
       this.materializedNodes = Object.freeze(nodes);
       this.materializationBuildCountValue = 1;
     }
-    if (this.projectionDepth >= COMPLETE_SKELETON_PROJECTION_REBASE_DEPTH) {
+    if (this.nodeViewDepth >= COMPLETE_SKELETON_NODE_VIEW_REBASE_DEPTH) {
       // The public value remains immutable. Only the private way this handle
       // answers future reads changes, and it reuses the exact frozen array and
       // node objects already returned to callers.
-      this.projection = new FlatSnapshotProjection(this.materializedNodes);
-      this.projectionDepth = 0;
+      this.nodeView = new FlatSnapshotNodeView(this.materializedNodes);
+      this.nodeViewDepth = 0;
     }
     return this.materializedNodes;
   }
 }
 
-export function createCompleteSkeletonSnapshot(nodes: readonly SkeletonNode[]) {
-  return CompleteSkeletonSnapshotHandle.create(nodes);
+export function createCompleteSkeleton(nodes: readonly SkeletonNode[]) {
+  return CompleteSkeleton.create(nodes);
 }
 
-export function patchCompleteSkeletonSnapshot(
-  source: CompleteSkeletonSnapshotHandle,
+export function patchCompleteSkeleton(
+  source: CompleteSkeleton,
   patches: readonly CompleteSkeletonNodePatch[],
 ) {
-  return CompleteSkeletonSnapshotHandle.patch(source, patches);
+  return CompleteSkeleton.patch(source, patches);
 }
 
-export function splitCompleteSkeletonSnapshot(
-  source: CompleteSkeletonSnapshotHandle,
+export function splitCompleteSkeleton(
+  source: CompleteSkeleton,
   selectedNodeIds: Iterable<bigint>,
 ) {
-  return CompleteSkeletonSnapshotHandle.split(source, selectedNodeIds);
+  return CompleteSkeleton.split(source, selectedNodeIds);
 }
 
-export function mergeCompleteSkeletonSnapshots(
-  components: readonly CompleteSkeletonSnapshotMergeComponent[],
+export function mergeCompleteSkeletons(
+  components: readonly CompleteSkeletonMergeComponent[],
   options: {
     overrides?: readonly CompleteSkeletonNodeOverride[];
   } = {},
 ) {
-  return CompleteSkeletonSnapshotHandle.merge(components, options);
+  return CompleteSkeleton.merge(components, options);
 }
 
-export function remapCompleteSkeletonSnapshot(
-  source: CompleteSkeletonSnapshotHandle,
-  remappings: CompleteSkeletonSnapshotRemapping,
+export function remapCompleteSkeleton(
+  source: CompleteSkeleton,
+  remappings: CompleteSkeletonRemapping,
 ) {
-  return CompleteSkeletonSnapshotHandle.remap(source, remappings);
+  return CompleteSkeleton.remap(source, remappings);
 }

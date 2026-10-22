@@ -162,7 +162,7 @@ export abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUser
     }
     const resolvedNodeInfo =
       skeletonLayer.getNode(nodeHit.nodeId) ??
-      this.layer.spatialSkeletonState.getCachedNode(nodeHit.nodeId);
+      this.layer.spatialSkeletonEditSession.getCachedNode(nodeHit.nodeId);
     return {
       nodeId: nodeHit.nodeId,
       segmentId: resolvedNodeInfo?.segmentId ?? nodeHit.segmentId,

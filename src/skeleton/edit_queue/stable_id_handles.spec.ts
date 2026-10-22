@@ -17,17 +17,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  SpatialSkeletonLogicalHandleMappings,
-  spatialSkeletonLogicalNode,
-  spatialSkeletonLogicalSegment,
+  SpatialSkeletonStableIdHandles,
+  spatialSkeletonStableNode,
+  spatialSkeletonStableSegment,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
 
 describe("stable node and skeleton ids", () => {
   it("keeps logical handles stable while physical node and segment ids remap", () => {
-    const mappings = new SpatialSkeletonLogicalHandleMappings<number, number>();
-    const node = spatialSkeletonLogicalNode("created:1");
-    const firstSegment = spatialSkeletonLogicalSegment("merge:first");
-    const secondSegment = spatialSkeletonLogicalSegment("merge:second");
+    const mappings = new SpatialSkeletonStableIdHandles<number, number>();
+    const node = spatialSkeletonStableNode("created:1");
+    const firstSegment = spatialSkeletonStableSegment("merge:first");
+    const secondSegment = spatialSkeletonStableSegment("merge:second");
 
     expect(mappings.bindNodes([[node, -1]])).toBe(true);
     expect(mappings.bindSegment(firstSegment, -2)).toBe(true);
@@ -57,11 +57,11 @@ describe("stable node and skeleton ids", () => {
   });
 
   it("binds a complete snapshot node set with one mapping revision", () => {
-    const mappings = new SpatialSkeletonLogicalHandleMappings<number, number>();
+    const mappings = new SpatialSkeletonStableIdHandles<number, number>();
     const bindings = Array.from(
       { length: 5_000 },
       (_, index) =>
-        [spatialSkeletonLogicalNode(`snapshot:${index}`), index + 1] as const,
+        [spatialSkeletonStableNode(`snapshot:${index}`), index + 1] as const,
     );
 
     expect(mappings.bindNodes(bindings)).toBe(true);
@@ -72,10 +72,10 @@ describe("stable node and skeleton ids", () => {
   });
 
   it("finds the first logical handles for many physical node ids", () => {
-    const mappings = new SpatialSkeletonLogicalHandleMappings<number, number>();
-    const first = spatialSkeletonLogicalNode("first");
-    const alias = spatialSkeletonLogicalNode("alias");
-    const second = spatialSkeletonLogicalNode("second");
+    const mappings = new SpatialSkeletonStableIdHandles<number, number>();
+    const first = spatialSkeletonStableNode("first");
+    const alias = spatialSkeletonStableNode("alias");
+    const second = spatialSkeletonStableNode("second");
     mappings.bindNodes([
       [first, 11],
       [alias, 11],
@@ -91,8 +91,8 @@ describe("stable node and skeleton ids", () => {
   });
 
   it("rolls back only the provisional mapping owned by an intent", () => {
-    const mappings = new SpatialSkeletonLogicalHandleMappings<number, number>();
-    const segment = spatialSkeletonLogicalSegment("restored");
+    const mappings = new SpatialSkeletonStableIdHandles<number, number>();
+    const segment = spatialSkeletonStableSegment("restored");
     mappings.bindSegment(segment, 17);
 
     const first = mappings.stage(1, { segments: [[segment, 1001]] });
@@ -119,9 +119,9 @@ describe("stable node and skeleton ids", () => {
   });
 
   it("keeps confirmed ids accessible beneath later recreation previews", () => {
-    const mappings = new SpatialSkeletonLogicalHandleMappings<number, number>();
-    const node = spatialSkeletonLogicalNode("recreated-node");
-    const segment = spatialSkeletonLogicalSegment("recreated-segment");
+    const mappings = new SpatialSkeletonStableIdHandles<number, number>();
+    const node = spatialSkeletonStableNode("recreated-node");
+    const segment = spatialSkeletonStableSegment("recreated-segment");
     const first = mappings.stage(1, {
       nodes: [[node, 1001]],
       segments: [[segment, 1010]],
@@ -155,9 +155,9 @@ describe("stable node and skeleton ids", () => {
   });
 
   it("supports multiple historical handles for one authoritative segment", () => {
-    const mappings = new SpatialSkeletonLogicalHandleMappings<number, number>();
-    const result = spatialSkeletonLogicalSegment("merge-result");
-    const deleted = spatialSkeletonLogicalSegment("merge-deleted");
+    const mappings = new SpatialSkeletonStableIdHandles<number, number>();
+    const result = spatialSkeletonStableSegment("merge-result");
+    const deleted = spatialSkeletonStableSegment("merge-deleted");
     mappings.apply({
       segments: [
         [result, 101],

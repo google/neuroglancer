@@ -84,7 +84,7 @@ import { SegmentationGraphSourceTab } from "#src/segmentation_graph/source.js";
 import { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type { EditableSkeletonSource } from "#src/skeleton/api.js";
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import { SkeletonDataSourceState } from "#src/skeleton/find_path/find_path.js";
 import { attachFindPath } from "#src/skeleton/find_path/find_path_attachment.js";
 import {
@@ -630,8 +630,8 @@ export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   codeVisible = new TrackableBoolean(true);
-  readonly spatialSkeletonState = this.registerDisposer(
-    new SpatialSkeletonState(),
+  readonly spatialSkeletonEditSession = this.registerDisposer(
+    new SpatialSkeletonEditSession(),
   );
   readonly skeletonNodeSelection: SkeletonNodeSelection;
   readonly skeletonOverlaySegments: SkeletonOverlaySegments;
@@ -801,18 +801,18 @@ export class SegmentationUserLayer extends Base {
         layer: this,
         skeletonNodeAccess: this.skeletonNodeAccess,
         spatiallyIndexedSkeletonLayer: this.spatiallyIndexedSkeletonLayer,
-        spatialSkeletonState: this.spatialSkeletonState,
+        spatialSkeletonEditSession: this.spatialSkeletonEditSession,
       }),
     );
     this.skeletonOverlaySegments = this.registerDisposer(
       new SkeletonOverlaySegments({
         segmentationGroupState: this.displayState.segmentationGroupState,
-        editState: this.spatialSkeletonState,
+        editSession: this.spatialSkeletonEditSession,
       }),
     );
     this.skeletonSourceConnection = this.registerDisposer(
       new SkeletonSourceConnection({
-        spatialSkeletonState: this.spatialSkeletonState,
+        spatialSkeletonEditSession: this.spatialSkeletonEditSession,
         selection: this.skeletonNodeSelection,
         overlaySegments: this.skeletonOverlaySegments,
         segmentationGroupState: this.displayState.segmentationGroupState,
@@ -934,7 +934,7 @@ export class SegmentationUserLayer extends Base {
     const base = new SpatiallyIndexedSkeletonLayer({
       multiscaleSource: source,
       displayState,
-      editState: this.spatialSkeletonState,
+      editSession: this.spatialSkeletonEditSession,
       nodeSelection: this.skeletonNodeSelection,
       overlaySegments: this.skeletonOverlaySegments,
     });

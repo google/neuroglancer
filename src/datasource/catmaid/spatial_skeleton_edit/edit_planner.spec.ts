@@ -16,41 +16,45 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import type {
+  CatmaidSpatialSkeletonCommandDescriptor,
+  CatmaidEditPlan,
+} from "#src/datasource/catmaid/spatial_skeleton_edit/edit_planner.js";
 import {
-  CatmaidSpatialSkeletonWorkflowDriver,
-  getCatmaidOptimisticAuthorityPresentation,
-  type CatmaidSpatialSkeletonCommandDescriptor,
-  type CatmaidWorkflow,
+  CatmaidEditPlanner,
+  getCatmaidAuthorityLabels,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_planner.js";
 import type {
-  CatmaidOptimisticMutation,
-  CatmaidOptimisticMutationResult,
+  CatmaidEditRequest,
+  CatmaidEditRequestResult,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_requests.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
-import { createCompleteSkeletonSnapshot } from "#src/skeleton/edit_queue/complete_skeleton.js";
-import type { SpatialSkeletonProjectionInverseDelta } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
+import { createCompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
+import type { SpatialSkeletonEditInverseDelta } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
 import type {
   SpatialSkeletonAuthoritativeReconciliation,
-  SpatialSkeletonProjectionIntentDelta,
+  SpatialSkeletonPreviewIntentDelta,
 } from "#src/skeleton/edit_queue/preview.js";
 import type { SpatialSkeletonQueueInput } from "#src/skeleton/edit_queue/queue_input.js";
+import type {
+  SpatialSkeletonStableNodeHandle,
+  SpatialSkeletonStableSegmentHandle,
+} from "#src/skeleton/edit_queue/stable_id_handles.js";
 import {
-  spatialSkeletonLogicalNode,
-  spatialSkeletonLogicalSegment,
-  type SpatialSkeletonLogicalNodeHandle,
-  type SpatialSkeletonLogicalSegmentHandle,
+  spatialSkeletonStableNode,
+  spatialSkeletonStableSegment,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import { bigintCompare } from "#src/util/bigint.js";
 
 class TestIdentities {
   private readonly nodeHandles = new Map<
     bigint,
-    SpatialSkeletonLogicalNodeHandle
+    SpatialSkeletonStableNodeHandle
   >();
   private readonly segmentHandles = new Map<
     bigint,
-    SpatialSkeletonLogicalSegmentHandle
+    SpatialSkeletonStableSegmentHandle
   >();
   private readonly nodeBindings = new Map<string, bigint>();
   private readonly segmentBindings = new Map<string, bigint>();
@@ -58,7 +62,7 @@ class TestIdentities {
   getOrCreateNodeHandle(nodeId: bigint) {
     let handle = this.nodeHandles.get(nodeId);
     if (handle === undefined) {
-      handle = spatialSkeletonLogicalNode(`authority:${nodeId}`);
+      handle = spatialSkeletonStableNode(`authority:${nodeId}`);
       this.nodeHandles.set(nodeId, handle);
       this.nodeBindings.set(handle.stableId, nodeId);
     }
@@ -77,32 +81,32 @@ class TestIdentities {
   getOrCreateSegmentHandle(segmentId: bigint) {
     let handle = this.segmentHandles.get(segmentId);
     if (handle === undefined) {
-      handle = spatialSkeletonLogicalSegment(`authority:${segmentId}`);
+      handle = spatialSkeletonStableSegment(`authority:${segmentId}`);
       this.segmentHandles.set(segmentId, handle);
       this.segmentBindings.set(handle.stableId, segmentId);
     }
     return handle;
   }
 
-  resolveNode(handle: SpatialSkeletonLogicalNodeHandle) {
+  resolveNode(handle: SpatialSkeletonStableNodeHandle) {
     return this.nodeBindings.get(handle.stableId);
   }
 
-  resolveSegment(handle: SpatialSkeletonLogicalSegmentHandle) {
+  resolveSegment(handle: SpatialSkeletonStableSegmentHandle) {
     return this.segmentBindings.get(handle.stableId);
   }
 
   resolveAuthoritativeNode = this.resolveNode;
   resolveAuthoritativeSegment = this.resolveSegment;
 
-  resolveNodeTarget(handle: SpatialSkeletonLogicalNodeHandle) {
+  resolveNodeTarget(handle: SpatialSkeletonStableNodeHandle) {
     const physicalId = this.resolveNode(handle);
     return physicalId === undefined
       ? ({ state: "unbound" } as const)
       : ({ state: "authoritative", physicalId } as const);
   }
 
-  resolveSegmentTarget(handle: SpatialSkeletonLogicalSegmentHandle) {
+  resolveSegmentTarget(handle: SpatialSkeletonStableSegmentHandle) {
     const physicalId = this.resolveSegment(handle);
     return physicalId === undefined
       ? ({ state: "unbound" } as const)
@@ -137,7 +141,7 @@ function node(
   };
 }
 
-function makeDriver(
+function makePlanner(
   nodesBySegment: ReadonlyMap<bigint, readonly SkeletonNode[]>,
 ) {
   currentQueueInput = Object.freeze({
@@ -145,18 +149,18 @@ function makeDriver(
       [...nodesBySegment].map(([segmentId, nodes]) =>
         Object.freeze({
           segmentId,
-          snapshot: createCompleteSkeletonSnapshot(nodes),
+          snapshot: createCompleteSkeleton(nodes),
           cacheRevision: Number(segmentId) + 100,
         }),
       ),
     ),
   });
   const identities = new TestIdentities();
-  const driver = new CatmaidSpatialSkeletonWorkflowDriver(identities, {
+  const planner = new CatmaidEditPlanner(identities, {
     allocateNodeId: (intentId) => BigInt(1_000_000 - intentId),
     allocateSegmentId: (intentId) => BigInt(2_000_000 - intentId),
   });
-  return { driver, identities };
+  return { planner, identities };
 }
 
 let currentQueueInput: SpatialSkeletonQueueInput = Object.freeze({
@@ -181,11 +185,9 @@ function context(
   intentId: number,
   intent: "execute" | "undo" | "redo",
   recipe?: {
-    readonly workflow: ReturnType<
-      CatmaidSpatialSkeletonWorkflowDriver["createLogicalIntent"]
-    >["workflow"];
-    readonly projection: SpatialSkeletonProjectionIntentDelta;
-    readonly inverseProjection?: SpatialSkeletonProjectionInverseDelta;
+    readonly plan: ReturnType<CatmaidEditPlanner["planIntent"]>["plan"];
+    readonly preview: SpatialSkeletonPreviewIntentDelta;
+    readonly inversePreview?: SpatialSkeletonEditInverseDelta;
   },
 ) {
   if (intent === "execute") {
@@ -196,11 +198,11 @@ function context(
 }
 
 type CanonicalAttempt = Readonly<{
-  mutation: CatmaidOptimisticMutation;
-  result: CatmaidOptimisticMutationResult;
+  editRequest: CatmaidEditRequest;
+  result: CatmaidEditRequestResult;
 }>;
 
-function workflowContext(
+function planContext(
   intentId: number,
   intent: "execute" | "undo" | "redo",
   committedAttempts: readonly CanonicalAttempt[],
@@ -213,24 +215,24 @@ function workflowContext(
 }
 
 function commitNextAttempt(
-  driver: CatmaidSpatialSkeletonWorkflowDriver,
-  workflow: CatmaidWorkflow,
-  result: CatmaidOptimisticMutationResult,
+  planner: CatmaidEditPlanner,
+  plan: CatmaidEditPlan,
+  result: CatmaidEditRequestResult,
   attempts: CanonicalAttempt[],
   intent: "execute" | "undo" | "redo" = "execute",
 ) {
-  const before = workflowContext(1, intent, attempts);
-  const next = driver.nextAttempt(workflow, before);
+  const before = planContext(1, intent, attempts);
+  const next = planner.nextAttempt(plan, before);
   if (next === undefined) throw new Error("Expected a CATMAID attempt.");
-  const mutation = next.materializeMutation();
-  if (mutation instanceof Promise) {
+  const editRequest = next.materializeEditRequest();
+  if (editRequest instanceof Promise) {
     throw new Error("CATMAID test materialization must be synchronous.");
   }
-  attempts.push(Object.freeze({ mutation, result }));
-  return mutation;
+  attempts.push(Object.freeze({ editRequest, result }));
+  return editRequest;
 }
 
-describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
+describe("CatmaidEditPlanner", () => {
   it("provides exact CATMAID operation nouns and one immutable stall policy", () => {
     const expected = {
       "add-node": "node creation",
@@ -247,16 +249,14 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
 
     for (const [kind, operationNoun] of Object.entries(expected)) {
       expect(
-        getCatmaidOptimisticAuthorityPresentation(
-          kind as keyof typeof expected,
-        ),
+        getCatmaidAuthorityLabels(kind as keyof typeof expected),
       ).toMatchObject({
         authorityLabel: "CATMAID",
         operationNoun,
         stalledWarning: {
           delayMs: 30_000,
           message:
-            "CATMAID has not confirmed the optimistic skeleton edit yet. The server mutation lane is stalled, but you may continue previewing independent edits while the request remains in order.",
+            "CATMAID has not confirmed the optimistic skeleton edit yet. The server edit request lane is stalled, but you may continue previewing independent edits while the request remains in order.",
         },
       });
     }
@@ -264,8 +264,8 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
 
   it("builds a move entirely from queue input and clears an omitted token", () => {
     const original = node(2, 23, 1);
-    const { driver } = makeDriver(new Map([[23n, [node(1, 23), original]]]));
-    const logical = driver.createLogicalIntent(
+    const { planner } = makePlanner(new Map([[23n, [node(1, 23), original]]]));
+    const logical = planner.planIntent(
       command(SpatialSkeletonActions.moveNodes, "Move node", {
         kind: "move-node",
         options: {
@@ -277,30 +277,30 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
     );
 
     expect(logical.kind).toBe("moveNode");
-    expect(logical.projection.delta).toMatchObject({
+    expect(logical.preview.delta).toMatchObject({
       kind: "move",
       position: [10, 11, 12],
     });
-    expect(logical.workflow).not.toHaveProperty("projection");
-    expect(logical.workflow).not.toHaveProperty("resources");
+    expect(logical.plan).not.toHaveProperty("preview");
+    expect(logical.plan).not.toHaveProperty("resources");
 
     const attempts: CanonicalAttempt[] = [];
-    const mutation = commitNextAttempt(
-      driver,
-      logical.workflow,
+    const editRequest = commitNextAttempt(
+      planner,
+      logical.plan,
       {} as any,
       attempts,
     );
-    expect(mutation).toMatchObject({
+    expect(editRequest).toMatchObject({
       kind: "move-node",
       request: {
         nodeId: 2n,
         position: [10, 11, 12],
       },
     });
-    const reconciliation = driver.createReconciliation(
-      logical.workflow,
-      workflowContext(1, "execute", attempts),
+    const reconciliation = planner.createReconciliation(
+      logical.plan,
+      planContext(1, "execute", attempts),
     );
     expect(reconciliation).toEqual({
       bindings: { nodes: [], segments: [] },
@@ -310,7 +310,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
 
   it("rejects Execute when its admitted inspected bundle is incomplete", () => {
     const original = node(2, 23, 1);
-    const { driver } = makeDriver(new Map([[23n, [node(1, 23), original]]]));
+    const { planner } = makePlanner(new Map([[23n, [node(1, 23), original]]]));
     const descriptor = command(SpatialSkeletonActions.moveNodes, "Move node", {
       kind: "move-node",
       options: {
@@ -320,7 +320,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
     });
 
     expect(() =>
-      driver.createLogicalIntent(descriptor, {
+      planner.planIntent(descriptor, {
         intentId: 1,
         intent: "execute",
         queueInput: Object.freeze({ segments: Object.freeze([]) }),
@@ -329,7 +329,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
   });
 
   it("schedules CATMAID work exclusively by logical segment", () => {
-    const { driver } = makeDriver(
+    const { planner } = makePlanner(
       new Map([
         [11n, [node(101, 11)]],
         [17n, [node(201, 17)]],
@@ -337,7 +337,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
       ]),
     );
     const intents = [
-      driver.createLogicalIntent(
+      planner.planIntent(
         command(SpatialSkeletonActions.addNodes, "Add node", {
           kind: "add-node",
           options: {
@@ -348,7 +348,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
         }),
         context(1, "execute"),
       ),
-      driver.createLogicalIntent(
+      planner.planIntent(
         command(SpatialSkeletonActions.moveNodes, "Move node", {
           kind: "move-node",
           options: {
@@ -358,14 +358,14 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
         }),
         context(2, "execute"),
       ),
-      driver.createLogicalIntent(
+      planner.planIntent(
         command(SpatialSkeletonActions.splitSkeletons, "Split skeleton", {
           kind: "split",
           node: node(2, 23, 1),
         }),
         context(3, "execute"),
       ),
-      driver.createLogicalIntent(
+      planner.planIntent(
         command(SpatialSkeletonActions.mergeSkeletons, "Merge skeletons", {
           kind: "merge",
           options: {
@@ -379,7 +379,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
 
     expect(
       intents.map((intent) =>
-        intent.logicalResources.map(({ handle }) => handle.kind),
+        intent.stableResources.map(({ handle }) => handle.kind),
       ),
     ).toEqual([
       ["segment"],
@@ -399,7 +399,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
     ];
     const first = [node(100, 11), node(101, 11, 100), node(102, 11, 100)];
     const second = [node(200, 17), node(201, 17, 200), node(202, 17, 201)];
-    const { driver } = makeDriver(
+    const { planner } = makePlanner(
       new Map([
         [23n, main],
         [11n, first],
@@ -413,11 +413,11 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
       descriptor: CatmaidSpatialSkeletonCommandDescriptor,
       intentId: number,
     ) => {
-      const intent = driver.createLogicalIntent(
+      const intent = planner.planIntent(
         descriptor,
         context(intentId, "execute"),
       );
-      const retainedNodes = intent.workflow.semantic.retainedNodes;
+      const retainedNodes = intent.plan.semantic.retainedNodes;
       expect(retainedNodes).toBeInstanceOf(Map);
       expect(
         [...retainedNodes].every(
@@ -513,7 +513,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
       9,
     );
     expect(merge.ids).toEqual([100n, 101n, 200n, 201n]);
-    expect(merge.intent.workflow.semantic).toMatchObject({});
+    expect(merge.intent.plan.semantic).toMatchObject({});
     expect(materializeSpies.every((spy) => spy.mock.calls.length === 0)).toBe(
       true,
     );
@@ -531,7 +531,9 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
         ...node(2, 23, 1),
         description: "before",
       });
-      const { driver } = makeDriver(new Map([[23n, [node(1, 23), original]]]));
+      const { planner } = makePlanner(
+        new Map([[23n, [node(1, 23), original]]]),
+      );
       const descriptor = command(
         SpatialSkeletonActions.editNodeDescription,
         "Edit description",
@@ -543,15 +545,12 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
           },
         },
       );
-      const execute = driver.createLogicalIntent(
-        descriptor,
-        context(1, "execute"),
-      );
+      const execute = planner.planIntent(descriptor, context(1, "execute"));
       const executeAttempts: CanonicalAttempt[] = [];
       expect(
         commitNextAttempt(
-          driver,
-          execute.workflow,
+          planner,
+          execute.plan,
           { description: normalized } as any,
           executeAttempts,
         ),
@@ -559,44 +558,41 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
         kind: "description",
         request: { description: input },
       });
-      const reconciliation = driver.createReconciliation(
-        execute.workflow,
-        workflowContext(1, "execute", executeAttempts),
+      const reconciliation = planner.createReconciliation(
+        execute.plan,
+        planContext(1, "execute", executeAttempts),
       );
-      expect(reconciliation.finalizedProjectionDelta).toMatchObject({
+      expect(reconciliation.finalizedPreviewDelta).toMatchObject({
         kind: "node-attributes",
         changes: { description: normalized },
       });
-      const executeDelta = execute.projection.delta;
+      const executeDelta = execute.preview.delta;
       if (executeDelta.kind !== "node-attributes") {
-        throw new Error("Expected a description projection.");
+        throw new Error("Expected a description preview.");
       }
-      const canonicalProjection = Object.freeze({
-        ...execute.projection,
-        delta: reconciliation.finalizedProjectionDelta!,
+      const canonicalPreview = Object.freeze({
+        ...execute.preview,
+        delta: reconciliation.finalizedPreviewDelta!,
       });
-      const inverseProjection = Object.freeze({
+      const inversePreview = Object.freeze({
         kind: "node-attributes" as const,
         segment: executeDelta.segment,
         node: executeDelta.node,
         changes: Object.freeze({ description: "before" }),
       });
       const recipe = {
-        workflow: execute.workflow,
-        projection: canonicalProjection,
-        inverseProjection,
+        plan: execute.plan,
+        preview: canonicalPreview,
+        inversePreview,
       };
 
-      const undo = driver.createLogicalIntent(
-        descriptor,
-        context(2, "undo", recipe),
-      );
-      expect(undo.projection.delta).toBe(inverseProjection);
+      const undo = planner.planIntent(descriptor, context(2, "undo", recipe));
+      expect(undo.preview.delta).toBe(inversePreview);
       const undoAttempts: CanonicalAttempt[] = [];
       expect(
         commitNextAttempt(
-          driver,
-          undo.workflow,
+          planner,
+          undo.plan,
           { description: "before" } as any,
           undoAttempts,
           "undo",
@@ -606,19 +602,16 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
         request: { description: "before" },
       });
 
-      const redo = driver.createLogicalIntent(
-        descriptor,
-        context(3, "redo", recipe),
-      );
-      expect(redo.projection.delta).toMatchObject({
+      const redo = planner.planIntent(descriptor, context(3, "redo", recipe));
+      expect(redo.preview.delta).toMatchObject({
         kind: "node-attributes",
         changes: { description: normalized },
       });
       const redoAttempts: CanonicalAttempt[] = [];
       expect(
         commitNextAttempt(
-          driver,
-          redo.workflow,
+          planner,
+          redo.plan,
           { description: normalized } as any,
           redoAttempts,
           "redo",
@@ -652,7 +645,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
         node(201, 17, undefined, rootAttributes),
         node(202, 17, 201),
       ];
-      const { driver, identities } = makeDriver(
+      const { planner, identities } = makePlanner(
         new Map([
           [11n, first],
           [17n, second],
@@ -668,11 +661,8 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
               kind: "merge",
               options: { firstNode: first[1], secondNode: second[1] },
             });
-      const execute = driver.createLogicalIntent(
-        descriptor,
-        context(1, "execute"),
-      );
-      let semantic = execute.workflow.semantic;
+      const execute = planner.planIntent(descriptor, context(1, "execute"));
+      let semantic = execute.plan.semantic;
       const rootId = kind === "merge" ? 201n : 101n;
       const rootHandle = identities.getOrCreateNodeHandle(rootId);
       if (kind === "reversed merge" && semantic.kind === "merge") {
@@ -688,15 +678,15 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
         };
       }
       const inverse = {
-        ...execute.workflow,
+        ...execute.plan,
         semantic,
         direction: "inverse",
-      } as CatmaidWorkflow;
+      } as CatmaidEditPlan;
       // A later deletion/restoration can replace the physical root before Undo.
       identities.apply({ bindings: { nodes: [[rootHandle, 901n]] } });
       const attempts: CanonicalAttempt[] = [];
       const undo = (result?: object) =>
-        commitNextAttempt(driver, inverse, result as any, attempts, "undo");
+        commitNextAttempt(planner, inverse, result as any, attempts, "undo");
       if (kind !== "reroot") {
         expect(
           undo({
@@ -716,7 +706,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
         });
       }
       expect(
-        driver.nextAttempt(inverse, workflowContext(2, "undo", attempts)),
+        planner.nextAttempt(inverse, planContext(2, "undo", attempts)),
       ).toBeUndefined();
     },
   );
@@ -728,7 +718,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
     });
     const first = [node(100, 11), node(101, 11, 100)];
     const second = [node(200, 17), node(201, 17, 200)];
-    const { driver } = makeDriver(
+    const { planner } = makePlanner(
       new Map([
         [23n, [node(1, 23), node(2, 23, 1), richLeaf]],
         [11n, first],
@@ -738,20 +728,17 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
     const materializeSpies = currentQueueInput.segments.map(({ snapshot }) =>
       vi.spyOn(snapshot, "materialize"),
     );
-    const mutation = (
+    const editRequest = (
       descriptor: CatmaidSpatialSkeletonCommandDescriptor,
       intentId: number,
     ) => {
-      const logical = driver.createLogicalIntent(
+      const logical = planner.planIntent(
         descriptor,
         context(intentId, "execute"),
       );
-      return driver
-        .nextAttempt(
-          logical.workflow,
-          workflowContext(intentId, "execute", []),
-        )!
-        .materializeMutation();
+      return planner
+        .nextAttempt(logical.plan, planContext(intentId, "execute", []))!
+        .materializeEditRequest();
     };
 
     const cases: readonly [
@@ -837,7 +824,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
       ],
     ];
     cases.forEach(([action, payload, expected], index) => {
-      const actual = mutation(command(action, "Edit", payload), index + 1);
+      const actual = editRequest(command(action, "Edit", payload), index + 1);
       expect(actual.kind).toBe((expected as { kind: string }).kind);
       expect(actual.request).toEqual((expected as { request: object }).request);
       if (actual.kind === "merge") {
@@ -853,10 +840,10 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
 
   it("resolves retained logical handles when the authority lease starts", () => {
     const original = node(2, 23, 1);
-    const { driver, identities } = makeDriver(
+    const { planner, identities } = makePlanner(
       new Map([[23n, [node(1, 23), original]]]),
     );
-    const logical = driver.createLogicalIntent(
+    const logical = planner.planIntent(
       command(SpatialSkeletonActions.moveNodes, "Move", {
         kind: "move-node",
         options: {
@@ -866,14 +853,14 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
       }),
       context(1, "execute"),
     );
-    const delta = logical.projection.delta;
-    if (delta.kind !== "move") throw new Error("Expected move projection.");
+    const delta = logical.preview.delta;
+    if (delta.kind !== "move") throw new Error("Expected move preview.");
     identities.apply({ bindings: { nodes: [[delta.node, 900n]] } });
 
     expect(
-      driver
-        .nextAttempt(logical.workflow, workflowContext(1, "execute", []))!
-        .materializeMutation(),
+      planner
+        .nextAttempt(logical.plan, planContext(1, "execute", []))!
+        .materializeEditRequest(),
     ).toEqual({
       kind: "move-node",
       request: { nodeId: 900n, position: [10, 11, 12] },
@@ -885,23 +872,20 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
       ...node(2, 23, 1, { true_end: [1] }),
       description: "terminal",
     });
-    const { driver, identities } = makeDriver(
+    const { planner, identities } = makePlanner(
       new Map([[23n, [node(1, 23), deleted]]]),
     );
     const descriptor = command(SpatialSkeletonActions.deleteNodes, "Delete", {
       kind: "delete-node",
       node: deleted,
     });
-    const execute = driver.createLogicalIntent(
-      descriptor,
-      context(1, "execute"),
-    );
-    const undo = driver.createLogicalIntent(
+    const execute = planner.planIntent(descriptor, context(1, "execute"));
+    const undo = planner.planIntent(
       descriptor,
       context(2, "undo", {
-        workflow: execute.workflow,
-        projection: execute.projection,
-        inverseProjection: {
+        plan: execute.plan,
+        preview: execute.preview,
+        inversePreview: {
           kind: "restore-delete",
           segment: identities.getOrCreateSegmentHandle(23n),
           snapshot: {
@@ -917,8 +901,8 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
     const attempts: CanonicalAttempt[] = [];
     expect(
       commitNextAttempt(
-        driver,
-        undo.workflow,
+        planner,
+        undo.plan,
         { nodeId: 20n, segmentId: 23n } as any,
         attempts,
         "undo",
@@ -929,8 +913,8 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
     });
     expect(
       commitNextAttempt(
-        driver,
-        undo.workflow,
+        planner,
+        undo.plan,
         { description: "terminal" } as any,
         attempts,
         "undo",
@@ -940,12 +924,14 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
       request: { nodeId: 20n, description: "terminal", isTrueEnd: true },
     });
     expect(
-      driver.nextAttempt(undo.workflow, workflowContext(2, "undo", attempts)),
+      planner.nextAttempt(undo.plan, planContext(2, "undo", attempts)),
     ).toBeUndefined();
   });
 
   it("reuses one immutable recipe across execute, undo, and redo with fresh identities", () => {
-    const { driver, identities } = makeDriver(new Map([[23n, [node(1, 23)]]]));
+    const { planner, identities } = makePlanner(
+      new Map([[23n, [node(1, 23)]]]),
+    );
     const descriptor = command(SpatialSkeletonActions.addNodes, "Add node", {
       kind: "add-node",
       options: {
@@ -954,15 +940,10 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
         positionInModelSpace: Object.freeze([4, 5, 6]),
       },
     });
-    const execute = driver.createLogicalIntent(
-      descriptor,
-      context(1, "execute"),
-    );
+    const execute = planner.planIntent(descriptor, context(1, "execute"));
     expect(execute.kind).toBe("addNode");
-    expect(execute.projection.provisionalBindings?.nodes?.[0]?.[1]).toBe(
-      999_999n,
-    );
-    expect(execute.projection.uiHints).toMatchObject({
+    expect(execute.preview.provisionalBindings?.nodes?.[0]?.[1]).toBe(999_999n);
+    expect(execute.preview.uiHints).toMatchObject({
       segmentVisibility: [{ visible: true, select: "pin" }],
       selectedNode: {
         kind: "select",
@@ -974,8 +955,8 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
     const executeAttempts: CanonicalAttempt[] = [];
     expect(
       commitNextAttempt(
-        driver,
-        execute.workflow,
+        planner,
+        execute.plan,
         { nodeId: 2n, segmentId: 23n } as any,
         executeAttempts,
       ),
@@ -983,62 +964,56 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
       kind: "add-node",
       request: { parentNodeId: 1n },
     });
-    const executeReconciliation = driver.createReconciliation(
-      execute.workflow,
-      workflowContext(1, "execute", executeAttempts),
+    const executeReconciliation = planner.createReconciliation(
+      execute.plan,
+      planContext(1, "execute", executeAttempts),
     );
     identities.apply(executeReconciliation);
-    const createdHandle = (execute.projection.delta as any).node;
+    const createdHandle = (execute.preview.delta as any).node;
     expect(identities.resolveNode(createdHandle)).toBe(2n);
 
-    const inverseProjection = {
+    const inversePreview = {
       kind: "delete",
-      segment: (execute.projection.delta as any).segment,
+      segment: (execute.preview.delta as any).segment,
       node: createdHandle,
-    } as SpatialSkeletonProjectionInverseDelta;
+    } as SpatialSkeletonEditInverseDelta;
     const recipe = {
-      workflow: execute.workflow,
-      projection: execute.projection,
-      inverseProjection,
+      plan: execute.plan,
+      preview: execute.preview,
+      inversePreview,
     };
-    const undo = driver.createLogicalIntent(
-      descriptor,
-      context(2, "undo", recipe),
-    );
-    expect(undo.projection.delta).toBe(inverseProjection);
-    expect(undo.workflow).not.toBe(execute.workflow);
-    expect(undo.projection.uiHints).toMatchObject({
+    const undo = planner.planIntent(descriptor, context(2, "undo", recipe));
+    expect(undo.preview.delta).toBe(inversePreview);
+    expect(undo.plan).not.toBe(execute.plan);
+    expect(undo.preview.uiHints).toMatchObject({
       selectedNode: { kind: "select", node: { stableId: "authority:1" } },
     });
     const undoAttempts: CanonicalAttempt[] = [];
-    const undoMutation = commitNextAttempt(
-      driver,
-      undo.workflow,
+    const undoEditRequest = commitNextAttempt(
+      planner,
+      undo.plan,
       {} as any,
       undoAttempts,
       "undo",
     );
-    expect(undoMutation).toEqual({
+    expect(undoEditRequest).toEqual({
       kind: "delete-node",
       request: { nodeId: 2n },
     });
     expect(executeAttempts).toHaveLength(1);
 
-    const redo = driver.createLogicalIntent(
-      descriptor,
-      context(3, "redo", recipe),
-    );
-    expect(redo.projection.delta).toStrictEqual(execute.projection.delta);
-    expect(redo.projection.provisionalBindings?.nodes?.[0]?.[1]).toBe(999_997n);
-    expect(redo.projection.uiHints).toMatchObject({
+    const redo = planner.planIntent(descriptor, context(3, "redo", recipe));
+    expect(redo.preview.delta).toStrictEqual(execute.preview.delta);
+    expect(redo.preview.provisionalBindings?.nodes?.[0]?.[1]).toBe(999_997n);
+    expect(redo.preview.uiHints).toMatchObject({
       segmentVisibility: [{ visible: true, select: "preserve" }],
       selectedNode: { kind: "select", moveView: false },
     });
     const redoAttempts: CanonicalAttempt[] = [];
     expect(
       commitNextAttempt(
-        driver,
-        redo.workflow,
+        planner,
+        redo.plan,
         { nodeId: 3n, segmentId: 23n } as any,
         redoAttempts,
         "redo",
@@ -1048,9 +1023,9 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
       request: { parentNodeId: 1n },
     });
     identities.apply(
-      driver.createReconciliation(
-        redo.workflow,
-        workflowContext(3, "redo", redoAttempts),
+      planner.createReconciliation(
+        redo.plan,
+        planContext(3, "redo", redoAttempts),
       ),
     );
     expect(identities.resolveNode(createdHandle)).toBe(3n);
@@ -1058,24 +1033,21 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
 
   it("targets the appropriate root for Execute, Undo, and Redo", () => {
     const nodes = [node(1, 23), node(2, 23, 1), node(3, 23, 2), node(4, 23, 1)];
-    const { driver } = makeDriver(new Map([[23n, nodes]]));
+    const { planner } = makePlanner(new Map([[23n, nodes]]));
     const descriptor = command(SpatialSkeletonActions.reroot, "Reroot", {
       kind: "reroot",
       node: nodes[2],
     });
-    const execute = driver.createLogicalIntent(
-      descriptor,
-      context(1, "execute"),
-    );
-    const semantic = execute.workflow.semantic;
+    const execute = planner.planIntent(descriptor, context(1, "execute"));
+    const semantic = execute.plan.semantic;
     if (semantic.kind !== "reroot")
       throw new Error("Expected reroot semantic.");
     expect(semantic.node.stableId).toBe("authority:3");
     expect(semantic.originalRoot.stableId).toBe("authority:1");
     const recipe = {
-      workflow: execute.workflow,
-      projection: execute.projection,
-      inverseProjection: {
+      plan: execute.plan,
+      preview: execute.preview,
+      inversePreview: {
         kind: "restore-topology",
         segment: semantic.segment,
         patches: nodes.slice(0, 3).map((node) => ({
@@ -1086,7 +1058,7 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
               : semantic.retainedNodes.get(node.parentNodeId)!,
           confidence: node.attributes?.confidence?.[0],
         })),
-      } as SpatialSkeletonProjectionInverseDelta,
+      } as SpatialSkeletonEditInverseDelta,
     };
 
     for (const [intent, intentId] of [
@@ -1097,31 +1069,28 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
       const logical =
         intent === "execute"
           ? execute
-          : driver.createLogicalIntent(
-              descriptor,
-              context(intentId, intent, recipe),
-            );
+          : planner.planIntent(descriptor, context(intentId, intent, recipe));
       const attempts: CanonicalAttempt[] = [];
-      const mutation = commitNextAttempt(
-        driver,
-        logical.workflow,
+      const editRequest = commitNextAttempt(
+        planner,
+        logical.plan,
         undefined,
         attempts,
         intent,
       );
-      expect(mutation).toEqual({
+      expect(editRequest).toEqual({
         kind: "reroot",
         request: { nodeId: intent === "undo" ? 1n : 3n },
       });
       expect(
-        driver.nextAttempt(
-          logical.workflow,
-          workflowContext(intentId, intent, attempts),
+        planner.nextAttempt(
+          logical.plan,
+          planContext(intentId, intent, attempts),
         ),
       ).toBeUndefined();
-      const reconciliation = driver.createReconciliation(
-        logical.workflow,
-        workflowContext(intentId, intent, attempts),
+      const reconciliation = planner.createReconciliation(
+        logical.plan,
+        planContext(intentId, intent, attempts),
       );
       expect(reconciliation).toEqual({
         bindings: { nodes: [], segments: [] },
@@ -1131,17 +1100,17 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
   });
 
   it("describes delete selection without owning layer presentation state", () => {
-    const { driver } = makeDriver(
+    const { planner } = makePlanner(
       new Map([[23n, [node(1, 23), node(2, 23, 1)]]]),
     );
-    const childDelete = driver.createLogicalIntent(
+    const childDelete = planner.planIntent(
       command(SpatialSkeletonActions.deleteNodes, "Delete node", {
         kind: "delete-node",
         node: node(2, 23, 1),
       }),
       context(1, "execute"),
     );
-    expect(childDelete.projection.uiHints).toMatchObject({
+    expect(childDelete.preview.uiHints).toMatchObject({
       selectedNode: {
         kind: "select",
         node: { stableId: "authority:1" },
@@ -1150,17 +1119,17 @@ describe("CatmaidSpatialSkeletonWorkflowDriver", () => {
       },
     });
 
-    const { driver: soleRootDriver } = makeDriver(
+    const { planner: soleRootPlanner } = makePlanner(
       new Map([[31n, [node(7, 31)]]]),
     );
-    const rootDelete = soleRootDriver.createLogicalIntent(
+    const rootDelete = soleRootPlanner.planIntent(
       command(SpatialSkeletonActions.deleteNodes, "Delete node", {
         kind: "delete-node",
         node: node(7, 31),
       }),
       context(2, "execute"),
     );
-    expect(rootDelete.projection.uiHints).toMatchObject({
+    expect(rootDelete.preview.uiHints).toMatchObject({
       segmentVisibility: [
         {
           segment: { stableId: "authority:31" },

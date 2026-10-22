@@ -30,59 +30,59 @@ import {
   getSpatialSkeletonActionSupportLabel,
   getSpatialSkeletonEditCommandFactoryFromSource,
 } from "#src/skeleton/edit_commands.js";
-import {
-  assertSpatialSkeletonOptimisticDriverRegistration,
-  isSpatialSkeletonOptimisticEditingProvider,
-  SpatialSkeletonOptimisticDatasourceContractError,
-  type SpatialSkeletonOptimisticEditingProvider,
-  type SpatialSkeletonProvisionalNumericIdPolicy,
-  type SpatialSkeletonProvisionalNumericIdService,
+import type {
+  SpatialSkeletonEditPlannerProvider,
+  SpatialSkeletonProvisionalNumericIdPolicy,
+  SpatialSkeletonProvisionalNumericIdService,
 } from "#src/skeleton/edit_queue/api.js";
 import {
-  createCompleteSkeletonSnapshot,
-  type CompleteSkeletonSnapshotHandle,
-} from "#src/skeleton/edit_queue/complete_skeleton.js";
-import {
-  SpatialSkeletonInspectionRequiredError,
-  type SpatialSkeletonInspectionRequiredReason,
-} from "#src/skeleton/edit_queue/edit_errors.js";
-import { SpatialSkeletonOptimisticQueueEngine } from "#src/skeleton/edit_queue/edit_queue.js";
+  assertSpatialSkeletonEditPlannerRegistration,
+  isSpatialSkeletonEditPlannerProvider,
+  SpatialSkeletonDatasourceContractError,
+} from "#src/skeleton/edit_queue/api.js";
+import type { CompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
+import { createCompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
+import type { SpatialSkeletonInspectionRequiredReason } from "#src/skeleton/edit_queue/edit_errors.js";
+import { SpatialSkeletonInspectionRequiredError } from "#src/skeleton/edit_queue/edit_errors.js";
+import { SpatialSkeletonEditQueue } from "#src/skeleton/edit_queue/edit_queue.js";
 import type {
-  SpatialSkeletonPreparedProjectionStatePublication,
-  SpatialSkeletonPresentationLogicalOwner,
-  SpatialSkeletonPresentationNumericAlias,
-  SpatialSkeletonProjectionStatePublicationRequest,
+  SpatialSkeletonPreparedPreviewCachePublication,
+  SpatialSkeletonDisplayStableOwner,
+  SpatialSkeletonDisplayNumericAlias,
+  SpatialSkeletonPreviewCachePublicationRequest,
 } from "#src/skeleton/edit_queue/preview.js";
 import {
-  preparedSpatialSkeletonProjectionStatePublicationBrand,
-  SpatialSkeletonOptimisticProjectionRuntime,
+  preparedSpatialSkeletonPreviewCachePublicationBrand,
+  SpatialSkeletonEditPreview,
 } from "#src/skeleton/edit_queue/preview.js";
-import type { SpatialSkeletonResolvedProjectionUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
+import type { SpatialSkeletonResolvedPreviewUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
 import type {
   SpatialSkeletonQueueInput,
   SpatialSkeletonQueueInputPreparation,
   SpatialSkeletonQueueInputRequirement,
 } from "#src/skeleton/edit_queue/queue_input.js";
-import { SpatialSkeletonMutationAttemptScheduler } from "#src/skeleton/edit_queue/request_scheduler.js";
+import { SpatialSkeletonRequestScheduler } from "#src/skeleton/edit_queue/request_scheduler.js";
 import type {
-  SpatialSkeletonLogicalNodeHandle,
-  SpatialSkeletonLogicalSegmentHandle,
+  SpatialSkeletonStableNodeHandle,
+  SpatialSkeletonStableSegmentHandle,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
-import {
-  DEFAULT_SPATIAL_SKELETON_OPTIMISTIC_EDIT_QUEUE_CAPACITY,
-  freezeSpatialSkeletonOptimisticFatalState,
-  SpatialSkeletonOptimisticReloadRequiredError,
-  unchangedSpatialSkeletonOptimisticEditSettlement,
-  type SpatialSkeletonOptimisticEditActivityEntry,
-  type SpatialSkeletonOptimisticEditExecution,
-  type SpatialSkeletonOptimisticEditQueue,
-  type SpatialSkeletonOptimisticEditQueueEntry,
-  type SpatialSkeletonOptimisticEditState,
-  type SpatialSkeletonOptimisticFatalState,
+import type {
+  SpatialSkeletonEditActivityEntry,
+  SpatialSkeletonEditExecution,
+  SpatialSkeletonSessionEditQueue,
+  SpatialSkeletonEditQueueEntry,
+  SpatialSkeletonUndoRedoControls,
+  SpatialSkeletonReloadRequiredDetails,
 } from "#src/skeleton/edit_queue/types.js";
 import {
-  createSpatialSkeletonOptimisticHistoryPort,
-  SpatialSkeletonCommandHistory,
+  DEFAULT_SPATIAL_SKELETON_EDIT_QUEUE_CAPACITY,
+  freezeSpatialSkeletonReloadRequiredDetails,
+  SpatialSkeletonReloadRequiredError,
+  unchangedSpatialSkeletonEditSettlement,
+} from "#src/skeleton/edit_queue/types.js";
+import {
+  createSpatialSkeletonHistoryPort,
+  SpatialSkeletonUndoHistory,
 } from "#src/skeleton/edit_queue/undo_history.js";
 import { resolveSkeletonParents } from "#src/skeleton/skeleton_edges.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
@@ -92,39 +92,37 @@ import { bigintCompare } from "#src/util/bigint.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { PromiseConcurrencyLimiter } from "#src/util/promise_concurrency_limiter.js";
 
-export function getSpatialSkeletonOptimisticEditingProvider(
+export function getSpatialSkeletonEditPlannerProvider(
   source: EditableSkeletonSource,
-): SpatialSkeletonOptimisticEditingProvider | undefined {
-  const candidate = source.optimisticEditing;
-  return isSpatialSkeletonOptimisticEditingProvider(candidate)
+): SpatialSkeletonEditPlannerProvider | undefined {
+  const candidate = source.editPlannerProvider;
+  return isSpatialSkeletonEditPlannerProvider(candidate)
     ? candidate
     : undefined;
 }
 
 /**
- * Ensures the state-owned queue using the editable source's validated driver.
+ * Ensures the session-owned queue using the editable source's validated planner.
  *
  * Command construction calls this boundary every time. The layer state reuses
  * its existing engine for the same source and replaces it only after a new
  * datasource registration has been validated.
  */
-export function ensureSpatialSkeletonOptimisticEditQueue(
+export function ensureSpatialSkeletonEditQueue(
   layer: SpatialSkeletonLayerContext,
   source: EditableSkeletonSource,
-): SpatialSkeletonOptimisticEditQueue {
-  const state = layer.spatialSkeletonState;
-  const provider = getSpatialSkeletonOptimisticEditingProvider(source);
+): SpatialSkeletonSessionEditQueue {
+  const state = layer.spatialSkeletonEditSession;
+  const provider = getSpatialSkeletonEditPlannerProvider(source);
   if (provider === undefined) {
-    throw new SpatialSkeletonOptimisticDatasourceContractError(
-      "Writable spatial skeleton datasource is missing optimisticEditing.createDriver().",
+    throw new SpatialSkeletonDatasourceContractError(
+      "Writable spatial skeleton datasource is missing editPlannerProvider.createPlanner().",
     );
   }
-  return state.ensureOptimisticEditingEngine(layer, source, provider);
+  return state.ensureEditQueue(layer, source, provider);
 }
 
-function resolvedOptimisticEditExecution<T>(
-  value: T,
-): SpatialSkeletonOptimisticEditExecution<T> {
+function resolvedEditExecution<T>(value: T): SpatialSkeletonEditExecution<T> {
   const execution = Promise.resolve(value);
   Object.defineProperty(execution, "acceptedByQueue", {
     configurable: true,
@@ -132,16 +130,14 @@ function resolvedOptimisticEditExecution<T>(
   });
   Object.defineProperty(execution, "settled", {
     configurable: true,
-    value: Promise.resolve(
-      unchangedSpatialSkeletonOptimisticEditSettlement("no-op"),
-    ),
+    value: Promise.resolve(unchangedSpatialSkeletonEditSettlement("no-op")),
   });
-  return execution as SpatialSkeletonOptimisticEditExecution<T>;
+  return execution as SpatialSkeletonEditExecution<T>;
 }
 
-function rejectedOptimisticEditExecution<T>(
+function rejectedEditExecution<T>(
   error: unknown,
-): SpatialSkeletonOptimisticEditExecution<T> {
+): SpatialSkeletonEditExecution<T> {
   const execution = Promise.reject<T>(error);
   const acceptedByQueue = Promise.reject<void>(error);
   // These milestones are intentionally independent. Callers commonly await
@@ -155,29 +151,29 @@ function rejectedOptimisticEditExecution<T>(
   Object.defineProperty(execution, "settled", {
     configurable: true,
     value: Promise.resolve(
-      unchangedSpatialSkeletonOptimisticEditSettlement("not-started", error),
+      unchangedSpatialSkeletonEditSettlement("not-started", error),
     ),
   });
-  return execution as SpatialSkeletonOptimisticEditExecution<T>;
+  return execution as SpatialSkeletonEditExecution<T>;
 }
 
-export type SpatialSkeletonPreparationKind =
+export type SpatialSkeletonPendingEditKind =
   | "merge"
   | "split"
   | "delete"
   | "restore"
   | "reroot";
 
-export type SpatialSkeletonPreparationDirection = "execute" | "undo" | "redo";
+export type SpatialSkeletonPendingEditDirection = "execute" | "undo" | "redo";
 
-export type SpatialSkeletonPreparationLifecycle = "preparing";
+export type SpatialSkeletonPendingEditLifecycle = "preparing";
 
 /**
  * A position captured when a structural intent is admitted. Preparations use these
  * values only when the live node cache cannot resolve the corresponding node;
  * they are therefore truthful last-known locations, not invented topology.
  */
-export interface SpatialSkeletonPreparationPosition {
+export interface SpatialSkeletonPendingEditPosition {
   readonly nodeId: bigint;
   readonly position: Float32Array;
 }
@@ -189,14 +185,14 @@ export interface SpatialSkeletonPreparationPosition {
  * `cutParentNodeId` is the existing edge being cut, and `pathNodeIds` is an
  * optional known path (never inferred by the renderer).
  */
-export interface SpatialSkeletonPreparationIntent {
+export interface SpatialSkeletonPendingEdit {
   readonly intentId: number;
   readonly sequence: number;
-  readonly direction: SpatialSkeletonPreparationDirection;
-  readonly kind: SpatialSkeletonPreparationKind;
-  readonly lifecycle: SpatialSkeletonPreparationLifecycle;
-  readonly logicalNodeHandles?: readonly SpatialSkeletonLogicalNodeHandle[];
-  readonly logicalSegmentHandles?: readonly SpatialSkeletonLogicalSegmentHandle[];
+  readonly direction: SpatialSkeletonPendingEditDirection;
+  readonly kind: SpatialSkeletonPendingEditKind;
+  readonly lifecycle: SpatialSkeletonPendingEditLifecycle;
+  readonly stableNodeHandles?: readonly SpatialSkeletonStableNodeHandle[];
+  readonly stableSegmentHandles?: readonly SpatialSkeletonStableSegmentHandle[];
   readonly segmentIds: readonly bigint[];
   readonly nodeId?: bigint;
   readonly endpointNodeIds?: readonly bigint[];
@@ -204,7 +200,7 @@ export interface SpatialSkeletonPreparationIntent {
   readonly cutParentNodeId?: bigint;
   readonly rootNodeId?: bigint;
   readonly pathNodeIds?: readonly bigint[];
-  readonly lastKnownPositions?: readonly SpatialSkeletonPreparationPosition[];
+  readonly lastKnownPositions?: readonly SpatialSkeletonPendingEditPosition[];
 }
 
 /**
@@ -223,7 +219,7 @@ export type SpatialSkeletonCachedSegmentSnapshot =
  * represents snapshot contents without a separate lineage counter.
  */
 export interface SpatialSkeletonCachedSegmentSnapshotHandle {
-  readonly handle: CompleteSkeletonSnapshotHandle;
+  readonly handle: CompleteSkeleton;
   readonly cacheRevision: number;
 }
 
@@ -245,40 +241,40 @@ export interface SpatialSkeletonInputReference {
 /**
  * The complete presentation observed by rendering and Skeleton Details.
  * Topology references are always exact complete-skeleton handles.  A cold
- * structural intent is represented only by `preparations` until its exact
+ * structural intent is represented only by `pendingEdits` until its exact
  * reducer result can be published in the same presentation transaction.
  */
-export interface SpatialSkeletonPresentationSnapshot {
+export interface SpatialSkeletonDisplaySnapshot {
   readonly revision: number;
-  /** Explicit projection removals, including pending deletions and retired IDs. */
+  /** Explicit preview removals, including pending deletions and retired IDs. */
   readonly removedSegmentIds: readonly bigint[];
-  readonly activeLogicalOwners: readonly SpatialSkeletonPresentationLogicalOwner[];
-  readonly numericAliases: readonly SpatialSkeletonPresentationNumericAlias[];
-  /** Node ids that exist only in the local optimistic projection. */
+  readonly activeStableOwners: readonly SpatialSkeletonDisplayStableOwner[];
+  readonly numericAliases: readonly SpatialSkeletonDisplayNumericAlias[];
+  /** Node ids that exist only in the local optimistic preview. */
   readonly provisionalNodeIds: readonly bigint[];
-  readonly preparations: readonly SpatialSkeletonPreparationIntent[];
+  readonly pendingEdits: readonly SpatialSkeletonPendingEdit[];
 }
 
 /**
- * Returns active numeric aliases that exist only in the optimistic projection.
+ * Returns active numeric aliases that exist only in the optimistic preview.
  * These ids are presentation state rather than datasource identities and receive a
  * temporary render color until their owning operation is confirmed.
  */
 function getActiveProvisionalSpatialSkeletonSegmentIds(
-  presentation: SpatialSkeletonPresentationSnapshot,
+  display: SpatialSkeletonDisplaySnapshot,
 ): bigint[] {
   const activeOwners = new Map(
-    presentation.activeLogicalOwners.map(({ segmentId, logicalHandle }) => [
+    display.activeStableOwners.map(({ segmentId, stableHandle }) => [
       segmentId,
-      logicalHandle.stableId,
+      stableHandle.stableId,
     ]),
   );
   const provisionalSegmentIds = new Set<bigint>();
-  for (const alias of presentation.numericAliases) {
+  for (const alias of display.numericAliases) {
     if (
       alias.authoritative !== false ||
       alias.segmentId === 0n ||
-      activeOwners.get(alias.segmentId) !== alias.logicalHandle.stableId
+      activeOwners.get(alias.segmentId) !== alias.stableHandle.stableId
     ) {
       continue;
     }
@@ -409,15 +405,15 @@ function cachedSegmentSnapshotsEqual(
 
 interface SpatialSkeletonCachedSegmentReplacement {
   readonly nodes: readonly SkeletonNode[] | undefined;
-  readonly handle: CompleteSkeletonSnapshotHandle | undefined;
+  readonly handle: CompleteSkeleton | undefined;
   readonly adoptHandleStorage: boolean;
 }
 
-interface SpatialSkeletonPreparedProjectionStatePublicationImplementation
-  extends SpatialSkeletonPreparedProjectionStatePublication {
+interface SpatialSkeletonPreparedPreviewCachePublicationImplementation
+  extends SpatialSkeletonPreparedPreviewCachePublication {
   readonly owner: object;
   readonly expectedCacheRevisionClock: number;
-  readonly expectedPresentation: SpatialSkeletonPresentationSnapshot;
+  readonly expectedDisplay: SpatialSkeletonDisplaySnapshot;
   readonly expectedRevisions: ReadonlyMap<bigint, number>;
   readonly cacheRevisions: ReadonlyMap<bigint, number>;
   readonly nextCacheRevisionClock: number;
@@ -428,25 +424,25 @@ interface SpatialSkeletonPreparedProjectionStatePublicationImplementation
     SpatialSkeletonCachedSegmentSnapshotHandle
   >;
   readonly nextCachedNodesById: Map<bigint, SkeletonNode>;
-  readonly nextPresentationLogicalOwners: Map<
+  readonly nextDisplayStableOwners: Map<
     bigint,
-    SpatialSkeletonLogicalSegmentHandle
+    SpatialSkeletonStableSegmentHandle
   >;
-  readonly nextPresentationNumericAliases: Map<
+  readonly nextDisplayNumericAliases: Map<
     string,
     { readonly segmentId: bigint; readonly authoritative: boolean }
   >;
-  readonly nextPresentationProvisionalNodeIds: Set<bigint>;
-  readonly nextPresentationRemovedSegmentIds: Set<bigint>;
-  readonly nextPreparationsById: Map<number, SpatialSkeletonPreparationIntent>;
+  readonly nextDisplayProvisionalNodeIds: Set<bigint>;
+  readonly nextDisplayRemovedSegmentIds: Set<bigint>;
+  readonly nextPendingEditsById: Map<number, SpatialSkeletonPendingEdit>;
   readonly changedSegmentIds: readonly bigint[];
   readonly abortSegmentIds: readonly bigint[];
   readonly retiredSegmentIds: ReadonlySet<bigint>;
   readonly notifyNodeData: boolean;
-  readonly presentation?: SpatialSkeletonPresentationSnapshot;
+  readonly display?: SpatialSkeletonDisplaySnapshot;
 }
 
-function normalizePreparationId(value: number, label: string) {
+function normalizePendingEditId(value: number, label: string) {
   const normalized = Math.round(Number(value));
   if (!Number.isSafeInteger(normalized) || normalized === 0) {
     throw new RangeError(`Invalid ${label}: ${value}`);
@@ -454,65 +450,65 @@ function normalizePreparationId(value: number, label: string) {
   return normalized;
 }
 
-function normalizePreparationNodeId(value: bigint, label: string) {
+function normalizePendingEditNodeId(value: bigint, label: string) {
   if (value === 0n) {
     throw new RangeError(`Invalid ${label}: ${value}`);
   }
   return value;
 }
 
-function normalizePreparationNodeIds(
+function normalizePendingEditNodeIds(
   values: readonly bigint[] | undefined,
   label: string,
 ) {
   if (values === undefined) return undefined;
-  return values.map((value) => normalizePreparationNodeId(value, label));
+  return values.map((value) => normalizePendingEditNodeId(value, label));
 }
 
-function normalizeSpatialSkeletonPreparationIntent(
-  preparation: SpatialSkeletonPreparationIntent,
-): SpatialSkeletonPreparationIntent {
-  const intentId = normalizePreparationId(
-    preparation.intentId,
+function normalizeSpatialSkeletonPendingEdit(
+  pendingEdit: SpatialSkeletonPendingEdit,
+): SpatialSkeletonPendingEdit {
+  const intentId = normalizePendingEditId(
+    pendingEdit.intentId,
     "preparation intent id",
   );
   if (intentId < 0) {
     throw new RangeError(
-      `Invalid preparation intent id: ${preparation.intentId}`,
+      `Invalid preparation intent id: ${pendingEdit.intentId}`,
     );
   }
   if (
-    preparation.kind !== "merge" &&
-    preparation.kind !== "split" &&
-    preparation.kind !== "delete" &&
-    preparation.kind !== "restore" &&
-    preparation.kind !== "reroot"
+    pendingEdit.kind !== "merge" &&
+    pendingEdit.kind !== "split" &&
+    pendingEdit.kind !== "delete" &&
+    pendingEdit.kind !== "restore" &&
+    pendingEdit.kind !== "reroot"
   ) {
     throw new TypeError(
-      `Invalid spatial skeleton preparation kind: ${preparation.kind}`,
+      `Invalid spatial skeleton preparation kind: ${pendingEdit.kind}`,
     );
   }
-  if (preparation.lifecycle !== "preparing") {
+  if (pendingEdit.lifecycle !== "preparing") {
     throw new TypeError(
-      `Invalid spatial skeleton preparation lifecycle: ${preparation.lifecycle}`,
+      `Invalid spatial skeleton preparation lifecycle: ${pendingEdit.lifecycle}`,
     );
   }
-  const sequence = normalizePreparationId(
-    preparation.sequence,
+  const sequence = normalizePendingEditId(
+    pendingEdit.sequence,
     "preparation sequence",
   );
   if (sequence < 0) {
     throw new RangeError(
-      `Invalid preparation sequence: ${preparation.sequence}`,
+      `Invalid preparation sequence: ${pendingEdit.sequence}`,
     );
   }
-  const { direction } = preparation;
+  const { direction } = pendingEdit;
   if (direction !== "execute" && direction !== "undo" && direction !== "redo") {
     throw new TypeError(`Invalid preparation direction: ${direction}`);
   }
   const normalizeOptionalId = (value: bigint | undefined, label: string) =>
-    value === undefined ? undefined : normalizePreparationNodeId(value, label);
-  const lastKnownPositions = preparation.lastKnownPositions?.map((entry) => {
+    value === undefined ? undefined : normalizePendingEditNodeId(value, label);
+  const lastKnownPositions = pendingEdit.lastKnownPositions?.map((entry) => {
     const position = new Float32Array([
       Number(entry.position[0]),
       Number(entry.position[1]),
@@ -524,23 +520,23 @@ function normalizeSpatialSkeletonPreparationIntent(
       );
     }
     return Object.freeze({
-      nodeId: normalizePreparationNodeId(entry.nodeId, "preparation node id"),
+      nodeId: normalizePendingEditNodeId(entry.nodeId, "preparation node id"),
       position,
     });
   });
-  const cloneLogicalNodeHandle = ({
+  const cloneStableNodeHandle = ({
     kind,
     stableId,
-  }: SpatialSkeletonLogicalNodeHandle) => {
+  }: SpatialSkeletonStableNodeHandle) => {
     if (kind !== "node" || String(stableId).length === 0) {
       throw new TypeError("Invalid logical node handle in preparation.");
     }
     return Object.freeze({ kind, stableId: String(stableId) });
   };
-  const cloneLogicalSegmentHandle = ({
+  const cloneStableSegmentHandle = ({
     kind,
     stableId,
-  }: SpatialSkeletonLogicalSegmentHandle) => {
+  }: SpatialSkeletonStableSegmentHandle) => {
     if (kind !== "segment" || String(stableId).length === 0) {
       throw new TypeError("Invalid logical segment handle in preparation.");
     }
@@ -550,54 +546,54 @@ function normalizeSpatialSkeletonPreparationIntent(
     intentId,
     sequence,
     direction,
-    kind: preparation.kind,
-    lifecycle: preparation.lifecycle,
-    logicalNodeHandles:
-      preparation.logicalNodeHandles === undefined
+    kind: pendingEdit.kind,
+    lifecycle: pendingEdit.lifecycle,
+    stableNodeHandles:
+      pendingEdit.stableNodeHandles === undefined
         ? undefined
         : Object.freeze(
-            preparation.logicalNodeHandles.map(cloneLogicalNodeHandle),
+            pendingEdit.stableNodeHandles.map(cloneStableNodeHandle),
           ),
-    logicalSegmentHandles:
-      preparation.logicalSegmentHandles === undefined
+    stableSegmentHandles:
+      pendingEdit.stableSegmentHandles === undefined
         ? undefined
         : Object.freeze(
-            preparation.logicalSegmentHandles.map(cloneLogicalSegmentHandle),
+            pendingEdit.stableSegmentHandles.map(cloneStableSegmentHandle),
           ),
     segmentIds: Object.freeze(
-      normalizePreparationNodeIds(
-        preparation.segmentIds,
+      normalizePendingEditNodeIds(
+        pendingEdit.segmentIds,
         "preparation segment id",
       )!,
     ),
-    nodeId: normalizeOptionalId(preparation.nodeId, "preparation node id"),
+    nodeId: normalizeOptionalId(pendingEdit.nodeId, "preparation node id"),
     endpointNodeIds:
-      preparation.endpointNodeIds === undefined
+      pendingEdit.endpointNodeIds === undefined
         ? undefined
         : Object.freeze(
-            normalizePreparationNodeIds(
-              preparation.endpointNodeIds,
+            normalizePendingEditNodeIds(
+              pendingEdit.endpointNodeIds,
               "preparation endpoint node id",
             )!,
           ),
     cutNodeId: normalizeOptionalId(
-      preparation.cutNodeId,
+      pendingEdit.cutNodeId,
       "preparation cut node id",
     ),
     cutParentNodeId: normalizeOptionalId(
-      preparation.cutParentNodeId,
+      pendingEdit.cutParentNodeId,
       "preparation cut-parent node id",
     ),
     rootNodeId: normalizeOptionalId(
-      preparation.rootNodeId,
+      pendingEdit.rootNodeId,
       "preparation root node id",
     ),
     pathNodeIds:
-      preparation.pathNodeIds === undefined
+      pendingEdit.pathNodeIds === undefined
         ? undefined
         : Object.freeze(
-            normalizePreparationNodeIds(
-              preparation.pathNodeIds,
+            normalizePendingEditNodeIds(
+              pendingEdit.pathNodeIds,
               "preparation path node id",
             )!,
           ),
@@ -641,7 +637,7 @@ class StateOwnedSpatialSkeletonProvisionalNumericIdService
   private allocate(kind: "node" | "segment", intentId: number) {
     const { policy } = this;
     if (policy === undefined) {
-      throw new SpatialSkeletonOptimisticDatasourceContractError(
+      throw new SpatialSkeletonDatasourceContractError(
         `This spatial skeleton datasource did not register a provisional numeric-ID policy for ${kind} creation.`,
       );
     }
@@ -650,7 +646,7 @@ class StateOwnedSpatialSkeletonProvisionalNumericIdService
         ? policy.allocateNodeId(intentId)
         : policy.allocateSegmentId(intentId);
     if (id === 0n) {
-      throw new SpatialSkeletonOptimisticDatasourceContractError(
+      throw new SpatialSkeletonDatasourceContractError(
         `The datasource provisional ${kind} ID policy returned invalid ID ${id}.`,
       );
     }
@@ -658,32 +654,31 @@ class StateOwnedSpatialSkeletonProvisionalNumericIdService
   }
 }
 
-type StateOwnedSpatialSkeletonOptimisticEngine =
-  SpatialSkeletonOptimisticEditQueue & {
-    subscribe(listener: () => void): () => void;
-    getSnapshot(): readonly SpatialSkeletonOptimisticEditQueueEntry[];
-    getRecentActivity(): readonly SpatialSkeletonOptimisticEditActivityEntry[];
-    submitExecute(
-      command: SpatialSkeletonEditCommand,
-      queueInput:
-        | SpatialSkeletonQueueInput
-        | SpatialSkeletonQueueInputPreparation,
-    ): SpatialSkeletonOptimisticEditExecution<boolean>;
-    submitUndo(): SpatialSkeletonOptimisticEditExecution<boolean>;
-    submitRedo(): SpatialSkeletonOptimisticEditExecution<boolean>;
-  };
+type SessionOwnedSpatialSkeletonEditQueue = SpatialSkeletonSessionEditQueue & {
+  subscribe(listener: () => void): () => void;
+  getSnapshot(): readonly SpatialSkeletonEditQueueEntry[];
+  getRecentActivity(): readonly SpatialSkeletonEditActivityEntry[];
+  submitExecute(
+    command: SpatialSkeletonEditCommand,
+    queueInput:
+      | SpatialSkeletonQueueInput
+      | SpatialSkeletonQueueInputPreparation,
+  ): SpatialSkeletonEditExecution<boolean>;
+  submitUndo(): SpatialSkeletonEditExecution<boolean>;
+  submitRedo(): SpatialSkeletonEditExecution<boolean>;
+};
 
-export interface SpatialSkeletonStateOptions {
+export interface SpatialSkeletonEditSessionOptions {
   /** Shared admission, history, and recent-activity capacity. */
-  readonly optimisticEditQueueCapacity?: number;
+  readonly editQueueCapacity?: number;
 }
 
-export class SpatialSkeletonState
+export class SpatialSkeletonEditSession
   extends RefCounted
-  implements SpatialSkeletonOptimisticEditState
+  implements SpatialSkeletonUndoRedoControls
 {
-  readonly commandHistory: SpatialSkeletonCommandHistory;
-  readonly optimisticEditQueueCapacity: number;
+  readonly commandHistory: SpatialSkeletonUndoHistory;
+  readonly editQueueCapacity: number;
   readonly editMode = new WatchableValue(false);
   readonly mergeMode = new WatchableValue(false);
   readonly splitMode = new WatchableValue(false);
@@ -698,52 +693,52 @@ export class SpatialSkeletonState
   readonly provisionalSegmentIds = this.registerDisposer(new Uint64Set());
   readonly nodeDataVersion = new WatchableValue(0);
   readonly pendingNodePositionVersion = new WatchableValue(0);
-  readonly optimisticEditQueueVersion = new WatchableValue(0);
+  readonly editQueueVersion = new WatchableValue(0);
   /**
    * Shared exact topology and structural-preparation presentation.  Rendering
    * and details should subscribe here so they cannot observe cache adoption
    * and preparation removal as two different presentation revisions.
    */
-  readonly spatialSkeletonPresentation =
-    new WatchableValue<SpatialSkeletonPresentationSnapshot>(
+  readonly spatialSkeletonDisplay =
+    new WatchableValue<SpatialSkeletonDisplaySnapshot>(
       Object.freeze({
         revision: 0,
         removedSegmentIds: Object.freeze([]),
-        activeLogicalOwners: Object.freeze([]),
+        activeStableOwners: Object.freeze([]),
         numericAliases: Object.freeze([]),
         provisionalNodeIds: Object.freeze([]),
-        preparations: Object.freeze([]),
+        pendingEdits: Object.freeze([]),
       }),
     );
   /** The single pointer-drag coordinate rendered before queue admission. */
   private pendingNodePosition:
     | { nodeId: bigint; position: Float32Array }
     | undefined;
-  private spatialSkeletonPreparationsById = new Map<
+  private spatialSkeletonPendingEditsById = new Map<
     number,
-    SpatialSkeletonPreparationIntent
+    SpatialSkeletonPendingEdit
   >();
-  private presentationLogicalOwners = new Map<
+  private displayStableOwners = new Map<
     bigint,
-    SpatialSkeletonLogicalSegmentHandle
+    SpatialSkeletonStableSegmentHandle
   >();
-  private presentationNumericAliases = new Map<
+  private displayNumericAliases = new Map<
     string,
     { readonly segmentId: bigint; readonly authoritative: boolean }
   >();
-  private presentationProvisionalNodeIds = new Set<bigint>();
-  private presentationRemovedSegmentIds = new Set<bigint>();
-  private presentationTransactionDepth = 0;
-  private presentationPublicationPending = false;
-  private preparedPresentationPublication:
-    | SpatialSkeletonPresentationSnapshot
+  private displayProvisionalNodeIds = new Set<bigint>();
+  private displayRemovedSegmentIds = new Set<bigint>();
+  private displayTransactionDepth = 0;
+  private displayPublicationPending = false;
+  private preparedDisplayPublication:
+    | SpatialSkeletonDisplaySnapshot
     | undefined;
-  private readonly presentationNotificationErrorReporters = new Set<
+  private readonly displayNotificationErrorReporters = new Set<
     (error: unknown) => void
   >();
   private nodeDataNotificationPending = false;
-  private readonly projectionStatePublicationOwner = {};
-  private readonly adoptedProjectionStatePublications = new WeakSet<object>();
+  private readonly previewCachePublicationOwner = {};
+  private readonly adoptedPreviewCachePublications = new WeakSet<object>();
   /** Complete node arrays for the current cached versions of skeletons. */
   private fullSegmentNodeCache = new Map<bigint, SkeletonNode[]>();
   /** Immutable views of those versions, paired with local cache revisions. */
@@ -798,80 +793,74 @@ export class SpatialSkeletonState
    * queue or datasource runtime state: clearing either cannot make editing
    * safe again after authority became unknowable.
    */
-  private optimisticEditFatalState:
-    | SpatialSkeletonOptimisticFatalState
-    | undefined;
-  private optimisticEditQueue?: StateOwnedSpatialSkeletonOptimisticEngine;
-  private optimisticEditSource?: EditableSkeletonSource;
-  private optimisticProjectionRuntime?: SpatialSkeletonOptimisticProjectionRuntime;
-  private optimisticQueueSubscriptionCleanup?: () => void;
-  private optimisticDatasourceCleanup?: () => void;
-  private optimisticFatalLatchOrigin?: SpatialSkeletonOptimisticEditQueue;
+  private reloadRequired: SpatialSkeletonReloadRequiredDetails | undefined;
+  private editQueue?: SessionOwnedSpatialSkeletonEditQueue;
+  private editSource?: EditableSkeletonSource;
+  private editPreview?: SpatialSkeletonEditPreview;
+  private queueSubscriptionCleanup?: () => void;
+  private datasourceCleanup?: () => void;
+  private reloadRequiredLatchOrigin?: SpatialSkeletonSessionEditQueue;
 
-  constructor(options: SpatialSkeletonStateOptions = {}) {
+  constructor(options: SpatialSkeletonEditSessionOptions = {}) {
     super();
     const capacity =
-      options.optimisticEditQueueCapacity ??
-      DEFAULT_SPATIAL_SKELETON_OPTIMISTIC_EDIT_QUEUE_CAPACITY;
+      options.editQueueCapacity ?? DEFAULT_SPATIAL_SKELETON_EDIT_QUEUE_CAPACITY;
     if (!Number.isSafeInteger(capacity) || capacity <= 0) {
       throw new RangeError(
         "The spatial skeleton optimistic-edit queue capacity must be a positive safe integer.",
       );
     }
-    this.optimisticEditQueueCapacity = capacity;
+    this.editQueueCapacity = capacity;
     this.commandHistory = this.registerDisposer(
-      new SpatialSkeletonCommandHistory({ capacity }),
+      new SpatialSkeletonUndoHistory({ capacity }),
     );
   }
 
   /**
    * Constructs the single queue runtime owned by this layer state. Providers
-   * contribute workflow/transport behavior, never another queue.
+   * contribute plan/transport behavior, never another queue.
    */
-  ensureOptimisticEditingEngine(
+  ensureEditQueue(
     layer: SpatialSkeletonLayerContext,
     source: EditableSkeletonSource,
-    provider: SpatialSkeletonOptimisticEditingProvider,
-  ): SpatialSkeletonOptimisticEditQueue {
-    if (
-      this.optimisticEditSource === source &&
-      this.optimisticEditQueue !== undefined
-    ) {
-      return this.optimisticEditQueue;
+    provider: SpatialSkeletonEditPlannerProvider,
+  ): SpatialSkeletonSessionEditQueue {
+    if (this.editSource === source && this.editQueue !== undefined) {
+      return this.editQueue;
     }
 
-    const projection = new SpatialSkeletonOptimisticProjectionRuntime(this, {
+    const preview = new SpatialSkeletonEditPreview(this, {
       uiHints:
-        layer.applySpatialSkeletonProjectionUiHints === undefined
+        layer.applySpatialSkeletonPreviewUiHints === undefined
           ? undefined
           : {
               apply: (hints) =>
-                layer.applySpatialSkeletonProjectionUiHints!(hints),
+                layer.applySpatialSkeletonPreviewUiHints!(hints),
             },
       onAuxiliaryError: (error) => console.error(error),
     });
     const provisionalIds =
       new StateOwnedSpatialSkeletonProvisionalNumericIdService();
-    const registration = provider.createDriver({
+    const registration = provider.createPlanner({
       source,
-      identities: projection,
+      identities: preview,
       provisionalIds,
     });
-    assertSpatialSkeletonOptimisticDriverRegistration(registration);
+    assertSpatialSkeletonEditPlannerRegistration(registration);
     provisionalIds.configure(registration.provisionalNumericIdPolicy);
-    const attempts = new SpatialSkeletonMutationAttemptScheduler({
-      adapter: registration.mutationAdapter,
+    const attempts = new SpatialSkeletonRequestScheduler({
+      adapter: registration.editRequestAdapter,
     });
-    const engine = new SpatialSkeletonOptimisticQueueEngine({
-      driver: registration.driver,
-      projection,
-      history: createSpatialSkeletonOptimisticHistoryPort(this.commandHistory),
+    const engine = new SpatialSkeletonEditQueue({
+      planner: registration.planner,
+      preview,
+      history: createSpatialSkeletonHistoryPort(this.commandHistory),
       attempts,
-      preparation: {
+      pendingEdit: {
         publish: (intentId, intent, descriptor) => {
-          const { lastKnownPositions, ...preparation } = descriptor;
-          this.setSpatialSkeletonPreparation({
-            ...preparation,
+          const { lastKnownPositions, ...pendingEdit } = descriptor;
+          this.setSpatialSkeletonPendingEdit({
+            ...pendingEdit,
             intentId,
             sequence: intentId,
             direction: intent,
@@ -890,58 +879,58 @@ export class SpatialSkeletonState
           });
         },
         remove: (intentId) => {
-          this.removeSpatialSkeletonPreparation(intentId);
+          this.removeSpatialSkeletonPendingEdit(intentId);
         },
       },
-      fatalState: {
-        get: () => this.getOptimisticEditFatalState(),
-        latch: (fatalState) => {
-          this.optimisticFatalLatchOrigin = engine;
+      reloadRequired: {
+        get: () => this.getReloadRequired(),
+        latch: (reloadRequired) => {
+          this.reloadRequiredLatchOrigin = engine;
           try {
-            return this.latchOptimisticEditFatalState(fatalState);
+            return this.latchReloadRequired(reloadRequired);
           } finally {
-            this.optimisticFatalLatchOrigin = undefined;
+            this.reloadRequiredLatchOrigin = undefined;
           }
         },
       },
       onListenerError: (error) => console.error(error),
-    }) as StateOwnedSpatialSkeletonOptimisticEngine;
+    }) as SessionOwnedSpatialSkeletonEditQueue;
 
     // The candidate is complete before replacing the current engine. A
     // provider construction failure therefore leaves the old source usable.
-    this.releaseOptimisticEditingEngine();
+    this.releaseEditQueue();
     this.commandHistory.setSource(source);
-    this.optimisticEditSource = source;
-    this.optimisticProjectionRuntime = projection;
-    this.optimisticEditQueue = engine;
-    this.optimisticDatasourceCleanup = registration.cleanup;
-    this.optimisticQueueSubscriptionCleanup = engine.subscribe(() =>
-      this.notifyOptimisticEditQueueChanged(),
+    this.editSource = source;
+    this.editPreview = preview;
+    this.editQueue = engine;
+    this.datasourceCleanup = registration.cleanup;
+    this.queueSubscriptionCleanup = engine.subscribe(() =>
+      this.notifyEditQueueChanged(),
     );
-    const fatalState = this.optimisticEditFatalState;
-    if (fatalState === undefined) {
-      this.notifyOptimisticEditQueueChanged();
+    const latchedReloadRequired = this.reloadRequired;
+    if (latchedReloadRequired === undefined) {
+      this.notifyEditQueueChanged();
     } else {
-      engine.handleFatalStateLatched(fatalState);
+      engine.handleReloadRequiredLatched(latchedReloadRequired);
     }
     return engine;
   }
 
-  releaseOptimisticEditingEngine() {
-    const queue = this.optimisticEditQueue;
-    const datasourceCleanup = this.optimisticDatasourceCleanup;
+  releaseEditQueue() {
+    const queue = this.editQueue;
+    const datasourceCleanup = this.datasourceCleanup;
     const hadRuntime =
       queue !== undefined ||
-      this.optimisticProjectionRuntime !== undefined ||
+      this.editPreview !== undefined ||
       datasourceCleanup !== undefined;
-    this.optimisticQueueSubscriptionCleanup?.();
-    this.optimisticQueueSubscriptionCleanup = undefined;
+    this.queueSubscriptionCleanup?.();
+    this.queueSubscriptionCleanup = undefined;
     // Capture and clear ownership before disposal so a synchronous callback
     // cannot schedule the same datasource cleanup twice.
-    this.optimisticDatasourceCleanup = undefined;
-    this.optimisticEditQueue = undefined;
-    this.optimisticEditSource = undefined;
-    this.optimisticProjectionRuntime = undefined;
+    this.datasourceCleanup = undefined;
+    this.editQueue = undefined;
+    this.editSource = undefined;
+    this.editPreview = undefined;
     const disposal = queue?.dispose();
     if (datasourceCleanup !== undefined) {
       const runDatasourceCleanup = () => {
@@ -960,22 +949,22 @@ export class SpatialSkeletonState
         void disposal.then(runDatasourceCleanup, runDatasourceCleanup);
       }
     }
-    if (hadRuntime) this.notifyOptimisticEditQueueChanged();
+    if (hadRuntime) this.notifyEditQueueChanged();
     return hadRuntime;
   }
 
-  executeOptimisticEdit(
+  executeEdit(
     command: SpatialSkeletonEditCommand,
     queueInput:
       | SpatialSkeletonQueueInput
       | SpatialSkeletonQueueInputPreparation,
   ) {
-    this.assertOptimisticEditingAllowed();
-    const engine = this.optimisticEditQueue;
+    this.assertEditingAllowed();
+    const engine = this.editQueue;
     if (engine === undefined) {
-      return rejectedOptimisticEditExecution<void>(
-        new SpatialSkeletonOptimisticDatasourceContractError(
-          "Editable spatial skeleton datasource has no installed queue driver.",
+      return rejectedEditExecution<void>(
+        new SpatialSkeletonDatasourceContractError(
+          "Editable spatial skeleton datasource has no installed queue planner.",
         ),
       );
     }
@@ -985,38 +974,34 @@ export class SpatialSkeletonState
       acceptedByQueue: { configurable: true, value: submitted.acceptedByQueue },
       settled: { configurable: true, value: submitted.settled },
     });
-    return execution as SpatialSkeletonOptimisticEditExecution<void>;
+    return execution as SpatialSkeletonEditExecution<void>;
   }
 
-  getOptimisticEditingIdentityService() {
-    const identities = this.optimisticProjectionRuntime;
+  getEditingIdentityService() {
+    const identities = this.editPreview;
     if (identities === undefined) {
-      throw new SpatialSkeletonOptimisticDatasourceContractError(
+      throw new SpatialSkeletonDatasourceContractError(
         "Editable spatial skeleton datasource has no installed queue identity service.",
       );
     }
     return identities;
   }
 
-  notifyOptimisticEditQueueChanged() {
-    this.optimisticEditQueueVersion.value =
-      this.optimisticEditQueueVersion.value + 1;
+  notifyEditQueueChanged() {
+    this.editQueueVersion.value = this.editQueueVersion.value + 1;
   }
 
-  getOptimisticEditFatalState() {
-    return this.optimisticEditFatalState;
+  getReloadRequired() {
+    return this.reloadRequired;
   }
 
-  latchOptimisticEditFatalState(
-    state: SpatialSkeletonOptimisticFatalState,
-  ): boolean {
-    if (this.optimisticEditFatalState !== undefined) return false;
-    this.optimisticEditFatalState =
-      freezeSpatialSkeletonOptimisticFatalState(state);
+  latchReloadRequired(state: SpatialSkeletonReloadRequiredDetails): boolean {
+    if (this.reloadRequired !== undefined) return false;
+    this.reloadRequired = freezeSpatialSkeletonReloadRequiredDetails(state);
 
-    // A latched layer may still be inspected and navigated, but no mutation
+    // A latched layer may still be inspected and navigated, but no edit request
     // gesture may remain armed. These are interaction-only overlays and do
-    // not alter the last complete adopted skeleton projection.
+    // not alter the last complete adopted skeleton preview.
     this.editMode.value = false;
     this.mergeMode.value = false;
     this.splitMode.value = false;
@@ -1024,31 +1009,31 @@ export class SpatialSkeletonState
     this.suppressSelectedNodeHighlight.value = false;
     this.clearPendingNodePositions();
 
-    // The latch is state-owned and may be won by an engine which has already
+    // The latch is session-owned and may be won by an engine which has already
     // been replaced. Always stop the currently installed engine as well.
-    const activeQueue = this.optimisticEditQueue;
+    const activeQueue = this.editQueue;
     if (activeQueue === undefined) {
-      this.notifyOptimisticEditQueueChanged();
-    } else if (activeQueue !== this.optimisticFatalLatchOrigin) {
+      this.notifyEditQueueChanged();
+    } else if (activeQueue !== this.reloadRequiredLatchOrigin) {
       // The engine publishes the single queue/UI revision after synchronously
       // canceling and refolding its unsent work.
-      activeQueue.handleFatalStateLatched(this.optimisticEditFatalState);
+      activeQueue.handleReloadRequiredLatched(this.reloadRequired);
     }
     return true;
   }
 
-  assertOptimisticEditingAllowed() {
-    const fatalState = this.optimisticEditFatalState;
-    if (fatalState !== undefined) {
-      throw new SpatialSkeletonOptimisticReloadRequiredError(fatalState);
+  assertEditingAllowed() {
+    const reloadRequired = this.reloadRequired;
+    if (reloadRequired !== undefined) {
+      throw new SpatialSkeletonReloadRequiredError(reloadRequired);
     }
   }
 
-  private prepareSpatialSkeletonPresentationPublication(
+  private prepareSpatialSkeletonDisplayPublication(
     options: {
-      readonly logicalOwners?: ReadonlyMap<
+      readonly stableOwners?: ReadonlyMap<
         bigint,
-        SpatialSkeletonLogicalSegmentHandle
+        SpatialSkeletonStableSegmentHandle
       >;
       readonly numericAliases?: ReadonlyMap<
         string,
@@ -1056,32 +1041,32 @@ export class SpatialSkeletonState
       >;
       readonly provisionalNodeIds?: ReadonlySet<bigint>;
       readonly removedSegmentIds?: ReadonlySet<bigint>;
-      readonly preparationsById?: ReadonlyMap<
+      readonly pendingEditsById?: ReadonlyMap<
         number,
-        SpatialSkeletonPreparationIntent
+        SpatialSkeletonPendingEdit
       >;
       readonly revision?: number;
     } = {},
-  ): SpatialSkeletonPresentationSnapshot {
-    const preparations = [
+  ): SpatialSkeletonDisplaySnapshot {
+    const pendingEdits = [
       ...(
-        options.preparationsById ?? this.spatialSkeletonPreparationsById
+        options.pendingEditsById ?? this.spatialSkeletonPendingEditsById
       ).values(),
     ].sort((a, b) => a.sequence - b.sequence || a.intentId - b.intentId);
-    const activeLogicalOwners = [
-      ...(options.logicalOwners ?? this.presentationLogicalOwners),
+    const activeStableOwners = [
+      ...(options.stableOwners ?? this.displayStableOwners),
     ]
       .sort(([a], [b]) => bigintCompare(a, b))
-      .map(([segmentId, logicalHandle]) =>
-        Object.freeze({ segmentId, logicalHandle }),
+      .map(([segmentId, stableHandle]) =>
+        Object.freeze({ segmentId, stableHandle }),
       );
     const numericAliases = [
-      ...(options.numericAliases ?? this.presentationNumericAliases),
+      ...(options.numericAliases ?? this.displayNumericAliases),
     ]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([stableId, { segmentId, authoritative }]) =>
         Object.freeze({
-          logicalHandle: Object.freeze({
+          stableHandle: Object.freeze({
             kind: "segment" as const,
             stableId,
           }),
@@ -1090,25 +1075,25 @@ export class SpatialSkeletonState
         }),
       );
     const provisionalNodeIds = [
-      ...(options.provisionalNodeIds ?? this.presentationProvisionalNodeIds),
+      ...(options.provisionalNodeIds ?? this.displayProvisionalNodeIds),
     ].sort(bigintCompare);
     return Object.freeze({
       revision:
-        options.revision ?? this.spatialSkeletonPresentation.value.revision + 1,
+        options.revision ?? this.spatialSkeletonDisplay.value.revision + 1,
       removedSegmentIds: Object.freeze(
-        [
-          ...(options.removedSegmentIds ?? this.presentationRemovedSegmentIds),
-        ].sort(bigintCompare),
+        [...(options.removedSegmentIds ?? this.displayRemovedSegmentIds)].sort(
+          bigintCompare,
+        ),
       ),
-      activeLogicalOwners: Object.freeze(activeLogicalOwners),
+      activeStableOwners: Object.freeze(activeStableOwners),
       numericAliases: Object.freeze(numericAliases),
       provisionalNodeIds: Object.freeze(provisionalNodeIds),
-      preparations: Object.freeze(preparations),
+      pendingEdits: Object.freeze(pendingEdits),
     });
   }
 
-  private reportSpatialSkeletonPresentationObserverError(error: unknown) {
-    for (const reportError of this.presentationNotificationErrorReporters) {
+  private reportSpatialSkeletonDisplayObserverError(error: unknown) {
+    for (const reportError of this.displayNotificationErrorReporters) {
       try {
         reportError(error);
       } catch {
@@ -1118,21 +1103,19 @@ export class SpatialSkeletonState
   }
 
   private notifyWithReporters(publish: () => void) {
-    if (this.presentationNotificationErrorReporters.size === 0) {
+    if (this.displayNotificationErrorReporters.size === 0) {
       publish();
       return;
     }
     try {
       publish();
     } catch (error) {
-      this.reportSpatialSkeletonPresentationObserverError(error);
+      this.reportSpatialSkeletonDisplayObserverError(error);
     }
   }
 
-  private updateProvisionalSegmentIds(
-    presentation: SpatialSkeletonPresentationSnapshot,
-  ) {
-    const nextIds = getActiveProvisionalSpatialSkeletonSegmentIds(presentation);
+  private updateProvisionalSegmentIds(display: SpatialSkeletonDisplaySnapshot) {
+    const nextIds = getActiveProvisionalSpatialSkeletonSegmentIds(display);
     const { provisionalSegmentIds } = this;
     if (
       nextIds.length === provisionalSegmentIds.size &&
@@ -1144,29 +1127,29 @@ export class SpatialSkeletonState
     if (nextIds.length !== 0) provisionalSegmentIds.add(nextIds);
   }
 
-  private publishPreparedSpatialSkeletonPresentation(
-    publication: SpatialSkeletonPresentationSnapshot,
+  private publishPreparedSpatialSkeletonDisplay(
+    publication: SpatialSkeletonDisplaySnapshot,
   ) {
     this.updateProvisionalSegmentIds(publication);
     this.notifyWithReporters(() => {
-      this.spatialSkeletonPresentation.value = publication;
+      this.spatialSkeletonDisplay.value = publication;
     });
   }
 
-  private publishSpatialSkeletonPresentation() {
-    this.presentationPublicationPending = false;
-    this.publishPreparedSpatialSkeletonPresentation(
-      this.prepareSpatialSkeletonPresentationPublication(),
+  private publishSpatialSkeletonDisplay() {
+    this.displayPublicationPending = false;
+    this.publishPreparedSpatialSkeletonDisplay(
+      this.prepareSpatialSkeletonDisplayPublication(),
     );
   }
 
-  private requestSpatialSkeletonPresentationPublication() {
-    this.preparedPresentationPublication = undefined;
-    if (this.presentationTransactionDepth !== 0) {
-      this.presentationPublicationPending = true;
+  private requestSpatialSkeletonDisplayPublication() {
+    this.preparedDisplayPublication = undefined;
+    if (this.displayTransactionDepth !== 0) {
+      this.displayPublicationPending = true;
       return;
     }
-    this.publishSpatialSkeletonPresentation();
+    this.publishSpatialSkeletonDisplay();
   }
 
   /**
@@ -1174,32 +1157,30 @@ export class SpatialSkeletonState
    * preparation changes, aliases, owners, and the node-data notification are
    * coalesced into a single presentation publication at the outer boundary.
    */
-  runSpatialSkeletonPresentationTransaction<T>(
+  runSpatialSkeletonDisplayTransaction<T>(
     callback: () => T,
     reportNotificationError?: (error: unknown) => void,
   ): T {
     if (reportNotificationError !== undefined) {
-      this.presentationNotificationErrorReporters.add(reportNotificationError);
+      this.displayNotificationErrorReporters.add(reportNotificationError);
     }
-    ++this.presentationTransactionDepth;
+    ++this.displayTransactionDepth;
     try {
       return callback();
     } finally {
-      if (--this.presentationTransactionDepth === 0) {
+      if (--this.displayTransactionDepth === 0) {
         try {
           // Publish the already-prepared presentation first.  Node-data
           // observers commonly schedule a redraw and must never observe the
           // newly adopted cache through an older alias/provisional/preparation
           // snapshot.  Both publications still happen only after every core
           // reference was installed by the transaction callback.
-          const preparedPresentation = this.preparedPresentationPublication;
-          this.preparedPresentationPublication = undefined;
-          if (preparedPresentation !== undefined) {
-            this.publishPreparedSpatialSkeletonPresentation(
-              preparedPresentation,
-            );
-          } else if (this.presentationPublicationPending) {
-            this.publishSpatialSkeletonPresentation();
+          const preparedDisplay = this.preparedDisplayPublication;
+          this.preparedDisplayPublication = undefined;
+          if (preparedDisplay !== undefined) {
+            this.publishPreparedSpatialSkeletonDisplay(preparedDisplay);
+          } else if (this.displayPublicationPending) {
+            this.publishSpatialSkeletonDisplay();
           }
           if (this.nodeDataNotificationPending) {
             this.nodeDataNotificationPending = false;
@@ -1208,51 +1189,51 @@ export class SpatialSkeletonState
             });
           }
         } finally {
-          this.presentationNotificationErrorReporters.clear();
+          this.displayNotificationErrorReporters.clear();
         }
       }
     }
   }
 
-  private prepareSpatialSkeletonPresentationIdentities(
-    activeLogicalOwners: Iterable<SpatialSkeletonPresentationLogicalOwner>,
-    numericAliases: Iterable<SpatialSkeletonPresentationNumericAlias>,
+  private prepareSpatialSkeletonDisplayIdentities(
+    activeStableOwners: Iterable<SpatialSkeletonDisplayStableOwner>,
+    numericAliases: Iterable<SpatialSkeletonDisplayNumericAlias>,
     provisionalNodeIds: Iterable<bigint> = [],
   ) {
-    const nextOwners = new Map<bigint, SpatialSkeletonLogicalSegmentHandle>();
-    for (const { segmentId, logicalHandle } of activeLogicalOwners) {
+    const nextOwners = new Map<bigint, SpatialSkeletonStableSegmentHandle>();
+    for (const { segmentId, stableHandle } of activeStableOwners) {
       if (segmentId === 0n) {
         throw new RangeError(
           `Invalid spatial skeleton presentation segment id: ${segmentId}`,
         );
       }
       if (
-        logicalHandle.kind !== "segment" ||
-        logicalHandle.stableId.length === 0
+        stableHandle.kind !== "segment" ||
+        stableHandle.stableId.length === 0
       ) {
         throw new TypeError(
           "Invalid active logical segment owner in presentation.",
         );
       }
-      nextOwners.set(segmentId, Object.freeze({ ...logicalHandle }));
+      nextOwners.set(segmentId, Object.freeze({ ...stableHandle }));
     }
     const nextAliases = new Map<
       string,
       { readonly segmentId: bigint; readonly authoritative: boolean }
     >();
-    for (const { logicalHandle, segmentId, authoritative } of numericAliases) {
+    for (const { stableHandle, segmentId, authoritative } of numericAliases) {
       if (segmentId === 0n) {
         throw new RangeError(
           `Invalid spatial skeleton presentation alias: ${segmentId}`,
         );
       }
       if (
-        logicalHandle.kind !== "segment" ||
-        logicalHandle.stableId.length === 0
+        stableHandle.kind !== "segment" ||
+        stableHandle.stableId.length === 0
       ) {
         throw new TypeError("Invalid logical segment alias in presentation.");
       }
-      nextAliases.set(logicalHandle.stableId, {
+      nextAliases.set(stableHandle.stableId, {
         segmentId,
         authoritative: authoritative ?? true,
       });
@@ -1267,26 +1248,24 @@ export class SpatialSkeletonState
       nextProvisionalNodeIds.add(nodeId);
     }
     const ownersUnchanged =
-      nextOwners.size === this.presentationLogicalOwners.size &&
+      nextOwners.size === this.displayStableOwners.size &&
       [...nextOwners].every(
         ([segmentId, handle]) =>
-          this.presentationLogicalOwners.get(segmentId)?.stableId ===
-          handle.stableId,
+          this.displayStableOwners.get(segmentId)?.stableId === handle.stableId,
       );
     const aliasesUnchanged =
-      nextAliases.size === this.presentationNumericAliases.size &&
+      nextAliases.size === this.displayNumericAliases.size &&
       [...nextAliases].every(([stableId, alias]) => {
-        const current = this.presentationNumericAliases.get(stableId);
+        const current = this.displayNumericAliases.get(stableId);
         return (
           current?.segmentId === alias.segmentId &&
           current.authoritative === alias.authoritative
         );
       });
     const provisionalNodeIdsUnchanged =
-      nextProvisionalNodeIds.size ===
-        this.presentationProvisionalNodeIds.size &&
+      nextProvisionalNodeIds.size === this.displayProvisionalNodeIds.size &&
       [...nextProvisionalNodeIds].every((nodeId) =>
-        this.presentationProvisionalNodeIds.has(nodeId),
+        this.displayProvisionalNodeIds.has(nodeId),
       );
     return {
       nextOwners,
@@ -1301,95 +1280,91 @@ export class SpatialSkeletonState
   }
 
   /** Adds a preparation and rejects accidental reuse of an active intent id. */
-  addSpatialSkeletonPreparation(preparation: SpatialSkeletonPreparationIntent) {
-    const normalized = normalizeSpatialSkeletonPreparationIntent(preparation);
-    if (this.spatialSkeletonPreparationsById.has(normalized.intentId)) {
+  addSpatialSkeletonPendingEdit(pendingEdit: SpatialSkeletonPendingEdit) {
+    const normalized = normalizeSpatialSkeletonPendingEdit(pendingEdit);
+    if (this.spatialSkeletonPendingEditsById.has(normalized.intentId)) {
       throw new Error(
         `Spatial skeleton preparation ${normalized.intentId} already exists.`,
       );
     }
-    this.spatialSkeletonPreparationsById.set(normalized.intentId, normalized);
-    this.requestSpatialSkeletonPresentationPublication();
+    this.spatialSkeletonPendingEditsById.set(normalized.intentId, normalized);
+    this.requestSpatialSkeletonDisplayPublication();
     return true;
   }
 
   /** Atomically replaces the cue as a queued intent acquires complete inputs. */
-  private setSpatialSkeletonPreparation(
-    preparation: SpatialSkeletonPreparationIntent,
+  private setSpatialSkeletonPendingEdit(
+    pendingEdit: SpatialSkeletonPendingEdit,
   ) {
-    const normalized = normalizeSpatialSkeletonPreparationIntent(preparation);
-    this.spatialSkeletonPreparationsById.set(normalized.intentId, normalized);
-    this.requestSpatialSkeletonPresentationPublication();
+    const normalized = normalizeSpatialSkeletonPendingEdit(pendingEdit);
+    this.spatialSkeletonPendingEditsById.set(normalized.intentId, normalized);
+    this.requestSpatialSkeletonDisplayPublication();
   }
 
-  removeSpatialSkeletonPreparation(intentId: number) {
-    const normalizedIntentId = normalizePreparationId(
+  removeSpatialSkeletonPendingEdit(intentId: number) {
+    const normalizedIntentId = normalizePendingEditId(
       intentId,
       "preparation intent id",
     );
-    if (!this.spatialSkeletonPreparationsById.delete(normalizedIntentId)) {
+    if (!this.spatialSkeletonPendingEditsById.delete(normalizedIntentId)) {
       return false;
     }
-    this.requestSpatialSkeletonPresentationPublication();
+    this.requestSpatialSkeletonDisplayPublication();
     return true;
   }
 
-  clearSpatialSkeletonPreparations() {
-    if (this.spatialSkeletonPreparationsById.size === 0) return false;
-    this.spatialSkeletonPreparationsById.clear();
-    this.requestSpatialSkeletonPresentationPublication();
+  clearSpatialSkeletonPendingEdits() {
+    if (this.spatialSkeletonPendingEditsById.size === 0) return false;
+    this.spatialSkeletonPendingEditsById.clear();
+    this.requestSpatialSkeletonDisplayPublication();
     return true;
   }
 
-  hasUnconfirmedOptimisticEdits() {
+  hasUnconfirmedEdits() {
     return (
-      this.optimisticEditFatalState !== undefined ||
-      (this.optimisticEditQueue?.hasUnconfirmedActions() ?? false)
+      this.reloadRequired !== undefined ||
+      (this.editQueue?.hasUnconfirmedActions() ?? false)
     );
   }
 
-  getOptimisticEditQueueSnapshot(): readonly SpatialSkeletonOptimisticEditQueueEntry[] {
-    return this.optimisticEditQueue?.getSnapshot() ?? [];
+  getEditQueueRows(): readonly SpatialSkeletonEditQueueEntry[] {
+    return this.editQueue?.getSnapshot() ?? [];
   }
 
-  getOptimisticEditQueueRecentActivity(): readonly SpatialSkeletonOptimisticEditActivityEntry[] {
-    return this.optimisticEditQueue?.getRecentActivity() ?? [];
+  getEditQueueRecentActivity(): readonly SpatialSkeletonEditActivityEntry[] {
+    return this.editQueue?.getRecentActivity() ?? [];
   }
 
-  canUndoOptimisticEdit() {
-    if (this.optimisticEditFatalState !== undefined) return false;
-    return this.optimisticEditQueue?.canUndo() ?? false;
+  canUndoEdit() {
+    if (this.reloadRequired !== undefined) return false;
+    return this.editQueue?.canUndo() ?? false;
   }
 
-  undoLatestOptimisticEdit() {
-    if (this.optimisticEditFatalState !== undefined) {
-      return rejectedOptimisticEditExecution<boolean>(
-        new SpatialSkeletonOptimisticReloadRequiredError(
-          this.optimisticEditFatalState,
-        ),
+  undoLatestEdit() {
+    if (this.reloadRequired !== undefined) {
+      return rejectedEditExecution<boolean>(
+        new SpatialSkeletonReloadRequiredError(this.reloadRequired),
       );
     }
-    return this.optimisticEditQueue?.canUndo()
-      ? this.optimisticEditQueue.undoLatest()
-      : resolvedOptimisticEditExecution(false);
+    return this.editQueue?.canUndo()
+      ? this.editQueue.undoLatest()
+      : resolvedEditExecution(false);
   }
 
-  canRedoOptimisticEdit() {
-    if (this.optimisticEditFatalState !== undefined) return false;
-    return this.optimisticEditQueue?.canRedo() ?? false;
+  canRedoEdit() {
+    if (this.reloadRequired !== undefined) return false;
+    return this.editQueue?.canRedo() ?? false;
   }
 
-  redoLatestOptimisticEdit() {
-    if (this.optimisticEditFatalState !== undefined) {
-      return rejectedOptimisticEditExecution<boolean>(
-        new SpatialSkeletonOptimisticReloadRequiredError(
-          this.optimisticEditFatalState,
-        ),
+  redoLatestEdit() {
+    if (this.reloadRequired !== undefined) {
+      return rejectedEditExecution<boolean>(
+        new SpatialSkeletonReloadRequiredError(this.reloadRequired),
       );
     }
-    return this.optimisticEditQueue?.canRedo()
-      ? this.optimisticEditQueue.redoLatest()
-      : resolvedOptimisticEditExecution(false);
+    return this.editQueue?.canRedo()
+      ? this.editQueue.redoLatest()
+      : resolvedEditExecution(false);
   }
 
   getPendingNodeIds() {
@@ -1496,30 +1471,30 @@ export class SpatialSkeletonState
   }
 
   clearRuntimeState() {
-    return this.runSpatialSkeletonPresentationTransaction(() =>
-      this.clearRuntimeStateInPresentation(),
+    return this.runSpatialSkeletonDisplayTransaction(() =>
+      this.clearRuntimeStateInDisplay(),
     );
   }
 
-  private clearRuntimeStateInPresentation() {
-    const optimisticQueueChanged = this.releaseOptimisticEditingEngine();
+  private clearRuntimeStateInDisplay() {
+    const queueChanged = this.releaseEditQueue();
     const cacheChanged =
       this.fullSegmentNodeCache.size !== 0 ||
       this.pendingFullSegmentNodeFetches.size !== 0 ||
       this.cachedNodesById.size !== 0;
     const pendingChanged = this.clearPendingNodePositions();
-    const intentCuesChanged = this.clearSpatialSkeletonPreparations();
-    const presentationIdentitiesChanged =
-      this.presentationLogicalOwners.size !== 0 ||
-      this.presentationNumericAliases.size !== 0 ||
-      this.presentationProvisionalNodeIds.size !== 0 ||
-      this.presentationRemovedSegmentIds.size !== 0;
-    if (presentationIdentitiesChanged) {
-      this.presentationLogicalOwners.clear();
-      this.presentationNumericAliases.clear();
-      this.presentationProvisionalNodeIds.clear();
-      this.presentationRemovedSegmentIds.clear();
-      this.requestSpatialSkeletonPresentationPublication();
+    const intentCuesChanged = this.clearSpatialSkeletonPendingEdits();
+    const displayIdentitiesChanged =
+      this.displayStableOwners.size !== 0 ||
+      this.displayNumericAliases.size !== 0 ||
+      this.displayProvisionalNodeIds.size !== 0 ||
+      this.displayRemovedSegmentIds.size !== 0;
+    if (displayIdentitiesChanged) {
+      this.displayStableOwners.clear();
+      this.displayNumericAliases.clear();
+      this.displayProvisionalNodeIds.clear();
+      this.displayRemovedSegmentIds.clear();
+      this.requestSpatialSkeletonDisplayPublication();
     }
     const mergeAnchorChanged = this.clearMergeAnchor();
     let modeChanged = false;
@@ -1544,8 +1519,8 @@ export class SpatialSkeletonState
       cacheChanged ||
       pendingChanged ||
       intentCuesChanged ||
-      presentationIdentitiesChanged ||
-      optimisticQueueChanged ||
+      displayIdentitiesChanged ||
+      queueChanged ||
       mergeAnchorChanged ||
       modeChanged ||
       historyChanged
@@ -1553,12 +1528,12 @@ export class SpatialSkeletonState
   }
 
   markNodeDataChanged() {
-    if (this.presentationTransactionDepth !== 0) {
+    if (this.displayTransactionDepth !== 0) {
       this.nodeDataNotificationPending = true;
     } else {
       this.nodeDataVersion.value = this.nodeDataVersion.value + 1;
     }
-    this.requestSpatialSkeletonPresentationPublication();
+    this.requestSpatialSkeletonDisplayPublication();
   }
 
   getCachedSegmentNodes(segmentId: bigint) {
@@ -1602,7 +1577,7 @@ export class SpatialSkeletonState
 
   /**
    * Validates a queue input requirement against the current complete
-   * projected snapshot without starting a read or changing cache state.
+   * previewed snapshot without starting a read or changing cache state.
    */
   private getCachedQueueInputSegment(
     requirement: SpatialSkeletonQueueInputRequirement,
@@ -1758,7 +1733,7 @@ export class SpatialSkeletonState
       bigint,
       {
         nodes: readonly SkeletonNode[] | undefined;
-        handle: CompleteSkeletonSnapshotHandle | undefined;
+        handle: CompleteSkeleton | undefined;
         adoptHandleStorage: boolean;
       }
     >();
@@ -1788,15 +1763,15 @@ export class SpatialSkeletonState
       replacements.set(segmentId, {
         nodes: clonedNodes,
         // Untrusted input remains defensively cloned above. The immutable
-        // handle is the complete baseline used by inspection and projection.
-        handle: createCompleteSkeletonSnapshot(clonedNodes),
+        // handle is the complete baseline used by inspection and preview.
+        handle: createCompleteSkeleton(clonedNodes),
         adoptHandleStorage: false,
       });
     }
     return this.publishCachedSegmentSnapshotReplacements(replacements, options);
   }
 
-  /** Routes only queue-owned reads through projection/history state. */
+  /** Routes only queue-owned reads through preview/history state. */
   private publishAuthoritativeReadSnapshots(
     snapshots: ReadonlyMap<bigint, readonly SkeletonNode[] | undefined>,
     options: {
@@ -1804,7 +1779,7 @@ export class SpatialSkeletonState
       readonly expectedRevisions: ReadonlyMap<bigint, number>;
     },
   ) {
-    const runtime = this.optimisticProjectionRuntime;
+    const runtime = this.editPreview;
     if (runtime === undefined) {
       return this.replaceCachedSegmentSnapshots(snapshots, {
         notify: options.notify,
@@ -1814,7 +1789,7 @@ export class SpatialSkeletonState
     const owned = new Map<bigint, readonly SkeletonNode[] | undefined>();
     const ordinary = new Map<bigint, readonly SkeletonNode[] | undefined>();
     for (const [segmentId, snapshot] of snapshots) {
-      (this.optimisticEditQueue?.ownsAuthoritativeReadSegment(segmentId)
+      (this.editQueue?.ownsAuthoritativeReadSegment(segmentId)
         ? owned
         : ordinary
       ).set(segmentId, snapshot);
@@ -1838,9 +1813,7 @@ export class SpatialSkeletonState
           [...owned].map(([segmentId, nodes]) => ({
             segmentId,
             snapshot:
-              nodes === undefined
-                ? undefined
-                : createCompleteSkeletonSnapshot(nodes),
+              nodes === undefined ? undefined : createCompleteSkeleton(nodes),
           })),
           {
             notify: false,
@@ -1860,18 +1833,15 @@ export class SpatialSkeletonState
   }
 
   /**
-   * Fully prepares the state-owned portion of an optimistic publication.
+   * Fully prepares the session-owned portion of an optimistic publication.
    * Lazy handles are materialized, reverse ownership is validated, cache
    * revisions are fenced, and complete replacement maps/presentation values
    * are built before the returned opaque artifact can be adopted.
    */
-  prepareSpatialSkeletonProjectionStatePublication(
-    request: SpatialSkeletonProjectionStatePublicationRequest,
-  ): SpatialSkeletonPreparedProjectionStatePublication | undefined {
-    const handles = new Map<
-      bigint,
-      CompleteSkeletonSnapshotHandle | undefined
-    >();
+  prepareSpatialSkeletonPreviewCachePublication(
+    request: SpatialSkeletonPreviewCachePublicationRequest,
+  ): SpatialSkeletonPreparedPreviewCachePublication | undefined {
+    const handles = new Map<bigint, CompleteSkeleton | undefined>();
     for (const [segmentId, handle] of request.snapshots) {
       if (segmentId === 0n) {
         throw new RangeError(
@@ -1880,7 +1850,7 @@ export class SpatialSkeletonState
       }
       if (handles.has(segmentId)) {
         throw new Error(
-          `Spatial skeleton projection publication contains duplicate segment ${segmentId}.`,
+          `Spatial skeleton preview publication contains duplicate segment ${segmentId}.`,
         );
       }
       handles.set(segmentId, handle);
@@ -1937,19 +1907,16 @@ export class SpatialSkeletonState
       });
     }
 
-    const nextPresentationRemovedSegmentIds = new Set(
-      this.presentationRemovedSegmentIds,
-    );
+    const nextDisplayRemovedSegmentIds = new Set(this.displayRemovedSegmentIds);
     for (const [segmentId, handle] of handles) {
-      if (handle === undefined)
-        nextPresentationRemovedSegmentIds.add(segmentId);
-      else nextPresentationRemovedSegmentIds.delete(segmentId);
+      if (handle === undefined) nextDisplayRemovedSegmentIds.add(segmentId);
+      else nextDisplayRemovedSegmentIds.delete(segmentId);
     }
     const removalsChanged =
-      nextPresentationRemovedSegmentIds.size !==
-        this.presentationRemovedSegmentIds.size ||
-      [...nextPresentationRemovedSegmentIds].some(
-        (id) => !this.presentationRemovedSegmentIds.has(id),
+      nextDisplayRemovedSegmentIds.size !==
+        this.displayRemovedSegmentIds.size ||
+      [...nextDisplayRemovedSegmentIds].some(
+        (id) => !this.displayRemovedSegmentIds.has(id),
       );
 
     const changedSegmentIds = [...replacements]
@@ -2024,41 +1991,41 @@ export class SpatialSkeletonState
       );
     }
 
-    const identities = this.prepareSpatialSkeletonPresentationIdentities(
-      request.activeLogicalOwners,
+    const identities = this.prepareSpatialSkeletonDisplayIdentities(
+      request.activeStableOwners,
       request.numericAliases,
       request.provisionalNodeIds,
     );
-    const nextPreparationsById = new Map(this.spatialSkeletonPreparationsById);
-    let preparationsChanged = false;
-    for (const intentId of request.preparationIntentIdsToRemove) {
-      preparationsChanged =
-        nextPreparationsById.delete(
-          normalizePreparationId(intentId, "preparation intent id"),
-        ) || preparationsChanged;
+    const nextPendingEditsById = new Map(this.spatialSkeletonPendingEditsById);
+    let pendingEditsChanged = false;
+    for (const intentId of request.pendingEditIntentIdsToRemove) {
+      pendingEditsChanged =
+        nextPendingEditsById.delete(
+          normalizePendingEditId(intentId, "preparation intent id"),
+        ) || pendingEditsChanged;
     }
-    const publishPresentation =
+    const publishDisplay =
       removalsChanged ||
       identities.changed ||
-      preparationsChanged ||
+      pendingEditsChanged ||
       (request.notify && changedSegmentIds.length !== 0);
-    const presentation = publishPresentation
-      ? this.prepareSpatialSkeletonPresentationPublication({
-          logicalOwners: identities.nextOwners,
+    const display = publishDisplay
+      ? this.prepareSpatialSkeletonDisplayPublication({
+          stableOwners: identities.nextOwners,
           numericAliases: identities.nextAliases,
           provisionalNodeIds: identities.nextProvisionalNodeIds,
-          removedSegmentIds: nextPresentationRemovedSegmentIds,
-          preparationsById: nextPreparationsById,
-          revision: this.spatialSkeletonPresentation.value.revision + 1,
+          removedSegmentIds: nextDisplayRemovedSegmentIds,
+          pendingEditsById: nextPendingEditsById,
+          revision: this.spatialSkeletonDisplay.value.revision + 1,
         })
       : undefined;
 
-    const implementation: SpatialSkeletonPreparedProjectionStatePublicationImplementation =
+    const implementation: SpatialSkeletonPreparedPreviewCachePublicationImplementation =
       {
-        [preparedSpatialSkeletonProjectionStatePublicationBrand]: true,
-        owner: this.projectionStatePublicationOwner,
+        [preparedSpatialSkeletonPreviewCachePublicationBrand]: true,
+        owner: this.previewCachePublicationOwner,
         expectedCacheRevisionClock,
-        expectedPresentation: this.spatialSkeletonPresentation.value,
+        expectedDisplay: this.spatialSkeletonDisplay.value,
         expectedRevisions: new Map(request.expectedRevisions),
         cacheRevisions,
         nextCacheRevisionClock,
@@ -2066,43 +2033,43 @@ export class SpatialSkeletonState
         nextFullSegmentNodeCache,
         nextFullSegmentSnapshotHandles,
         nextCachedNodesById,
-        nextPresentationLogicalOwners: identities.nextOwners,
-        nextPresentationNumericAliases: identities.nextAliases,
-        nextPresentationProvisionalNodeIds: identities.nextProvisionalNodeIds,
-        nextPresentationRemovedSegmentIds,
-        nextPreparationsById,
+        nextDisplayStableOwners: identities.nextOwners,
+        nextDisplayNumericAliases: identities.nextAliases,
+        nextDisplayProvisionalNodeIds: identities.nextProvisionalNodeIds,
+        nextDisplayRemovedSegmentIds,
+        nextPendingEditsById,
         changedSegmentIds: Object.freeze(changedSegmentIds),
         abortSegmentIds: Object.freeze([...changedSegmentIds]),
         retiredSegmentIds,
         notifyNodeData: request.notify && changedSegmentIds.length !== 0,
-        ...(presentation === undefined ? {} : { presentation }),
+        ...(display === undefined ? {} : { display }),
       };
     return Object.freeze(implementation);
   }
 
   /** Installs a genuine prepared publication using reference assignments only. */
-  adoptPreparedSpatialSkeletonProjectionStatePublication(
-    publication: SpatialSkeletonPreparedProjectionStatePublication,
+  adoptPreparedSpatialSkeletonPreviewCachePublication(
+    publication: SpatialSkeletonPreparedPreviewCachePublication,
   ): boolean {
     const prepared =
-      publication as SpatialSkeletonPreparedProjectionStatePublicationImplementation;
+      publication as SpatialSkeletonPreparedPreviewCachePublicationImplementation;
     if (
-      prepared?.owner !== this.projectionStatePublicationOwner ||
-      prepared[preparedSpatialSkeletonProjectionStatePublicationBrand] !== true
+      prepared?.owner !== this.previewCachePublicationOwner ||
+      prepared[preparedSpatialSkeletonPreviewCachePublicationBrand] !== true
     ) {
       throw new TypeError(
-        "Prepared spatial skeleton projection publication belongs to another state.",
+        "Prepared spatial skeleton preview publication belongs to another edit session.",
       );
     }
-    if (this.adoptedProjectionStatePublications.has(prepared)) {
+    if (this.adoptedPreviewCachePublications.has(prepared)) {
       throw new Error(
-        "Prepared spatial skeleton projection publication was already adopted.",
+        "Prepared spatial skeleton preview publication was already adopted.",
       );
     }
     if (
       this.fullSegmentNodeRevisionClock !==
         prepared.expectedCacheRevisionClock ||
-      this.spatialSkeletonPresentation.value !== prepared.expectedPresentation
+      this.spatialSkeletonDisplay.value !== prepared.expectedDisplay
     ) {
       return false;
     }
@@ -2114,40 +2081,38 @@ export class SpatialSkeletonState
       }
     }
 
-    this.adoptedProjectionStatePublications.add(prepared);
+    this.adoptedPreviewCachePublications.add(prepared);
     this.fullSegmentNodeRevisionClock = prepared.nextCacheRevisionClock;
     this.fullSegmentNodeRevisions = prepared.nextFullSegmentNodeRevisions;
     this.fullSegmentNodeCache = prepared.nextFullSegmentNodeCache;
     this.fullSegmentSnapshotHandles = prepared.nextFullSegmentSnapshotHandles;
     this.cachedNodesById = prepared.nextCachedNodesById;
-    this.presentationLogicalOwners = prepared.nextPresentationLogicalOwners;
-    this.presentationNumericAliases = prepared.nextPresentationNumericAliases;
-    this.presentationProvisionalNodeIds =
-      prepared.nextPresentationProvisionalNodeIds;
-    this.presentationRemovedSegmentIds =
-      prepared.nextPresentationRemovedSegmentIds;
-    this.spatialSkeletonPreparationsById = prepared.nextPreparationsById;
+    this.displayStableOwners = prepared.nextDisplayStableOwners;
+    this.displayNumericAliases = prepared.nextDisplayNumericAliases;
+    this.displayProvisionalNodeIds = prepared.nextDisplayProvisionalNodeIds;
+    this.displayRemovedSegmentIds = prepared.nextDisplayRemovedSegmentIds;
+    this.spatialSkeletonPendingEditsById = prepared.nextPendingEditsById;
     if (prepared.notifyNodeData) this.nodeDataNotificationPending = true;
-    if (prepared.presentation !== undefined) {
-      this.presentationPublicationPending = false;
-      this.preparedPresentationPublication = prepared.presentation;
+    if (prepared.display !== undefined) {
+      this.displayPublicationPending = false;
+      this.preparedDisplayPublication = prepared.display;
     }
     return true;
   }
 
   /** Runs callback-bearing cache cleanup only after core adoption completed. */
-  finalizePreparedSpatialSkeletonProjectionStatePublication(
-    publication: SpatialSkeletonPreparedProjectionStatePublication,
+  finalizePreparedSpatialSkeletonPreviewCachePublication(
+    publication: SpatialSkeletonPreparedPreviewCachePublication,
     reportError?: (error: unknown) => void,
   ) {
     const prepared =
-      publication as SpatialSkeletonPreparedProjectionStatePublicationImplementation;
+      publication as SpatialSkeletonPreparedPreviewCachePublicationImplementation;
     if (
-      prepared?.owner !== this.projectionStatePublicationOwner ||
-      !this.adoptedProjectionStatePublications.has(prepared)
+      prepared?.owner !== this.previewCachePublicationOwner ||
+      !this.adoptedPreviewCachePublications.has(prepared)
     ) {
       throw new TypeError(
-        "Only an adopted state-owned spatial skeleton publication can be finalized.",
+        "Only an adopted session-owned spatial skeleton publication can be finalized.",
       );
     }
     for (const segmentId of prepared.abortSegmentIds) {
@@ -2174,7 +2139,7 @@ export class SpatialSkeletonState
       bigint,
       {
         nodes: readonly SkeletonNode[] | undefined;
-        handle: CompleteSkeletonSnapshotHandle | undefined;
+        handle: CompleteSkeleton | undefined;
         adoptHandleStorage: boolean;
       }
     >,
@@ -2275,7 +2240,7 @@ export class SpatialSkeletonState
       if (replacement.nodes === undefined) {
         this.fullSegmentNodeCache.delete(segmentId);
       } else {
-        this.presentationRemovedSegmentIds.delete(segmentId);
+        this.displayRemovedSegmentIds.delete(segmentId);
         // The public cache historically exposes a mutable-array type. Trusted
         // handle materializations are frozen readonly arrays at runtime, but
         // retaining the established type avoids widening unrelated callers.
@@ -2380,7 +2345,7 @@ export class SpatialSkeletonState
 
   evictInactiveSegmentNodes(activeSegmentIds: Iterable<bigint>) {
     const activeSegmentIdSet = new Set(activeSegmentIds);
-    for (const segmentId of this.optimisticEditQueue?.getProtectedProjectionSegmentIds() ??
+    for (const segmentId of this.editQueue?.getProtectedPreviewSegmentIds() ??
       []) {
       if (segmentId !== 0n) {
         activeSegmentIdSet.add(segmentId);
@@ -2596,16 +2561,16 @@ export class SpatialSkeletonState
   }
 
   disposed() {
-    this.releaseOptimisticEditingEngine();
+    this.releaseEditQueue();
     super.disposed();
   }
 }
 
 export interface SpatialSkeletonLayerContext {
   getSpatiallyIndexedSkeletonLayer(): SpatiallyIndexedSkeletonLayer | undefined;
-  readonly spatialSkeletonState: SpatialSkeletonState;
+  readonly spatialSkeletonEditSession: SpatialSkeletonEditSession;
   /** Optional because headless/test layer contexts have no presentation UI. */
-  applySpatialSkeletonProjectionUiHints?(
-    hints: SpatialSkeletonResolvedProjectionUiHints,
+  applySpatialSkeletonPreviewUiHints?(
+    hints: SpatialSkeletonResolvedPreviewUiHints,
   ): void;
 }

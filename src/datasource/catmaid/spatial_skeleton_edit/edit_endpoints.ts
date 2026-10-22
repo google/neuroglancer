@@ -24,8 +24,8 @@ import type {
 import type { SkeletonVector } from "#src/skeleton/api.js";
 
 export interface CatmaidSpatialSkeletonEditOperations {
-  /** Stable identity of the physical CATMAID mutation target. */
-  readonly mutationScope: object;
+  /** Stable identity of the physical CATMAID edit request target. */
+  readonly editRequestScope: object;
   commitAddNode(
     request: CatmaidSpatialSkeletonAddNodeRequest,
   ): Promise<CatmaidSpatialSkeletonAddNodeResult>;

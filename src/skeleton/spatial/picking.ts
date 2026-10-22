@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import type { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type { SkeletonPickGeometry } from "#src/skeleton/spatial/frontend.js";
 
 export function resolveSpatiallyIndexedSkeletonSegmentPick(
@@ -46,7 +46,7 @@ export function resolveSpatiallyIndexedSkeletonSegmentPick(
 export function resolveSpatiallyIndexedSkeletonNodePick(
   geometry: SkeletonPickGeometry,
   pickedOffset: number,
-  editState: Pick<SpatialSkeletonState, "getDisplayedNode">,
+  editSession: Pick<SpatialSkeletonEditSession, "getDisplayedNode">,
 ) {
   const segmentId = resolveSpatiallyIndexedSkeletonSegmentPick(
     geometry,
@@ -57,7 +57,7 @@ export function resolveSpatiallyIndexedSkeletonNodePick(
   const nodeId = geometry.nodeIds[pickedOffset];
   // A pick buffer can outlive a topology update or come from a stale
   // spatial cell. Use the complete node snapshot whenever it is available.
-  const cachedNode = editState.getDisplayedNode(nodeId);
+  const cachedNode = editSession.getDisplayedNode(nodeId);
   const baseOffset = pickedOffset * 3;
   return {
     nodeId,

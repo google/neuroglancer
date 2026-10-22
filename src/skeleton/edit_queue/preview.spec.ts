@@ -17,21 +17,21 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
-  createCompleteSkeletonSnapshot,
-  patchCompleteSkeletonSnapshot,
+  createCompleteSkeleton,
+  patchCompleteSkeleton,
 } from "#src/skeleton/edit_queue/complete_skeleton.js";
-import { SpatialSkeletonProjectionWorkspace } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
+import { CompleteSkeletonSet } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
+import type { SpatialSkeletonPreviewIntentDelta } from "#src/skeleton/edit_queue/preview.js";
 import {
-  SpatialSkeletonOptimisticProjectionRuntime,
-  SpatialSkeletonProjectionPublicationFenceError,
-  type SpatialSkeletonProjectionIntentDelta,
+  SpatialSkeletonEditPreview,
+  SpatialSkeletonPreviewPublicationFenceError,
 } from "#src/skeleton/edit_queue/preview.js";
 import {
-  SpatialSkeletonLogicalHandleMappings,
-  spatialSkeletonLogicalNode,
-  spatialSkeletonLogicalSegment,
+  SpatialSkeletonStableIdHandles,
+  spatialSkeletonStableNode,
+  spatialSkeletonStableSegment,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import { bigintCompare } from "#src/util/bigint.js";
 
@@ -51,7 +51,7 @@ function node(
 }
 
 function revisionsOf(
-  state: SpatialSkeletonState,
+  state: SpatialSkeletonEditSession,
   segmentIds: readonly bigint[],
 ) {
   return new Map(
@@ -63,20 +63,20 @@ function revisionsOf(
 }
 
 function fixture() {
-  const state = new SpatialSkeletonState();
+  const state = new SpatialSkeletonEditSession();
   state.replaceCachedSegmentSnapshots(
     [[10n, [node(1n, 10n), node(2n, 10n, 1n), node(3n, 10n, 1n)]]],
     { notify: false },
   );
-  const segment = spatialSkeletonLogicalSegment("segment-a");
+  const segment = spatialSkeletonStableSegment("segment-a");
   const nodes = {
-    root: spatialSkeletonLogicalNode("root"),
-    first: spatialSkeletonLogicalNode("first"),
-    second: spatialSkeletonLogicalNode("second"),
-    added: spatialSkeletonLogicalNode("added"),
-    missing: spatialSkeletonLogicalNode("missing"),
+    root: spatialSkeletonStableNode("root"),
+    first: spatialSkeletonStableNode("first"),
+    second: spatialSkeletonStableNode("second"),
+    added: spatialSkeletonStableNode("added"),
+    missing: spatialSkeletonStableNode("missing"),
   };
-  const mappings = new SpatialSkeletonLogicalHandleMappings<bigint, bigint>();
+  const mappings = new SpatialSkeletonStableIdHandles<bigint, bigint>();
   mappings.apply({
     segments: [[segment, 10n]],
     nodes: [
@@ -86,11 +86,11 @@ function fixture() {
     ],
   });
   const baselineHandle = state.getCachedSegmentSnapshotHandle(10n)!.handle;
-  const baseline = new SpatialSkeletonProjectionWorkspace([
+  const baseline = new CompleteSkeletonSet([
     { segment, snapshot: baselineHandle },
   ]);
   const auxiliaryErrors = vi.fn();
-  const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state, {
+  const runtime = new SpatialSkeletonEditPreview(state, {
     retainedHistoryWorkspace: baseline,
     mappings,
     onAuxiliaryError: auxiliaryErrors,
@@ -108,10 +108,10 @@ function fixture() {
 }
 
 function move(
-  segment: ReturnType<typeof spatialSkeletonLogicalSegment>,
-  nodeHandle: ReturnType<typeof spatialSkeletonLogicalNode>,
+  segment: ReturnType<typeof spatialSkeletonStableSegment>,
+  nodeHandle: ReturnType<typeof spatialSkeletonStableNode>,
   position: readonly number[],
-): SpatialSkeletonProjectionIntentDelta {
+): SpatialSkeletonPreviewIntentDelta {
   return {
     delta: { kind: "move", segment, node: nodeHandle, position },
   };
@@ -119,54 +119,50 @@ function move(
 
 function exactArtifact(
   intentId: number,
-  prepared: ReturnType<
-    SpatialSkeletonOptimisticProjectionRuntime["prepareExact"]
-  >,
+  prepared: ReturnType<SpatialSkeletonEditPreview["prepareExact"]>,
 ) {
   return {
     intentId,
-    projection: prepared.projection,
-    inverseProjection: prepared.inverseProjection,
+    preview: prepared.preview,
+    inversePreview: prepared.inversePreview,
   };
 }
 
-describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
+describe("SpatialSkeletonEditPreview", () => {
   it("retires the authoritative singleton while preserving a pending Undo replacement", () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     state.replaceCachedSegmentSnapshots([[10n, [node(1n, 10n)]]]);
     const snapshot = state.getCachedSegmentSnapshotHandle(10n)!.handle;
-    const segment = spatialSkeletonLogicalSegment("singleton");
-    const root = spatialSkeletonLogicalNode("root");
-    const mappings = new SpatialSkeletonLogicalHandleMappings<bigint, bigint>();
+    const segment = spatialSkeletonStableSegment("singleton");
+    const root = spatialSkeletonStableNode("root");
+    const mappings = new SpatialSkeletonStableIdHandles<bigint, bigint>();
     mappings.apply({ segments: [[segment, 10n]], nodes: [[root, 1n]] });
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state, {
+    const runtime = new SpatialSkeletonEditPreview(state, {
       mappings,
-      retainedHistoryWorkspace: new SpatialSkeletonProjectionWorkspace([
+      retainedHistoryWorkspace: new CompleteSkeletonSet([
         { segment, snapshot },
       ]),
     });
     const deletion = runtime.prepareExact(1, {
       delta: { kind: "delete", segment, node: root },
     });
-    runtime.publishExact(1, deletion.projection);
-    expect(state.spatialSkeletonPresentation.value.removedSegmentIds).toEqual([
-      10n,
-    ]);
+    runtime.publishExact(1, deletion.preview);
+    expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([10n]);
     // Admit the replacement before the delete commits. It must not change
     // either the delete's input identity or the retired authoritative id.
     const restoration = runtime.prepareExact(2, {
-      delta: deletion.inverseProjection,
+      delta: deletion.inversePreview,
       provisionalBindings: {
         segments: [[segment, 1010n]],
         nodes: [[root, 1001n]],
       },
     });
-    runtime.publishExact(2, restoration.projection);
+    runtime.publishExact(2, restoration.preview);
     expect(runtime.ownsAuthoritativeReadSegment(10n)).toBe(true);
 
     // A fresh baseline read stays under the replacement preview. It must not
     // publish the original root beside its provisional restoration.
-    const fresh = createCompleteSkeletonSnapshot([node(1n, 10n)]);
+    const fresh = createCompleteSkeleton([node(1n, 10n)]);
     expect(
       runtime.publishAuthoritativeRead([{ segmentId: 10n, snapshot: fresh }], {
         expectedCacheRevisions: revisionsOf(state, [10n]),
@@ -189,9 +185,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       segmentId: 1010n,
       position: [1, 1.25, 1.5],
     });
-    expect(state.spatialSkeletonPresentation.value.removedSegmentIds).toEqual([
-      10n,
-    ]);
+    expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([10n]);
     expect(
       runtime.publishAuthoritativeRead([{ segmentId: 10n, snapshot }], {
         expectedCacheRevisions,
@@ -213,11 +207,11 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
   });
 
   it("retains initial history snapshots without materializing them", () => {
-    const segment = spatialSkeletonLogicalSegment("retained");
-    const mappings = new SpatialSkeletonLogicalHandleMappings<bigint, bigint>();
+    const segment = spatialSkeletonStableSegment("retained");
+    const mappings = new SpatialSkeletonStableIdHandles<bigint, bigint>();
     mappings.bindSegment(segment, 10n);
-    const snapshot = patchCompleteSkeletonSnapshot(
-      createCompleteSkeletonSnapshot([node(1n, 10n), node(2n, 10n, 1n)]),
+    const snapshot = patchCompleteSkeleton(
+      createCompleteSkeleton([node(1n, 10n), node(2n, 10n, 1n)]),
       [
         {
           kind: "update",
@@ -226,13 +220,13 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
         },
       ],
     );
-    const retainedHistoryWorkspace = new SpatialSkeletonProjectionWorkspace([
+    const retainedHistoryWorkspace = new CompleteSkeletonSet([
       { segment, snapshot },
     ]);
 
     expect(snapshot.materializationCount).toBe(0);
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(
-      new SpatialSkeletonState(),
+    const runtime = new SpatialSkeletonEditPreview(
+      new SpatialSkeletonEditSession(),
       { mappings, retainedHistoryWorkspace },
     );
 
@@ -243,15 +237,15 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
   });
 
   it("gets or creates a node-handle batch atomically with one mapping revision", () => {
-    const known = spatialSkeletonLogicalNode("known");
-    const occupiedCanonical = spatialSkeletonLogicalNode("authority:12");
-    const mappings = new SpatialSkeletonLogicalHandleMappings<bigint, bigint>();
+    const known = spatialSkeletonStableNode("known");
+    const occupiedCanonical = spatialSkeletonStableNode("authority:12");
+    const mappings = new SpatialSkeletonStableIdHandles<bigint, bigint>();
     mappings.bindNodes([
       [known, 11n],
       [occupiedCanonical, 91n],
     ]);
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(
-      new SpatialSkeletonState(),
+    const runtime = new SpatialSkeletonEditPreview(
+      new SpatialSkeletonEditSession(),
       { mappings },
     );
 
@@ -291,7 +285,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
     expect(runtime.generation).toBe(preparedGeneration);
     expect(runtime.mappingRevision).toBeGreaterThan(preparedMappingRevision);
 
-    runtime.publishExact(1, prepared.projection);
+    runtime.publishExact(1, prepared.preview);
 
     expect(runtime.resolveNode(laterNode)).toBe(20n);
     expect(runtime.resolveSegment(laterSegment)).toBe(30n);
@@ -299,15 +293,15 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
   });
 
   it("uses fresh authority handles when canonical node and segment ids were rebound", () => {
-    const reboundNode = spatialSkeletonLogicalNode("authority:11");
-    const reboundSegment = spatialSkeletonLogicalSegment("authority:17");
-    const mappings = new SpatialSkeletonLogicalHandleMappings<bigint, bigint>();
+    const reboundNode = spatialSkeletonStableNode("authority:11");
+    const reboundSegment = spatialSkeletonStableSegment("authority:17");
+    const mappings = new SpatialSkeletonStableIdHandles<bigint, bigint>();
     mappings.apply({
       nodes: [[reboundNode, 91n]],
       segments: [[reboundSegment, 97n]],
     });
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(
-      new SpatialSkeletonState(),
+    const runtime = new SpatialSkeletonEditPreview(
+      new SpatialSkeletonEditSession(),
       { mappings },
     );
 
@@ -323,7 +317,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
   });
 
   it("does not undo a reversed merge binding during a later physical lookup", () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     state.replaceCachedSegmentSnapshots(
       [
         [11n, [node(101n, 11n), node(102n, 11n, 101n)]],
@@ -331,7 +325,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       ],
       { notify: false },
     );
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state);
+    const runtime = new SpatialSkeletonEditPreview(state);
     const firstSegment = runtime.getOrCreateSegmentHandle(11n);
     const secondSegment = runtime.getOrCreateSegmentHandle(17n);
     const firstRoot = runtime.getOrCreateNodeHandle(101n);
@@ -373,7 +367,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
         expectedCacheRevisions: revisionsOf(state, [11n, 17n]),
       },
     });
-    runtime.publishExact(1, merge.projection);
+    runtime.publishExact(1, merge.preview);
     runtime.publishAuthoritative({
       intentId: 1,
       reconciliation: {
@@ -395,7 +389,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
   });
 
   it("removes a losing seeded segment in the first atomic merge preview", () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     state.replaceCachedSegmentSnapshots(
       [
         [11n, [node(101n, 11n), node(102n, 11n, 101n)]],
@@ -403,13 +397,13 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       ],
       { notify: false },
     );
-    const firstSegment = spatialSkeletonLogicalSegment("seed:first");
-    const secondSegment = spatialSkeletonLogicalSegment("seed:second");
-    const firstRoot = spatialSkeletonLogicalNode("seed:first-root");
-    const firstEndpoint = spatialSkeletonLogicalNode("seed:first-endpoint");
-    const secondRoot = spatialSkeletonLogicalNode("seed:second-root");
-    const secondChild = spatialSkeletonLogicalNode("seed:second-child");
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state);
+    const firstSegment = spatialSkeletonStableSegment("seed:first");
+    const secondSegment = spatialSkeletonStableSegment("seed:second");
+    const firstRoot = spatialSkeletonStableNode("seed:first-root");
+    const firstEndpoint = spatialSkeletonStableNode("seed:first-endpoint");
+    const secondRoot = spatialSkeletonStableNode("seed:second-root");
+    const secondChild = spatialSkeletonStableNode("seed:second-child");
+    const runtime = new SpatialSkeletonEditPreview(state);
     const exact = runtime.prepareExact(1, {
       delta: {
         kind: "merge",
@@ -446,7 +440,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       },
     });
 
-    expect(() => runtime.publishExact(1, exact.projection)).not.toThrow();
+    expect(() => runtime.publishExact(1, exact.preview)).not.toThrow();
     expect(state.getCachedSegmentSnapshotHandle(17n)).toBeUndefined();
     expect(state.getCachedNode(201n)).toMatchObject({
       segmentId: 11n,
@@ -455,11 +449,11 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
   });
 
   it("does not seed an earlier active provisional segment into the baseline", () => {
-    const state = new SpatialSkeletonState();
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state);
-    const segment = spatialSkeletonLogicalSegment("provisional-root-segment");
-    const root = spatialSkeletonLogicalNode("provisional-root");
-    const child = spatialSkeletonLogicalNode("provisional-child");
+    const state = new SpatialSkeletonEditSession();
+    const runtime = new SpatialSkeletonEditPreview(state);
+    const segment = spatialSkeletonStableSegment("provisional-root-segment");
+    const root = spatialSkeletonStableNode("provisional-root");
+    const child = spatialSkeletonStableNode("provisional-child");
     const rootAdd = runtime.prepareExact(1, {
       delta: {
         kind: "add",
@@ -473,8 +467,8 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
         nodes: [[root, 1001n]],
       },
     });
-    runtime.publishExact(1, rootAdd.projection);
-    const projectedRoot = state.getCachedSegmentSnapshotHandle(1002n)!;
+    runtime.publishExact(1, rootAdd.preview);
+    const previewedRoot = state.getCachedSegmentSnapshotHandle(1002n)!;
 
     const childAdd = runtime.prepareExact(2, {
       delta: {
@@ -486,16 +480,16 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       },
       provisionalBindings: { nodes: [[child, 1003n]] },
       inspectionSeed: {
-        segments: [{ segment, snapshot: projectedRoot.handle }],
+        segments: [{ segment, snapshot: previewedRoot.handle }],
         authoritativeBindings: {
           segments: [[segment, 1002n]],
           nodes: [[root, 1001n]],
         },
-        expectedCacheRevisions: new Map([[1002n, projectedRoot.cacheRevision]]),
+        expectedCacheRevisions: new Map([[1002n, previewedRoot.cacheRevision]]),
       },
     });
 
-    expect(() => runtime.publishExact(2, childAdd.projection)).not.toThrow();
+    expect(() => runtime.publishExact(2, childAdd.preview)).not.toThrow();
     expect(
       state.getCachedSegmentNodes(1002n)?.map(({ nodeId }) => nodeId),
     ).toEqual([1001n, 1003n]);
@@ -504,7 +498,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
 
   it("prepares off-screen and adopts cache, identities, and cue removal in one frame", () => {
     const { state, segment, nodes, runtime, baselineHandle } = fixture();
-    state.addSpatialSkeletonPreparation({
+    state.addSpatialSkeletonPendingEdit({
       intentId: 1,
       sequence: 1,
       direction: "execute",
@@ -513,22 +507,21 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       segmentIds: [10n],
       nodeId: 2n,
     });
-    const beforeRevision = state.spatialSkeletonPresentation.value.revision;
+    const beforeRevision = state.spatialSkeletonDisplay.value.revision;
     const frames: Array<{
       readonly nodePosition: readonly number[] | undefined;
-      readonly preparations: number;
+      readonly pendingEdits: number;
       readonly owners: readonly string[];
     }> = [];
-    state.spatialSkeletonPresentation.changed.add(() => {
+    state.spatialSkeletonDisplay.changed.add(() => {
       frames.push({
         nodePosition:
           state.getCachedNode(2n) === undefined
             ? undefined
             : Array.from(state.getCachedNode(2n)!.position),
-        preparations:
-          state.spatialSkeletonPresentation.value.preparations.length,
-        owners: state.spatialSkeletonPresentation.value.activeLogicalOwners.map(
-          ({ logicalHandle }) => logicalHandle.stableId,
+        pendingEdits: state.spatialSkeletonDisplay.value.pendingEdits.length,
+        owners: state.spatialSkeletonDisplay.value.activeStableOwners.map(
+          ({ stableHandle }) => stableHandle.stableId,
         ),
       });
     });
@@ -544,24 +537,22 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
     expect(Array.from(state.getCachedNode(2n)!.position)).toEqual([
       2, 2.25, 2.5,
     ]);
-    expect(state.spatialSkeletonPresentation.value.preparations).toHaveLength(
-      1,
-    );
-    expect(prepared.inverseProjection).toMatchObject({
+    expect(state.spatialSkeletonDisplay.value.pendingEdits).toHaveLength(1);
+    expect(prepared.inversePreview).toMatchObject({
       kind: "move",
       position: [2, 2.25, 2.5],
     });
 
-    runtime.publishExact(1, prepared.projection);
+    runtime.publishExact(1, prepared.preview);
 
     expect(state.getCachedNode(2n)?.position).toEqual([20, 21, 22]);
-    expect(state.spatialSkeletonPresentation.value.revision).toBe(
+    expect(state.spatialSkeletonDisplay.value.revision).toBe(
       beforeRevision + 1,
     );
     expect(frames).toEqual([
       {
         nodePosition: [20, 21, 22],
-        preparations: 0,
+        pendingEdits: 0,
         owners: ["segment-a"],
       },
     ]);
@@ -577,7 +568,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
         changes: { description: "first" },
       },
     });
-    runtime.publishExact(1, first.projection);
+    runtime.publishExact(1, first.preview);
     runtime.publishAuthoritative({
       intentId: 1,
       reconciliation: {},
@@ -600,13 +591,13 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       },
     });
 
-    expect(() => runtime.publishExact(2, second.projection)).not.toThrow();
+    expect(() => runtime.publishExact(2, second.preview)).not.toThrow();
     expect(state.getCachedNode(2n)?.description).toBe("second");
   });
 
   it("keeps a preview adopted and reports the error when an observer throws", () => {
     const { state, segment, nodes, runtime, auxiliaryErrors } = fixture();
-    state.addSpatialSkeletonPreparation({
+    state.addSpatialSkeletonPendingEdit({
       intentId: 1,
       sequence: 1,
       direction: "execute",
@@ -618,24 +609,20 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
     const observed = vi.fn(() => {
       expect(runtime.generation).toBe(1);
       expect(state.getCachedNode(2n)?.position).toEqual([20, 21, 22]);
-      expect(state.spatialSkeletonPresentation.value.preparations).toHaveLength(
-        0,
-      );
+      expect(state.spatialSkeletonDisplay.value.pendingEdits).toHaveLength(0);
     });
-    state.spatialSkeletonPresentation.changed.add(observed);
+    state.spatialSkeletonDisplay.changed.add(observed);
     const notificationOrder: string[] = [];
-    state.spatialSkeletonPresentation.changed.add(() => {
-      notificationOrder.push("presentation");
+    state.spatialSkeletonDisplay.changed.add(() => {
+      notificationOrder.push("display");
     });
     const laterNodeObserver = vi.fn(() => {
       notificationOrder.push("nodes");
-      expect(state.spatialSkeletonPresentation.value.preparations).toHaveLength(
-        0,
-      );
+      expect(state.spatialSkeletonDisplay.value.pendingEdits).toHaveLength(0);
     });
     state.nodeDataVersion.changed.add(laterNodeObserver);
     const observerFailure = new Error("preview observer failed");
-    state.spatialSkeletonPresentation.changed.add(() => {
+    state.spatialSkeletonDisplay.changed.add(() => {
       throw observerFailure;
     });
     const nodeObserverFailure = new Error("node observer failed");
@@ -647,11 +634,11 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       move(segment, nodes.first, [20, 21, 22]),
     );
 
-    expect(() => runtime.publishExact(1, prepared.projection)).not.toThrow();
+    expect(() => runtime.publishExact(1, prepared.preview)).not.toThrow();
 
     expect(observed).toHaveBeenCalledTimes(1);
     expect(laterNodeObserver).toHaveBeenCalledTimes(1);
-    expect(notificationOrder).toEqual(["presentation", "nodes"]);
+    expect(notificationOrder).toEqual(["display", "nodes"]);
     expect(auxiliaryErrors).toHaveBeenCalledWith(observerFailure);
     expect(auxiliaryErrors).toHaveBeenCalledWith(nodeObserverFailure);
   });
@@ -668,7 +655,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       },
       provisionalBindings: { nodes: [[nodes.added, 1001n]] },
     });
-    runtime.publishExact(1, add.projection);
+    runtime.publishExact(1, add.preview);
     auxiliaryErrors.mockClear();
 
     const observed = vi.fn(() => {
@@ -676,13 +663,11 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       expect(runtime.resolveNode(nodes.added)).toBe(9n);
       expect(state.getCachedNode(1001n)).toBeUndefined();
       expect(state.getCachedNode(9n)?.position).toEqual([4, 4, 4]);
-      expect(
-        state.spatialSkeletonPresentation.value.provisionalNodeIds,
-      ).toEqual([]);
+      expect(state.spatialSkeletonDisplay.value.provisionalNodeIds).toEqual([]);
     });
-    state.spatialSkeletonPresentation.changed.add(observed);
+    state.spatialSkeletonDisplay.changed.add(observed);
     const observerFailure = new Error("authority observer failed");
-    state.spatialSkeletonPresentation.changed.add(() => {
+    state.spatialSkeletonDisplay.changed.add(() => {
       throw observerFailure;
     });
 
@@ -708,12 +693,12 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       1,
       move(segment, nodes.first, [20, 20, 20]),
     );
-    runtime.publishExact(1, preview.projection);
+    runtime.publishExact(1, preview.preview);
 
     const finalized = runtime.publishAuthoritative({
       intentId: 1,
       reconciliation: {
-        finalizedProjectionDelta: {
+        finalizedPreviewDelta: {
           kind: "move",
           segment,
           node: nodes.first,
@@ -723,20 +708,20 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       activePreviews: [],
     });
 
-    expect(finalized.projection.delta).toMatchObject({
+    expect(finalized.preview.delta).toMatchObject({
       kind: "move",
       position: [15, 15, 15],
     });
-    expect(finalized.inverseProjection).toMatchObject({
+    expect(finalized.inversePreview).toMatchObject({
       kind: "move",
       position: [2, 2.25, 2.5],
     });
     expect(state.getCachedNode(2n)?.position).toEqual([15, 15, 15]);
 
     const undo = runtime.prepareExact(2, {
-      delta: finalized.inverseProjection,
+      delta: finalized.inversePreview,
     });
-    runtime.publishExact(2, undo.projection);
+    runtime.publishExact(2, undo.preview);
     expect(state.getCachedNode(2n)?.position).toEqual([2, 2.25, 2.5]);
   });
 
@@ -746,16 +731,16 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       1,
       move(segment, nodes.first, [20, 20, 20]),
     );
-    runtime.publishExact(1, first.projection);
+    runtime.publishExact(1, first.preview);
     const second = runtime.prepareExact(
       2,
       move(segment, nodes.second, [30, 30, 30]),
     );
-    runtime.publishExact(2, second.projection);
+    runtime.publishExact(2, second.preview);
 
-    const beforeRevision = state.spatialSkeletonPresentation.value.revision;
+    const beforeRevision = state.spatialSkeletonDisplay.value.revision;
     const frames: Array<readonly [number, number]> = [];
-    state.spatialSkeletonPresentation.changed.add(() => {
+    state.spatialSkeletonDisplay.changed.add(() => {
       frames.push([
         state.getCachedNode(2n)!.position[0],
         state.getCachedNode(3n)!.position[0],
@@ -767,7 +752,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       replayIntents: [],
     });
 
-    expect(state.spatialSkeletonPresentation.value.revision).toBe(
+    expect(state.spatialSkeletonDisplay.value.revision).toBe(
       beforeRevision + 1,
     );
     expect(frames).toEqual([[2, 30]]);
@@ -775,17 +760,17 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
     expect(state.getCachedNode(3n)?.position).toEqual([30, 30, 30]);
   });
 
-  it("retains baseline slices still owned by an active projection", () => {
+  it("retains baseline slices still owned by an active preview", () => {
     const { state, segment, nodes, runtime } = fixture();
     const prepared = runtime.prepareExact(
       1,
       move(segment, nodes.first, [20, 20, 20]),
     );
-    runtime.publishExact(1, prepared.projection);
+    runtime.publishExact(1, prepared.preview);
 
     // Simulates history capacity evicting this entry while its authority
     // request remains unresolved.
-    runtime.setRetainedHistoryProjections([]);
+    runtime.setRetainedHistoryPreviews([]);
     runtime.rollbackAndReplay({
       rollbackIntents: [exactArtifact(1, prepared)],
       replayIntents: [],
@@ -806,9 +791,9 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       },
       provisionalBindings: { nodes: [[nodes.added, 1001n]] },
     });
-    runtime.publishExact(1, add.projection);
+    runtime.publishExact(1, add.preview);
     expect(state.getCachedNode(1001n)?.position).toEqual([4, 4, 4]);
-    expect(state.spatialSkeletonPresentation.value.provisionalNodeIds).toEqual([
+    expect(state.spatialSkeletonDisplay.value.provisionalNodeIds).toEqual([
       1001n,
     ]);
 
@@ -816,19 +801,19 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       2,
       move(segment, nodes.added, [8, 8, 8]),
     );
-    runtime.publishExact(2, laterMove.projection);
+    runtime.publishExact(2, laterMove.preview);
 
     const observed: Array<{
       readonly ids: readonly bigint[];
       readonly provisional: readonly bigint[];
     }> = [];
-    state.spatialSkeletonPresentation.changed.add(() => {
+    state.spatialSkeletonDisplay.changed.add(() => {
       observed.push({
         ids: state
           .getCachedSegmentNodes(10n)!
           .map(({ nodeId }) => nodeId)
           .sort(bigintCompare),
-        provisional: state.spatialSkeletonPresentation.value.provisionalNodeIds,
+        provisional: state.spatialSkeletonDisplay.value.provisionalNodeIds,
       });
     });
 
@@ -874,7 +859,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       });
       throw new Error("selection UI unavailable");
     });
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state, {
+    const runtime = new SpatialSkeletonEditPreview(state, {
       retainedHistoryWorkspace: baseline,
       mappings,
       uiHints: { apply: applyHints },
@@ -902,7 +887,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       },
     });
 
-    expect(() => runtime.publishExact(1, exact.projection)).not.toThrow();
+    expect(() => runtime.publishExact(1, exact.preview)).not.toThrow();
     expect(applyHints).toHaveBeenCalledTimes(1);
     expect(auxiliaryErrors).toHaveBeenCalledWith(
       expect.objectContaining({ message: "selection UI unavailable" }),
@@ -913,13 +898,13 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
   it("uses the retired provisional mapping for post-rollback UI cleanup", () => {
     const { state, mappings, baseline } = fixture();
     const applyHints = vi.fn();
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state, {
+    const runtime = new SpatialSkeletonEditPreview(state, {
       retainedHistoryWorkspace: baseline,
       mappings,
       uiHints: { apply: applyHints },
     });
-    const createdSegment = spatialSkeletonLogicalSegment("rollback-segment");
-    const createdRoot = spatialSkeletonLogicalNode("rollback-root");
+    const createdSegment = spatialSkeletonStableSegment("rollback-segment");
+    const createdRoot = spatialSkeletonStableNode("rollback-root");
     const exact = runtime.prepareExact(1, {
       delta: {
         kind: "add",
@@ -939,7 +924,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
         selectedNode: { kind: "clear" },
       },
     });
-    runtime.publishExact(1, exact.projection);
+    runtime.publishExact(1, exact.preview);
 
     runtime.rollbackAndReplay({
       rollbackIntents: [exactArtifact(1, exact)],
@@ -962,16 +947,16 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
     const { state, mappings, baseline } = fixture();
     const applyHints = vi.fn();
     const auxiliaryErrors = vi.fn();
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state, {
+    const runtime = new SpatialSkeletonEditPreview(state, {
       retainedHistoryWorkspace: baseline,
       mappings,
       uiHints: { apply: applyHints },
       onAuxiliaryError: auxiliaryErrors,
     });
-    const createdSegment = spatialSkeletonLogicalSegment(
+    const createdSegment = spatialSkeletonStableSegment(
       "repeated-rollback-segment",
     );
-    const createdRoot = spatialSkeletonLogicalNode("repeated-rollback-root");
+    const createdRoot = spatialSkeletonStableNode("repeated-rollback-root");
     const exact = runtime.prepareExact(1, {
       delta: {
         kind: "add",
@@ -990,19 +975,17 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
         ],
       },
     });
-    runtime.publishExact(1, exact.projection);
+    runtime.publishExact(1, exact.preview);
     const artifact = exactArtifact(1, exact);
 
     const previewGeneration = runtime.generation;
-    const previewRevision = state.spatialSkeletonPresentation.value.revision;
+    const previewRevision = state.spatialSkeletonDisplay.value.revision;
     runtime.rollbackAndReplay({
       rollbackIntents: [],
       replayIntents: [artifact],
     });
     expect(runtime.generation).toBe(previewGeneration);
-    expect(state.spatialSkeletonPresentation.value.revision).toBe(
-      previewRevision,
-    );
+    expect(state.spatialSkeletonDisplay.value.revision).toBe(previewRevision);
 
     runtime.rollbackAndReplay({
       rollbackIntents: [artifact],
@@ -1014,9 +997,9 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
     applyHints.mockClear();
     auxiliaryErrors.mockClear();
     const rolledBackGeneration = runtime.generation;
-    const rolledBackRevision = state.spatialSkeletonPresentation.value.revision;
+    const rolledBackRevision = state.spatialSkeletonDisplay.value.revision;
 
-    // Fatal cleanup may remove the preview before layer disposal asks the old
+    // Reload-required cleanup may remove the preview before layer disposal asks the old
     // runtime to roll it back again. The stale request has no model or UI work.
     expect(() =>
       runtime.rollbackAndReplay({
@@ -1026,7 +1009,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
     ).not.toThrow();
 
     expect(runtime.generation).toBe(rolledBackGeneration);
-    expect(state.spatialSkeletonPresentation.value.revision).toBe(
+    expect(state.spatialSkeletonDisplay.value.revision).toBe(
       rolledBackRevision,
     );
     expect(applyHints).not.toHaveBeenCalled();
@@ -1041,13 +1024,13 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       expect(hints.nodeIdRemappings).toEqual(new Map([[1001n, 9n]]));
       expect(hints.segmentIdRemappings).toEqual(new Map([[1002n, 19n]]));
     });
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state, {
+    const runtime = new SpatialSkeletonEditPreview(state, {
       retainedHistoryWorkspace: baseline,
       mappings,
       uiHints: { apply: applyHints },
     });
-    const createdSegment = spatialSkeletonLogicalSegment("created-segment");
-    const createdRoot = spatialSkeletonLogicalNode("created-root");
+    const createdSegment = spatialSkeletonStableSegment("created-segment");
+    const createdRoot = spatialSkeletonStableNode("created-root");
     const exact = runtime.prepareExact(1, {
       delta: {
         kind: "add",
@@ -1061,7 +1044,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
         segments: [[createdSegment, 1002n]],
       },
     });
-    runtime.publishExact(1, exact.projection);
+    runtime.publishExact(1, exact.preview);
     applyHints.mockClear();
 
     runtime.publishAuthoritative({
@@ -1082,7 +1065,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
   it.each([false, true])(
     "retires the physical Merge target while retaining logical aliases (pending Undo: %s)",
     (pendingUndo) => {
-      const state = new SpatialSkeletonState();
+      const state = new SpatialSkeletonEditSession();
       state.replaceCachedSegmentSnapshots(
         [
           [11n, [node(101n, 11n), node(102n, 11n, 101n)]],
@@ -1090,13 +1073,13 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
         ],
         { notify: false },
       );
-      const firstSegment = spatialSkeletonLogicalSegment("merge:first");
-      const secondSegment = spatialSkeletonLogicalSegment("merge:second");
-      const firstRoot = spatialSkeletonLogicalNode("merge:first-root");
-      const firstEndpoint = spatialSkeletonLogicalNode("merge:first-endpoint");
-      const secondRoot = spatialSkeletonLogicalNode("merge:second-root");
-      const secondChild = spatialSkeletonLogicalNode("merge:second-child");
-      const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state);
+      const firstSegment = spatialSkeletonStableSegment("merge:first");
+      const secondSegment = spatialSkeletonStableSegment("merge:second");
+      const firstRoot = spatialSkeletonStableNode("merge:first-root");
+      const firstEndpoint = spatialSkeletonStableNode("merge:first-endpoint");
+      const secondRoot = spatialSkeletonStableNode("merge:second-root");
+      const secondChild = spatialSkeletonStableNode("merge:second-child");
+      const runtime = new SpatialSkeletonEditPreview(state);
       const exact = runtime.prepareExact(1, {
         delta: {
           kind: "merge",
@@ -1132,14 +1115,14 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
           expectedCacheRevisions: revisionsOf(state, [11n, 17n]),
         },
       });
-      runtime.publishExact(1, exact.projection);
+      runtime.publishExact(1, exact.preview);
       const expectedCacheRevisions = revisionsOf(state, [17n]);
       const restoration = {
-        projection: {
-          delta: exact.inverseProjection,
+        preview: {
+          delta: exact.inversePreview,
           provisionalBindings: { segments: [[secondSegment, 1017n]] },
-        } satisfies SpatialSkeletonProjectionIntentDelta,
-        inverseProjection: exact.projection.delta,
+        } satisfies SpatialSkeletonPreviewIntentDelta,
+        inversePreview: exact.preview.delta,
       };
 
       expect(() =>
@@ -1174,7 +1157,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
           [
             {
               segmentId: 17n,
-              snapshot: createCompleteSkeletonSnapshot([
+              snapshot: createCompleteSkeleton([
                 node(201n, 17n),
                 node(202n, 17n, 201n),
               ]),
@@ -1205,7 +1188,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
   );
 
   it("applies reversed-winner merge corrections before authoritative aliasing", () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     state.replaceCachedSegmentSnapshots(
       [
         [11n, [node(101n, 11n), node(102n, 11n, 101n)]],
@@ -1213,13 +1196,13 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       ],
       { notify: false },
     );
-    const firstSegment = spatialSkeletonLogicalSegment("reverse:first");
-    const secondSegment = spatialSkeletonLogicalSegment("reverse:second");
-    const firstRoot = spatialSkeletonLogicalNode("reverse:first-root");
-    const firstEndpoint = spatialSkeletonLogicalNode("reverse:first-endpoint");
-    const secondRoot = spatialSkeletonLogicalNode("reverse:second-root");
-    const secondChild = spatialSkeletonLogicalNode("reverse:second-child");
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state);
+    const firstSegment = spatialSkeletonStableSegment("reverse:first");
+    const secondSegment = spatialSkeletonStableSegment("reverse:second");
+    const firstRoot = spatialSkeletonStableNode("reverse:first-root");
+    const firstEndpoint = spatialSkeletonStableNode("reverse:first-endpoint");
+    const secondRoot = spatialSkeletonStableNode("reverse:second-root");
+    const secondChild = spatialSkeletonStableNode("reverse:second-child");
+    const runtime = new SpatialSkeletonEditPreview(state);
     const exact = runtime.prepareExact(1, {
       delta: {
         kind: "merge",
@@ -1255,7 +1238,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
         expectedCacheRevisions: revisionsOf(state, [11n, 17n]),
       },
     });
-    runtime.publishExact(1, exact.projection);
+    runtime.publishExact(1, exact.preview);
 
     runtime.publishAuthoritative({
       intentId: 1,
@@ -1266,7 +1249,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
             [secondSegment, 17n],
           ],
         },
-        finalizedProjectionDelta: {
+        finalizedPreviewDelta: {
           kind: "merge",
           firstSegment: secondSegment,
           secondSegment: firstSegment,
@@ -1293,7 +1276,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
 
   it("rejects a stale cache fence without adopting any part of a preview", () => {
     const { state, segment, nodes, runtime, baselineHandle } = fixture();
-    state.addSpatialSkeletonPreparation({
+    state.addSpatialSkeletonPendingEdit({
       intentId: 1,
       sequence: 1,
       direction: "execute",
@@ -1310,28 +1293,26 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       [[10n, [node(1n, 10n), node(2n, 10n, 1n, { position: [99, 99, 99] })]]],
       { notify: false },
     );
-    const beforePresentation = state.spatialSkeletonPresentation.value;
+    const beforeDisplay = state.spatialSkeletonDisplay.value;
     const beforeGeneration = runtime.generation;
 
-    expect(() => runtime.publishExact(1, prepared.projection)).toThrow(
-      SpatialSkeletonProjectionPublicationFenceError,
+    expect(() => runtime.publishExact(1, prepared.preview)).toThrow(
+      SpatialSkeletonPreviewPublicationFenceError,
     );
 
     expect(runtime.generation).toBe(beforeGeneration);
-    expect(runtime.projectedWorkspace.segments).toHaveLength(0);
+    expect(runtime.previewedWorkspace.segments).toHaveLength(0);
     expect(runtime.retainedHistoryWorkspace.getSegment(segment)?.snapshot).toBe(
       baselineHandle,
     );
     expect(Array.from(state.getCachedNode(2n)!.position)).toEqual([99, 99, 99]);
-    expect(state.spatialSkeletonPresentation.value).toBe(beforePresentation);
-    expect(state.spatialSkeletonPresentation.value.preparations).toHaveLength(
-      1,
-    );
+    expect(state.spatialSkeletonDisplay.value).toBe(beforeDisplay);
+    expect(state.spatialSkeletonDisplay.value.pendingEdits).toHaveLength(1);
   });
 
   it("fails local reducer and reconciliation guards before touching visible state", () => {
     const { state, segment, nodes, runtime, baselineHandle } = fixture();
-    const beforePresentation = state.spatialSkeletonPresentation.value;
+    const beforeDisplay = state.spatialSkeletonDisplay.value;
 
     expect(() =>
       runtime.prepareExact(1, {
@@ -1349,21 +1330,21 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
     expect(state.getCachedSegmentSnapshotHandle(10n)?.handle).toBe(
       baselineHandle,
     );
-    expect(state.spatialSkeletonPresentation.value).toBe(beforePresentation);
+    expect(state.spatialSkeletonDisplay.value).toBe(beforeDisplay);
 
     const exact = runtime.prepareExact(
       2,
       move(segment, nodes.first, [20, 20, 20]),
     );
-    runtime.publishExact(2, exact.projection);
+    runtime.publishExact(2, exact.preview);
     const exactHandle = state.getCachedSegmentSnapshotHandle(10n)!.handle;
-    const exactPresentation = state.spatialSkeletonPresentation.value;
+    const exactDisplay = state.spatialSkeletonDisplay.value;
 
     expect(() =>
       runtime.publishAuthoritative({
         intentId: 2,
         reconciliation: {
-          finalizedProjectionDelta: {
+          finalizedPreviewDelta: {
             kind: "move",
             segment,
             node: nodes.missing,
@@ -1374,7 +1355,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       }),
     ).toThrow("Logical node missing has no physical mapping.");
     expect(state.getCachedSegmentSnapshotHandle(10n)!.handle).toBe(exactHandle);
-    expect(state.spatialSkeletonPresentation.value).toBe(exactPresentation);
+    expect(state.spatialSkeletonDisplay.value).toBe(exactDisplay);
     expect(runtime.resolveNode(nodes.first)).toBe(2n);
   });
 
@@ -1384,7 +1365,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       1,
       move(segment, nodes.first, [20, 20, 20]),
     );
-    runtime.publishExact(1, first.projection);
+    runtime.publishExact(1, first.preview);
     const second = runtime.prepareExact(2, {
       delta: {
         kind: "add",
@@ -1395,9 +1376,9 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       },
       provisionalBindings: { nodes: [[nodes.added, 500n]] },
     });
-    runtime.publishExact(2, second.projection);
+    runtime.publishExact(2, second.preview);
     const snapshot = state.getCachedSegmentSnapshotHandle(10n);
-    const presentation = state.spatialSkeletonPresentation.value;
+    const display = state.spatialSkeletonDisplay.value;
     const baseline = runtime.retainedHistoryWorkspace;
     const publication = {
       intentId: 1,
@@ -1420,7 +1401,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       }),
     ).toThrow("Logical node missing has no physical mapping.");
     expect(state.getCachedSegmentSnapshotHandle(10n)).toBe(snapshot);
-    expect(state.spatialSkeletonPresentation.value).toBe(presentation);
+    expect(state.spatialSkeletonDisplay.value).toBe(display);
     expect(runtime.retainedHistoryWorkspace).toBe(baseline);
     expect(runtime.resolveNode(nodes.added)).toBe(500n);
     runtime.publishAuthoritative(publication);
@@ -1439,12 +1420,12 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       move(segment, nodes.second, [30, 30, 30]),
     );
 
-    runtime.publishExact(1, first.projection);
-    runtime.publishExact(2, second.projection);
+    runtime.publishExact(1, first.preview);
+    runtime.publishExact(2, second.preview);
 
     expect(state.getCachedNode(2n)?.position).toEqual([20, 20, 20]);
     expect(state.getCachedNode(3n)?.position).toEqual([30, 30, 30]);
-    expect(second.inverseProjection).toMatchObject({
+    expect(second.inversePreview).toMatchObject({
       kind: "move",
       position: [3, 3.25, 3.5],
     });
@@ -1457,8 +1438,8 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       1,
       move(segment, nodes.first, [20, 20, 20]),
     );
-    runtime.publishExact(1, exact.projection);
-    const presentation = state.spatialSkeletonPresentation.value;
+    runtime.publishExact(1, exact.preview);
+    const display = state.spatialSkeletonDisplay.value;
     expect(state.getCachedSegmentRevision(10n)).not.toBe(
       expectedCacheRevisions.get(10n),
     );
@@ -1468,7 +1449,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
         [
           {
             segmentId: 10n,
-            snapshot: createCompleteSkeletonSnapshot([
+            snapshot: createCompleteSkeleton([
               node(1n, 10n),
               node(2n, 10n, 1n, { position: [7, 7, 7] }),
               node(3n, 10n, 1n),
@@ -1479,10 +1460,10 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       ),
     ).toBe(false);
     expect(state.getCachedNode(2n)?.position).toEqual([20, 20, 20]);
-    expect(state.spatialSkeletonPresentation.value).toBe(presentation);
+    expect(state.spatialSkeletonDisplay.value).toBe(display);
   });
 
-  it("accepts an unrelated ordinary read across another segment's projection", () => {
+  it("accepts an unrelated ordinary read across another segment's preview", () => {
     const { state, segment, nodes, runtime } = fixture();
     state.replaceCachedSegmentSnapshots(
       [[20n, [node(21n, 20n), node(22n, 20n, 21n)]]],
@@ -1494,7 +1475,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
       1,
       move(segment, nodes.first, [20, 20, 20]),
     );
-    runtime.publishExact(1, exact.projection);
+    runtime.publishExact(1, exact.preview);
 
     expect(runtime.generation).toBeGreaterThan(readGeneration);
     expect(state.getCachedSegmentRevision(20n)).toBe(
@@ -1505,7 +1486,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
         [
           {
             segmentId: 20n,
-            snapshot: createCompleteSkeletonSnapshot([
+            snapshot: createCompleteSkeleton([
               node(21n, 20n),
               node(22n, 20n, 21n, { position: [44, 44, 44] }),
             ]),
@@ -1519,12 +1500,12 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
   });
 
   it("does not bind every node while adopting an authoritative read", () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     state.replaceCachedSegmentSnapshots(
       [[20n, [node(21n, 20n), node(22n, 20n, 21n)]]],
       { notify: false },
     );
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state);
+    const runtime = new SpatialSkeletonEditPreview(state);
     const expectedCacheRevisions = revisionsOf(state, [20n]);
 
     expect(
@@ -1532,7 +1513,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
         [
           {
             segmentId: 20n,
-            snapshot: createCompleteSkeletonSnapshot([
+            snapshot: createCompleteSkeleton([
               node(21n, 20n),
               node(22n, 20n, 21n, { position: [44, 44, 44] }),
             ]),
@@ -1554,23 +1535,23 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
     const artifactFrames: Array<
       readonly {
         readonly intentId: number;
-        readonly inverseProjection: unknown;
+        readonly inversePreview: unknown;
       }[]
     > = [];
-    runtime.subscribeProjectionArtifacts((artifacts) =>
+    runtime.subscribePreviewArtifacts((artifacts) =>
       artifactFrames.push(artifacts),
     );
-    runtime.subscribeProjectionArtifacts(() => {
+    runtime.subscribePreviewArtifacts(() => {
       throw new Error("artifact observer failed");
     });
     const exact = runtime.prepareExact(
       1,
       move(segment, nodes.first, [20, 20, 20]),
     );
-    runtime.publishExact(1, exact.projection);
+    runtime.publishExact(1, exact.preview);
     const expectedCacheRevisions = revisionsOf(state, [10n]);
     const frames: Array<readonly [number, number]> = [];
-    state.spatialSkeletonPresentation.changed.add(() => {
+    state.spatialSkeletonDisplay.changed.add(() => {
       frames.push([
         state.getCachedNode(2n)!.position[0],
         state.getCachedNode(3n)!.position[0],
@@ -1582,7 +1563,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
         [
           {
             segmentId: 10n,
-            snapshot: createCompleteSkeletonSnapshot([
+            snapshot: createCompleteSkeleton([
               node(1n, 10n),
               node(2n, 10n, 1n, { position: [7, 7, 7] }),
               node(3n, 10n, 1n, { position: [33, 33, 33] }),
@@ -1603,7 +1584,7 @@ describe("SpatialSkeletonOptimisticProjectionRuntime", () => {
     expect(artifactFrames.at(-1)).toEqual([
       expect.objectContaining({
         intentId: 1,
-        inverseProjection: expect.objectContaining({
+        inversePreview: expect.objectContaining({
           kind: "move",
           position: [7, 7, 7],
         }),

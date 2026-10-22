@@ -16,20 +16,20 @@
 
 import { describe, expect, it } from "vitest";
 
-import { SpatialSkeletonMutationAuthorityLeaseCoordinator } from "#src/skeleton/edit_queue/request_scheduler.js";
+import { SpatialSkeletonEditRequestLock } from "#src/skeleton/edit_queue/request_scheduler.js";
 
 async function isPending(promise: Promise<unknown>) {
   const marker = {};
   return (await Promise.race([promise, Promise.resolve(marker)])) === marker;
 }
 
-describe("SpatialSkeletonMutationAuthorityLeaseCoordinator", () => {
-  it("serializes every mutation in one scope in FIFO acquisition order", async () => {
-    const coordinator = new SpatialSkeletonMutationAuthorityLeaseCoordinator();
-    const mutationScope = {};
-    const first = await coordinator.acquire({ mutationScope });
-    const secondPromise = coordinator.acquire({ mutationScope });
-    const thirdPromise = coordinator.acquire({ mutationScope });
+describe("SpatialSkeletonEditRequestLock", () => {
+  it("serializes every edit request in one scope in FIFO acquisition order", async () => {
+    const coordinator = new SpatialSkeletonEditRequestLock();
+    const editRequestScope = {};
+    const first = await coordinator.acquire({ editRequestScope });
+    const secondPromise = coordinator.acquire({ editRequestScope });
+    const thirdPromise = coordinator.acquire({ editRequestScope });
 
     expect(await isPending(secondPromise)).toBe(true);
     expect(await isPending(thirdPromise)).toBe(true);
@@ -43,10 +43,10 @@ describe("SpatialSkeletonMutationAuthorityLeaseCoordinator", () => {
     third.release();
   });
 
-  it("allows different mutation scopes to make progress concurrently", async () => {
-    const coordinator = new SpatialSkeletonMutationAuthorityLeaseCoordinator();
-    const first = await coordinator.acquire({ mutationScope: {} });
-    const second = await coordinator.acquire({ mutationScope: {} });
+  it("allows different edit request scopes to make progress concurrently", async () => {
+    const coordinator = new SpatialSkeletonEditRequestLock();
+    const first = await coordinator.acquire({ editRequestScope: {} });
+    const second = await coordinator.acquire({ editRequestScope: {} });
 
     expect(first.state).toBe("active");
     expect(second.state).toBe("active");
@@ -54,14 +54,14 @@ describe("SpatialSkeletonMutationAuthorityLeaseCoordinator", () => {
     second.release();
   });
 
-  it("keeps a retained fatal fence ahead of every waiter in its scope", async () => {
-    const coordinator = new SpatialSkeletonMutationAuthorityLeaseCoordinator();
-    const mutationScope = {};
-    const lease = await coordinator.acquire({ mutationScope });
+  it("keeps a retained Reload-required fence ahead of every waiter in its scope", async () => {
+    const coordinator = new SpatialSkeletonEditRequestLock();
+    const editRequestScope = {};
+    const lease = await coordinator.acquire({ editRequestScope });
     expect(lease.retain()).toBe(true);
     expect(lease.state).toBe("retained");
 
-    const waiting = coordinator.acquire({ mutationScope });
+    const waiting = coordinator.acquire({ editRequestScope });
     expect(await isPending(waiting)).toBe(true);
     expect(lease.retain()).toBe(false);
 
@@ -73,15 +73,15 @@ describe("SpatialSkeletonMutationAuthorityLeaseCoordinator", () => {
   });
 
   it("removes an aborted waiter without disturbing FIFO order", async () => {
-    const coordinator = new SpatialSkeletonMutationAuthorityLeaseCoordinator();
-    const mutationScope = {};
-    const first = await coordinator.acquire({ mutationScope });
+    const coordinator = new SpatialSkeletonEditRequestLock();
+    const editRequestScope = {};
+    const first = await coordinator.acquire({ editRequestScope });
     const controller = new AbortController();
     const aborted = coordinator.acquire({
-      mutationScope,
+      editRequestScope,
       signal: controller.signal,
     });
-    const third = coordinator.acquire({ mutationScope });
+    const third = coordinator.acquire({ editRequestScope });
 
     controller.abort("not needed");
     await expect(aborted).rejects.toBe("not needed");
@@ -91,15 +91,15 @@ describe("SpatialSkeletonMutationAuthorityLeaseCoordinator", () => {
   });
 
   it("rejects invalid scopes and already-aborted acquisition", async () => {
-    const coordinator = new SpatialSkeletonMutationAuthorityLeaseCoordinator();
+    const coordinator = new SpatialSkeletonEditRequestLock();
     await expect(
-      coordinator.acquire({ mutationScope: null as unknown as object }),
+      coordinator.acquire({ editRequestScope: null as unknown as object }),
     ).rejects.toThrow("requires an object scope");
 
     const controller = new AbortController();
     controller.abort("stopped");
     await expect(
-      coordinator.acquire({ mutationScope: {}, signal: controller.signal }),
+      coordinator.acquire({ editRequestScope: {}, signal: controller.signal }),
     ).rejects.toBe("stopped");
   });
 });

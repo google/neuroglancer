@@ -16,17 +16,19 @@
 
 import { describe, expect, it } from "vitest";
 
+import type {
+  SpatialSkeletonIntentAdmission,
+  SpatialSkeletonIntentSequenceReservation,
+} from "#src/skeleton/edit_queue/edit_intent_journal.js";
 import {
   SpatialSkeletonIntentCapacityError,
   SpatialSkeletonIntentInvariantError,
   SpatialSkeletonIntentJournal,
-  type SpatialSkeletonIntentAdmission,
-  type SpatialSkeletonIntentSequenceReservation,
 } from "#src/skeleton/edit_queue/edit_intent_journal.js";
+import type { SpatialSkeletonStableResourceHandle } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import {
-  spatialSkeletonLogicalNode,
-  spatialSkeletonLogicalSegment,
-  type SpatialSkeletonLogicalResourceHandle,
+  spatialSkeletonStableNode,
+  spatialSkeletonStableSegment,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
 
 interface RequestedResult {
@@ -50,7 +52,7 @@ type Journal = SpatialSkeletonIntentJournal<
 
 function admission(
   historyTicketId: string,
-  handle: SpatialSkeletonLogicalResourceHandle,
+  handle: SpatialSkeletonStableResourceHandle,
   options: Partial<
     SpatialSkeletonIntentAdmission<
       string,
@@ -92,10 +94,10 @@ function admitExact(
 }
 
 function settle(journal: Journal, sequence: number) {
-  journal.claimAuthorityWorkflow(sequence);
+  journal.claimAuthorityPlan(sequence);
   journal.markAuthorityCommitStarted(sequence);
-  journal.recordCommittedMutationAttempt(sequence, {
-    mutation: undefined,
+  journal.recordCommittedEditRequestAttempt(sequence, {
+    editRequest: undefined,
     result: undefined,
   });
   journal.markAuthorityCommitted(sequence);
@@ -112,45 +114,47 @@ describe("edit intent journal", () => {
     >();
     const record = admitExact(
       journal,
-      admission("compound", spatialSkeletonLogicalSegment("compound")),
+      admission("compound", spatialSkeletonStableSegment("compound")),
     );
-    expect(journal.claimAuthorityWorkflow(record.sequence)).toBe(true);
-    expect(journal.claimAuthorityWorkflow(record.sequence)).toBe(false);
+    expect(journal.claimAuthorityPlan(record.sequence)).toBe(true);
+    expect(journal.claimAuthorityPlan(record.sequence)).toBe(false);
     expect(journal.get(record.sequence)?.lifecycle.authority).toBe("waiting");
     journal.markAuthorityCommitStarted(record.sequence);
 
-    journal.recordCommittedMutationAttempt(record.sequence, {
-      mutation: { step: "split" },
+    journal.recordCommittedEditRequestAttempt(record.sequence, {
+      editRequest: { step: "split" },
       result: { id: 101 },
     });
-    journal.recordCommittedMutationAttempt(record.sequence, {
-      mutation: { step: "reroot" },
+    journal.recordCommittedEditRequestAttempt(record.sequence, {
+      editRequest: { step: "reroot" },
       result: { id: 202 },
     });
 
     expect(journal.get(record.sequence)).toEqual(
       expect.objectContaining({
-        committedMutationAttempts: [
+        committedEditRequestAttempts: [
           expect.objectContaining({
-            mutation: { step: "split" },
+            editRequest: { step: "split" },
             result: { id: 101 },
           }),
           expect.objectContaining({
-            mutation: { step: "reroot" },
+            editRequest: { step: "reroot" },
             result: { id: 202 },
           }),
         ],
       }),
     );
     expect(
-      Object.isFrozen(journal.get(record.sequence)!.committedMutationAttempts),
+      Object.isFrozen(
+        journal.get(record.sequence)!.committedEditRequestAttempts,
+      ),
     ).toBe(true);
     expect(Object.isFrozen(journal.get(record.sequence))).toBe(true);
     expect(Object.isFrozen(journal.get(record.sequence)!.lifecycle)).toBe(true);
     expect(Object.isFrozen(journal.get(record.sequence)!.resources)).toBe(true);
     expect(
       Object.isFrozen(
-        journal.get(record.sequence)!.committedMutationAttempts[0],
+        journal.get(record.sequence)!.committedEditRequestAttempts[0],
       ),
     ).toBe(true);
   });
@@ -162,9 +166,9 @@ describe("edit intent journal", () => {
       InverseDelta,
       Metadata
     >();
-    const segmentA = spatialSkeletonLogicalSegment("A");
-    const segmentB = spatialSkeletonLogicalSegment("B");
-    const nodeA = spatialSkeletonLogicalNode("A:node");
+    const segmentA = spatialSkeletonStableSegment("A");
+    const segmentB = spatialSkeletonStableSegment("B");
+    const nodeA = spatialSkeletonStableNode("A:node");
 
     const merge = admitExact(journal, admission("merge", segmentA));
     const edit = admitExact(journal, {
@@ -206,7 +210,7 @@ describe("edit intent journal", () => {
     expect(() =>
       admitExact(
         journal,
-        admission("wrong-owner", spatialSkeletonLogicalSegment(1)),
+        admission("wrong-owner", spatialSkeletonStableSegment(1)),
       ),
     ).toThrow(SpatialSkeletonIntentInvariantError);
     expect(() => journal.reserveSequence()).toThrow(
@@ -215,7 +219,7 @@ describe("edit intent journal", () => {
 
     const first = admitExact(
       journal,
-      admission("first", spatialSkeletonLogicalSegment(1)),
+      admission("first", spatialSkeletonStableSegment(1)),
       reserved,
     );
     expect(first.sequence).toBe(1);
@@ -234,12 +238,12 @@ describe("edit intent journal", () => {
     expect(() =>
       admitExact(
         journal,
-        admission("stale", spatialSkeletonLogicalSegment(2)),
+        admission("stale", spatialSkeletonStableSegment(2)),
         canceled,
       ),
     ).toThrow(SpatialSkeletonIntentInvariantError);
     expect(
-      admitExact(journal, admission("second", spatialSkeletonLogicalSegment(2)))
+      admitExact(journal, admission("second", spatialSkeletonStableSegment(2)))
         .sequence,
     ).toBe(2);
     journal.assertInvariants();
@@ -252,7 +256,7 @@ describe("edit intent journal", () => {
       InverseDelta,
       Metadata
     >();
-    const segment = spatialSkeletonLogicalSegment("A");
+    const segment = spatialSkeletonStableSegment("A");
     const execute = admitExact(journal, admission("execute:1", segment));
     const undoAdmission = journal.admit({
       ...admission("undo:1", segment),
@@ -298,7 +302,7 @@ describe("edit intent journal", () => {
     journal.assertInvariants();
   });
 
-  it("atomically refreshes only active exact projection artifacts", () => {
+  it("atomically refreshes only active exact preview artifacts", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,
@@ -307,14 +311,14 @@ describe("edit intent journal", () => {
     >();
     const exact = admitExact(
       journal,
-      admission("exact", spatialSkeletonLogicalSegment("exact")),
+      admission("exact", spatialSkeletonStableSegment("exact")),
     );
     const reserved = journal.admit(
-      admission("reserved", spatialSkeletonLogicalSegment("reserved")),
+      admission("reserved", spatialSkeletonStableSegment("reserved")),
     );
 
     expect(() =>
-      journal.refreshExactProjectionArtifacts([
+      journal.refreshExactPreviewArtifacts([
         {
           sequence: exact.sequence,
           requestedResult: { value: "new-forward" },
@@ -332,7 +336,7 @@ describe("edit intent journal", () => {
       inverseDelta: { before: "before:exact" },
     });
 
-    journal.refreshExactProjectionArtifacts([
+    journal.refreshExactPreviewArtifacts([
       {
         sequence: exact.sequence,
         requestedResult: { value: "new-forward" },
@@ -352,12 +356,12 @@ describe("edit intent journal", () => {
       InverseDelta,
       Metadata
     >();
-    const segmentA = spatialSkeletonLogicalSegment("A");
-    const segmentB = spatialSkeletonLogicalSegment("B");
+    const segmentA = spatialSkeletonStableSegment("A");
+    const segmentB = spatialSkeletonStableSegment("B");
     const first = admitExact(journal, admission("first", segmentA));
     const second = admitExact(journal, admission("second", segmentA));
     const third = admitExact(journal, {
-      ...admission("third", spatialSkeletonLogicalNode("created-by-second")),
+      ...admission("third", spatialSkeletonStableNode("created-by-second")),
       semanticDependencySequences: [second.sequence],
     });
     const independent = admitExact(journal, admission("independent", segmentB));
@@ -407,8 +411,8 @@ describe("edit intent journal", () => {
       InverseDelta,
       Metadata
     >(2);
-    const segmentA = spatialSkeletonLogicalSegment("A");
-    const segmentB = spatialSkeletonLogicalSegment("B");
+    const segmentA = spatialSkeletonStableSegment("A");
+    const segmentB = spatialSkeletonStableSegment("B");
     const first = admitExact(journal, admission("first", segmentA));
     const second = admitExact(journal, admission("second", segmentB));
 
@@ -416,7 +420,7 @@ describe("edit intent journal", () => {
     expect(() =>
       admitExact(
         journal,
-        admission("third", spatialSkeletonLogicalSegment("third")),
+        admission("third", spatialSkeletonStableSegment("third")),
       ),
     ).toThrow(SpatialSkeletonIntentCapacityError);
 
@@ -441,7 +445,7 @@ describe("edit intent journal", () => {
     expect(() =>
       admitExact(
         journal,
-        admission("replacement-work", spatialSkeletonLogicalSegment("C")),
+        admission("replacement-work", spatialSkeletonStableSegment("C")),
       ),
     ).not.toThrow();
     journal.assertInvariants();
@@ -454,7 +458,7 @@ describe("edit intent journal", () => {
       InverseDelta,
       Metadata
     >();
-    const segment = spatialSkeletonLogicalSegment("A");
+    const segment = spatialSkeletonStableSegment("A");
     const first = admitExact(journal, admission("first", segment));
     settle(journal, first.sequence);
     const second = admitExact(journal, admission("second", segment));
@@ -482,7 +486,7 @@ describe("edit intent journal", () => {
       InverseDelta,
       Metadata
     >();
-    const segment = spatialSkeletonLogicalSegment("A");
+    const segment = spatialSkeletonStableSegment("A");
     const original = admitExact(journal, admission("original", segment));
     const coalesced = admitExact(journal, {
       ...admission("coalesced", segment),
@@ -506,7 +510,7 @@ describe("edit intent journal", () => {
       InverseDelta,
       Metadata
     >();
-    const segment = spatialSkeletonLogicalSegment("A");
+    const segment = spatialSkeletonStableSegment("A");
     const blocker = admitExact(journal, admission("blocker", segment));
     const execute = admitExact(journal, admission("execute", segment));
     const undo = admitExact(journal, {
@@ -571,10 +575,10 @@ describe("edit intent journal", () => {
       InverseDelta,
       Metadata
     >();
-    const segment = spatialSkeletonLogicalSegment("A");
+    const segment = spatialSkeletonStableSegment("A");
     const execute = admitExact(journal, admission("execute", segment));
     admitExact(journal, {
-      ...admission("observer", spatialSkeletonLogicalSegment("B")),
+      ...admission("observer", spatialSkeletonStableSegment("B")),
       semanticDependencySequences: [execute.sequence],
     });
     expect(() =>
@@ -595,25 +599,25 @@ describe("edit intent journal", () => {
       InverseDelta,
       Metadata
     >();
-    const segment = spatialSkeletonLogicalSegment("A");
+    const segment = spatialSkeletonStableSegment("A");
     const first = admitExact(journal, admission("ticket:1", segment));
 
     expect(() =>
       admitExact(journal, {
-        ...admission("future", spatialSkeletonLogicalSegment("B")),
+        ...admission("future", spatialSkeletonStableSegment("B")),
         semanticDependencySequences: [2],
       }),
     ).toThrow(/not earlier/);
     expect(() =>
       admitExact(journal, {
-        ...admission("missing", spatialSkeletonLogicalSegment("B")),
+        ...admission("missing", spatialSkeletonStableSegment("B")),
         semanticDependencySequences: [99],
       }),
     ).toThrow(/not earlier/);
     expect(() =>
       admitExact(
         journal,
-        admission("ticket:1", spatialSkeletonLogicalSegment("duplicate")),
+        admission("ticket:1", spatialSkeletonStableSegment("duplicate")),
       ),
     ).toThrow(/history ticket/i);
 
@@ -624,7 +628,7 @@ describe("edit intent journal", () => {
     });
     expect(() =>
       admitExact(journal, {
-        ...admission("after-rejection", spatialSkeletonLogicalSegment("C")),
+        ...admission("after-rejection", spatialSkeletonStableSegment("C")),
         semanticDependencySequences: [first.sequence],
       }),
     ).toThrow(/rejected intent/);
@@ -638,7 +642,7 @@ describe("edit intent journal", () => {
       InverseDelta,
       Metadata
     >();
-    const segmentA = spatialSkeletonLogicalSegment("A");
+    const segmentA = spatialSkeletonStableSegment("A");
     const blocked = admitExact(journal, admission("blocked:first", segmentA));
     const dependent = admitExact(
       journal,
@@ -646,17 +650,17 @@ describe("edit intent journal", () => {
     );
     const independent = admitExact(
       journal,
-      admission("independent", spatialSkeletonLogicalSegment("B")),
+      admission("independent", spatialSkeletonStableSegment("B")),
     );
 
-    expect(() => journal.claimAuthorityWorkflow(dependent.sequence)).toThrow(
+    expect(() => journal.claimAuthorityPlan(dependent.sequence)).toThrow(
       /dependency is unresolved/,
     );
     expect(() =>
-      journal.claimAuthorityWorkflow(independent.sequence),
+      journal.claimAuthorityPlan(independent.sequence),
     ).not.toThrow();
 
-    journal.claimAuthorityWorkflow(blocked.sequence);
+    journal.claimAuthorityPlan(blocked.sequence);
     expect(journal.get(blocked.sequence)).toMatchObject({
       lifecycle: { authority: "waiting", preview: "exact" },
       terminal: false,
@@ -669,8 +673,8 @@ describe("edit intent journal", () => {
       blocked.sequence,
     ]);
 
-    journal.recordCommittedMutationAttempt(blocked.sequence, {
-      mutation: undefined,
+    journal.recordCommittedEditRequestAttempt(blocked.sequence, {
+      editRequest: undefined,
       result: undefined,
     });
     journal.markAuthorityCommitted(blocked.sequence);
@@ -679,7 +683,7 @@ describe("edit intent journal", () => {
       terminal: false,
     });
     journal.settleSuccessful(blocked.sequence, "committed");
-    expect(journal.claimAuthorityWorkflow(blocked.sequence)).toBe(false);
+    expect(journal.claimAuthorityPlan(blocked.sequence)).toBe(false);
     journal.assertInvariants();
   });
 
@@ -690,11 +694,11 @@ describe("edit intent journal", () => {
       InverseDelta,
       Metadata
     >();
-    const segment = spatialSkeletonLogicalSegment("A");
+    const segment = spatialSkeletonStableSegment("A");
     const first = admitExact(journal, admission("first", segment));
     const second = admitExact(journal, admission("second", segment));
 
-    expect(() => journal.claimAuthorityWorkflow(second.sequence)).toThrow(
+    expect(() => journal.claimAuthorityPlan(second.sequence)).toThrow(
       SpatialSkeletonIntentInvariantError,
     );
     expect(

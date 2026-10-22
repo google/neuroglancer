@@ -28,7 +28,7 @@ import {
 } from "#src/layer/segmentation/selection.js";
 import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import type { SpatialSkeletonPresentationSnapshot } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import type { SpatialSkeletonDisplaySnapshot } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   executeSpatialSkeletonDeleteNode,
   executeSpatialSkeletonNodeConfidenceUpdate,
@@ -40,7 +40,7 @@ import {
 } from "#src/skeleton/edit/submit_edits.js";
 import type { SpatialSkeletonAction } from "#src/skeleton/edit_commands.js";
 import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
-import type { SpatialSkeletonOptimisticIdentityService } from "#src/skeleton/edit_queue/api.js";
+import type { SpatialSkeletonIdentityService } from "#src/skeleton/edit_queue/api.js";
 import {
   getSkeletonNodeConfidence,
   getSkeletonNodeRadius,
@@ -64,7 +64,7 @@ import { makeIcon } from "#src/widget/icon.js";
 
 export type SkeletonNodeDetailsLayer = Pick<
   SegmentationUserLayer,
-  | "spatialSkeletonState"
+  | "spatialSkeletonEditSession"
   | "skeletonSourceConnection"
   | "skeletonNodeSelection"
   | "skeletonNodeAccess"
@@ -120,7 +120,7 @@ export interface SkeletonSegmentColors {
 }
 
 function isProvisionalSkeletonSegment(
-  presentation: SpatialSkeletonPresentationSnapshot,
+  presentation: SpatialSkeletonDisplaySnapshot,
   segmentId: bigint,
 ) {
   return presentation.numericAliases.some(
@@ -137,7 +137,7 @@ export function selectsProvisionalSkeleton(
   return (
     segmentId !== undefined &&
     isProvisionalSkeletonSegment(
-      layer.spatialSkeletonState.spatialSkeletonPresentation.value,
+      layer.spatialSkeletonEditSession.spatialSkeletonDisplay.value,
       segmentId,
     )
   );
@@ -238,19 +238,19 @@ function readSkeletonNodeDetails(
   selectedSegmentId: bigint | undefined,
 ): SkeletonNodeDetailsModel {
   const {
-    spatialSkeletonState,
+    spatialSkeletonEditSession,
     skeletonSourceConnection: connection,
     skeletonNodeSelection: selection,
   } = layer;
   const transform = layer.skeletonNodeAccess.value?.displayState.transform
     .value as RenderLayerTransformOrError | undefined;
-  const presentation = spatialSkeletonState.spatialSkeletonPresentation.value;
+  const presentation = spatialSkeletonEditSession.spatialSkeletonDisplay.value;
   const getProvisionalIds = (segmentId: bigint): SkeletonProvisionalIds => ({
     node: (presentation.provisionalNodeIds ?? []).includes(nodeId),
     segment: isProvisionalSkeletonSegment(presentation, segmentId),
   });
   const skeletonLayer = connection.getSpatiallyIndexedSkeletonLayer();
-  const cachedNode = spatialSkeletonState.getCachedNode(nodeId);
+  const cachedNode = spatialSkeletonEditSession.getCachedNode(nodeId);
   const node = skeletonLayer?.getNode(nodeId) ?? cachedNode;
   if (node === undefined) {
     const selected = selection.selected.value;
@@ -282,7 +282,7 @@ function readSkeletonNodeDetails(
           : formatSkeletonNodePosition(graphNode.position, transform),
     };
   }
-  const segmentNodes = spatialSkeletonState.getCachedSegmentNodes(
+  const segmentNodes = spatialSkeletonEditSession.getCachedSegmentNodes(
     node.segmentId,
   );
   const childCount = segmentNodes?.filter(
@@ -412,9 +412,9 @@ class SkeletonNodeDetails extends RefCounted {
     | undefined;
   private nodeHandle:
     | {
-        readonly identities: SpatialSkeletonOptimisticIdentityService;
+        readonly identities: SpatialSkeletonIdentityService;
         readonly node: ReturnType<
-          SpatialSkeletonOptimisticIdentityService["getOrCreateNodeHandle"]
+          SpatialSkeletonIdentityService["getOrCreateNodeHandle"]
         >;
       }
     | undefined;
@@ -427,14 +427,17 @@ class SkeletonNodeDetails extends RefCounted {
   ) {
     super();
     this.element.classList.add("neuroglancer-selection-details-skeleton");
-    const { spatialSkeletonState, skeletonNodeAccess, skeletonNodeSelection } =
-      layer;
+    const {
+      spatialSkeletonEditSession,
+      skeletonNodeAccess,
+      skeletonNodeSelection,
+    } = layer;
     const update = () => this.update();
     this.registerDisposer(
-      spatialSkeletonState.nodeDataVersion.changed.add(update),
+      spatialSkeletonEditSession.nodeDataVersion.changed.add(update),
     );
     this.registerDisposer(
-      spatialSkeletonState.spatialSkeletonPresentation.changed.add(update),
+      spatialSkeletonEditSession.spatialSkeletonDisplay.changed.add(update),
     );
     this.registerDisposer(skeletonNodeSelection.selected.changed.add(update));
     this.registerDisposer(segmentColors.changed.add(update));
@@ -466,10 +469,10 @@ class SkeletonNodeDetails extends RefCounted {
   private readInputs(): readonly unknown[] {
     const { layer } = this;
     const nodeId = this.getNodeId();
-    const { spatialSkeletonState, skeletonNodeSelection } = layer;
+    const { spatialSkeletonEditSession, skeletonNodeSelection } = layer;
     const skeletonLayer =
       layer.skeletonSourceConnection.getSpatiallyIndexedSkeletonLayer();
-    const cachedNode = spatialSkeletonState.getCachedNode(nodeId);
+    const cachedNode = spatialSkeletonEditSession.getCachedNode(nodeId);
     const node = skeletonLayer?.getNode(nodeId) ?? cachedNode;
     const selected = skeletonNodeSelection.selected.value;
     const segmentId =
@@ -482,15 +485,15 @@ class SkeletonNodeDetails extends RefCounted {
       cachedNode,
       segmentId === undefined
         ? undefined
-        : spatialSkeletonState.getCachedSegmentNodes(segmentId),
+        : spatialSkeletonEditSession.getCachedSegmentNodes(segmentId),
       segmentId === undefined
         ? undefined
         : nodeAccess?.getSegmentNodes(segmentId),
       nodeAccess?.displayState.transform.value,
       selected,
-      spatialSkeletonState.spatialSkeletonPresentation.value,
-      spatialSkeletonState.nodeDataVersion.value,
-      spatialSkeletonState.getOptimisticEditFatalState(),
+      spatialSkeletonEditSession.spatialSkeletonDisplay.value,
+      spatialSkeletonEditSession.nodeDataVersion.value,
+      spatialSkeletonEditSession.getReloadRequired(),
       skeletonLayer,
       skeletonLayer?.editableSource,
       this.segmentColors.changed.count,
@@ -849,7 +852,7 @@ class SkeletonNodeDetails extends RefCounted {
   private ensureNodeHandle() {
     if (this.nodeHandle !== undefined) return this.nodeHandle;
     const identities =
-      this.layer.spatialSkeletonState.getOptimisticEditingIdentityService();
+      this.layer.spatialSkeletonEditSession.getEditingIdentityService();
     return (this.nodeHandle = {
       identities,
       node: identities.getOrCreateNodeHandle(this.selectedNodeId),
@@ -857,18 +860,16 @@ class SkeletonNodeDetails extends RefCounted {
   }
 
   private getNodeForEdit(): SkeletonNode {
-    const { spatialSkeletonState } = this.layer;
+    const { spatialSkeletonEditSession } = this.layer;
     const { identities, node } = this.ensureNodeHandle();
-    if (
-      identities !== spatialSkeletonState.getOptimisticEditingIdentityService()
-    ) {
+    if (identities !== spatialSkeletonEditSession.getEditingIdentityService()) {
       throw new Error("The skeleton editor's source is no longer active.");
     }
     const currentNodeId = identities.resolveNode(node);
     const currentNode =
       currentNodeId === undefined
         ? undefined
-        : spatialSkeletonState.getCachedNode(currentNodeId);
+        : spatialSkeletonEditSession.getCachedNode(currentNodeId);
     if (currentNode === undefined) {
       throw new Error(
         `Node ${this.selectedNodeId} is missing from the inspected skeleton cache.`,

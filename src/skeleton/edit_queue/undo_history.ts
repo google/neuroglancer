@@ -14,78 +14,77 @@
  * limitations under the License.
  */
 
-import type { SpatialSkeletonOptimisticHistoryPort } from "#src/skeleton/edit_queue/api.js";
-import { DEFAULT_SPATIAL_SKELETON_OPTIMISTIC_EDIT_QUEUE_CAPACITY } from "#src/skeleton/edit_queue/types.js";
+import type { SpatialSkeletonHistoryPort } from "#src/skeleton/edit_queue/api.js";
+import { DEFAULT_SPATIAL_SKELETON_EDIT_QUEUE_CAPACITY } from "#src/skeleton/edit_queue/types.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
 
-export interface SpatialSkeletonCommandHistoryOptions {
+export interface SpatialSkeletonUndoHistoryOptions {
   readonly capacity?: number;
 }
 
-export interface SpatialSkeletonCommandHistoryEntry {
+export interface SpatialSkeletonUndoHistoryEntry {
   readonly entryId: number;
   readonly label: string;
 }
 
-export type SpatialSkeletonCommandHistoryTransitionKind =
+export type SpatialSkeletonUndoHistoryTransitionKind =
   | "execute"
   | "undo"
   | "redo";
 
 /**
- * Stable identity for one projected LIFO transition.
+ * Stable identity for one previewed LIFO transition.
  *
  * Dependencies never change after staging. Definitive post-admission failure
  * discards the failed transition and its suffix without rewriting tickets.
  */
-export interface SpatialSkeletonCommandHistoryTransitionTicket {
+export interface SpatialSkeletonUndoHistoryTransitionTicket {
   readonly transitionId: number;
   readonly entryId: number;
   readonly label: string;
-  readonly kind: SpatialSkeletonCommandHistoryTransitionKind;
+  readonly kind: SpatialSkeletonUndoHistoryTransitionKind;
   readonly semanticDependencyTransitionIds: readonly number[];
 }
 
-interface ProjectedEntry {
-  readonly entry: SpatialSkeletonCommandHistoryEntry;
+interface PreviewedEntry {
+  readonly entry: SpatialSkeletonUndoHistoryEntry;
   exposedByTransitionId?: number;
 }
 
-interface ProjectedStacks {
-  readonly undo: ProjectedEntry[];
-  readonly redo: ProjectedEntry[];
+interface PreviewedStacks {
+  readonly undo: PreviewedEntry[];
+  readonly redo: PreviewedEntry[];
 }
 
 /**
- * Bounded projected LIFO history.
+ * Bounded previewed LIFO history.
  *
  * Authority transitions confirm in intent order. A failure while constructing
  * a not-yet-admitted intent may abandon only the latest staged ticket. Once an
  * intent is admitted, a definitive failure restores the history before it.
  */
-export class SpatialSkeletonCommandHistory extends RefCounted {
+export class SpatialSkeletonUndoHistory extends RefCounted {
   readonly canUndo = new WatchableValue(false);
   readonly canRedo = new WatchableValue(false);
   readonly undoLabel = new WatchableValue<string | undefined>(undefined);
   readonly redoLabel = new WatchableValue<string | undefined>(undefined);
 
-  private confirmedUndo: SpatialSkeletonCommandHistoryEntry[] = [];
-  private confirmedRedo: SpatialSkeletonCommandHistoryEntry[] = [];
-  private projectedUndo: ProjectedEntry[] = [];
-  private projectedRedo: ProjectedEntry[] = [];
-  private readonly staged: SpatialSkeletonCommandHistoryTransitionTicket[] = [];
+  private confirmedUndo: SpatialSkeletonUndoHistoryEntry[] = [];
+  private confirmedRedo: SpatialSkeletonUndoHistoryEntry[] = [];
+  private previewedUndo: PreviewedEntry[] = [];
+  private previewedRedo: PreviewedEntry[] = [];
+  private readonly staged: SpatialSkeletonUndoHistoryTransitionTicket[] = [];
   private readonly confirmedTransitionIds = new Set<number>();
   private nextEntryId = 1;
   private nextTransitionId = 1;
   private source: unknown;
   readonly capacity: number;
 
-  constructor(options: SpatialSkeletonCommandHistoryOptions = {}) {
+  constructor(options: SpatialSkeletonUndoHistoryOptions = {}) {
     super();
     const capacity =
-      options.capacity ??
-      DEFAULT_SPATIAL_SKELETON_OPTIMISTIC_EDIT_QUEUE_CAPACITY;
+      options.capacity ?? DEFAULT_SPATIAL_SKELETON_EDIT_QUEUE_CAPACITY;
     if (!Number.isSafeInteger(capacity) || capacity <= 0) {
       throw new RangeError(
         "The spatial skeleton command-history capacity must be a positive safe integer.",
@@ -95,17 +94,17 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
   }
 
   private updateState() {
-    const canUndo = this.projectedUndo.length !== 0;
-    const canRedo = this.projectedRedo.length !== 0;
-    const undoLabel = this.projectedUndo.at(-1)?.entry.label;
-    const redoLabel = this.projectedRedo.at(-1)?.entry.label;
+    const canUndo = this.previewedUndo.length !== 0;
+    const canRedo = this.previewedRedo.length !== 0;
+    const undoLabel = this.previewedUndo.at(-1)?.entry.label;
+    const redoLabel = this.previewedRedo.at(-1)?.entry.label;
     if (this.canUndo.value !== canUndo) this.canUndo.value = canUndo;
     if (this.canRedo.value !== canRedo) this.canRedo.value = canRedo;
     if (this.undoLabel.value !== undoLabel) this.undoLabel.value = undoLabel;
     if (this.redoLabel.value !== redoLabel) this.redoLabel.value = redoLabel;
   }
 
-  private trimProjected(stacks: ProjectedStacks) {
+  private trimPreviewed(stacks: PreviewedStacks) {
     const retained = new Set(
       [...stacks.undo, ...stacks.redo]
         .map(({ entry }) => entry)
@@ -126,8 +125,8 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
   }
 
   private applyTransition(
-    stacks: ProjectedStacks,
-    ticket: SpatialSkeletonCommandHistoryTransitionTicket,
+    stacks: PreviewedStacks,
+    ticket: SpatialSkeletonUndoHistoryTransitionTicket,
   ) {
     if (ticket.kind === "execute") {
       stacks.redo.length = 0;
@@ -135,7 +134,7 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
         entry: { entryId: ticket.entryId, label: ticket.label },
         exposedByTransitionId: ticket.transitionId,
       });
-      this.trimProjected(stacks);
+      this.trimPreviewed(stacks);
       return;
     }
     const source = ticket.kind === "undo" ? stacks.undo : stacks.redo;
@@ -143,7 +142,7 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
     const top = source.at(-1);
     if (top?.entry.entryId !== ticket.entryId) {
       throw new Error(
-        `Command-history ${ticket.kind} ${ticket.transitionId} no longer targets the projected stack top.`,
+        `Command-history ${ticket.kind} ${ticket.transitionId} no longer targets the previewed stack top.`,
       );
     }
     source.pop();
@@ -155,23 +154,23 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
       entry: top.entry,
       exposedByTransitionId: ticket.transitionId,
     });
-    this.trimProjected(stacks);
+    this.trimPreviewed(stacks);
   }
 
-  private rebuildProjection() {
-    const stacks: ProjectedStacks = {
+  private rebuildPreview() {
+    const stacks: PreviewedStacks = {
       undo: this.confirmedUndo.map((entry) => ({ entry })),
       redo: this.confirmedRedo.map((entry) => ({ entry })),
     };
     for (const ticket of this.staged) this.applyTransition(stacks, ticket);
-    this.projectedUndo = stacks.undo;
-    this.projectedRedo = stacks.redo;
+    this.previewedUndo = stacks.undo;
+    this.previewedRedo = stacks.redo;
     this.updateState();
   }
 
   private createTransition(
-    kind: SpatialSkeletonCommandHistoryTransitionKind,
-    entry: SpatialSkeletonCommandHistoryEntry,
+    kind: SpatialSkeletonUndoHistoryTransitionKind,
+    entry: SpatialSkeletonUndoHistoryEntry,
     semanticDependencyTransitionIds: readonly number[],
   ) {
     const ticket = Object.freeze({
@@ -185,7 +184,7 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
     });
     this.staged.push(ticket);
     this.applyTransition(
-      { undo: this.projectedUndo, redo: this.projectedRedo },
+      { undo: this.previewedUndo, redo: this.previewedRedo },
       ticket,
     );
     this.updateState();
@@ -204,7 +203,7 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
   }
 
   stageUndo() {
-    const source = this.projectedUndo.at(-1);
+    const source = this.previewedUndo.at(-1);
     if (source === undefined) return undefined;
     return this.createTransition(
       "undo",
@@ -216,7 +215,7 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
   }
 
   stageRedo() {
-    const source = this.projectedRedo.at(-1);
+    const source = this.previewedRedo.at(-1);
     if (source === undefined) return undefined;
     return this.createTransition(
       "redo",
@@ -232,7 +231,7 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
    * This preserves immediate queued-opposite settlement without letting later
    * authority reorder the confirmed LIFO stacks.
    */
-  confirm(ticket: SpatialSkeletonCommandHistoryTransitionTicket) {
+  confirm(ticket: SpatialSkeletonUndoHistoryTransitionTicket) {
     const index = this.staged.findIndex(
       ({ transitionId }) => transitionId === ticket.transitionId,
     );
@@ -244,7 +243,7 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
     ) {
       const next = this.staged.shift()!;
       this.confirmedTransitionIds.delete(next.transitionId);
-      const confirmedStacks: ProjectedStacks = {
+      const confirmedStacks: PreviewedStacks = {
         undo: this.confirmedUndo.map((entry) => ({ entry })),
         redo: this.confirmedRedo.map((entry) => ({ entry })),
       };
@@ -252,11 +251,11 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
       this.confirmedUndo = confirmedStacks.undo.map(({ entry }) => entry);
       this.confirmedRedo = confirmedStacks.redo.map(({ entry }) => entry);
     }
-    if (this.staged.length === 0) this.rebuildProjection();
+    if (this.staged.length === 0) this.rebuildPreview();
   }
 
-  /** Abandons a synchronous pre-admission transition and restores projection. */
-  abandonLatest(ticket: SpatialSkeletonCommandHistoryTransitionTicket) {
+  /** Abandons a synchronous pre-admission transition and restores preview. */
+  abandonLatest(ticket: SpatialSkeletonUndoHistoryTransitionTicket) {
     const latest = this.staged.at(-1);
     if (latest === undefined) return;
     if (latest.transitionId !== ticket.transitionId) {
@@ -268,7 +267,7 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
   }
 
   /** Restores history before a definitively failed transition, inclusively. */
-  rollbackFrom(ticket: SpatialSkeletonCommandHistoryTransitionTicket) {
+  rollbackFrom(ticket: SpatialSkeletonUndoHistoryTransitionTicket) {
     const index = this.staged.findIndex(
       ({ transitionId }) => transitionId === ticket.transitionId,
     );
@@ -280,19 +279,19 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
     for (const discarded of this.staged.splice(index)) {
       this.confirmedTransitionIds.delete(discarded.transitionId);
     }
-    this.rebuildProjection();
+    this.rebuildPreview();
   }
 
-  getStagedTransitions(): readonly SpatialSkeletonCommandHistoryTransitionTicket[] {
+  getStagedTransitions(): readonly SpatialSkeletonUndoHistoryTransitionTicket[] {
     return Object.freeze([...this.staged]);
   }
 
-  getProjectedUndoEntry(): SpatialSkeletonCommandHistoryEntry | undefined {
-    return this.projectedUndo.at(-1)?.entry;
+  getPreviewedUndoEntry(): SpatialSkeletonUndoHistoryEntry | undefined {
+    return this.previewedUndo.at(-1)?.entry;
   }
 
-  getProjectedRedoEntry(): SpatialSkeletonCommandHistoryEntry | undefined {
-    return this.projectedRedo.at(-1)?.entry;
+  getPreviewedRedoEntry(): SpatialSkeletonUndoHistoryEntry | undefined {
+    return this.previewedRedo.at(-1)?.entry;
   }
 
   getRetainedEntryIds(): readonly number[] {
@@ -300,8 +299,8 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
       ...new Set([
         ...this.confirmedUndo.map(({ entryId }) => entryId),
         ...this.confirmedRedo.map(({ entryId }) => entryId),
-        ...this.projectedUndo.map(({ entry }) => entry.entryId),
-        ...this.projectedRedo.map(({ entry }) => entry.entryId),
+        ...this.previewedUndo.map(({ entry }) => entry.entryId),
+        ...this.previewedRedo.map(({ entry }) => entry.entryId),
         // An earlier in-flight save can keep a locally confirmed edit/Undo
         // pair staged. Its recipe may return to Redo if a newer edit fails.
         ...this.staged.map(({ entryId }) => entryId),
@@ -313,13 +312,13 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
     const changed =
       this.confirmedUndo.length !== 0 ||
       this.confirmedRedo.length !== 0 ||
-      this.projectedUndo.length !== 0 ||
-      this.projectedRedo.length !== 0 ||
+      this.previewedUndo.length !== 0 ||
+      this.previewedRedo.length !== 0 ||
       this.staged.length !== 0;
     this.confirmedUndo = [];
     this.confirmedRedo = [];
-    this.projectedUndo = [];
-    this.projectedRedo = [];
+    this.previewedUndo = [];
+    this.previewedRedo = [];
     this.staged.length = 0;
     this.confirmedTransitionIds.clear();
     this.updateState();
@@ -334,11 +333,11 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
   }
 }
 
-export function createSpatialSkeletonOptimisticHistoryPort(
-  history: SpatialSkeletonCommandHistory,
-): SpatialSkeletonOptimisticHistoryPort<
+export function createSpatialSkeletonHistoryPort(
+  history: SpatialSkeletonUndoHistory,
+): SpatialSkeletonHistoryPort<
   { readonly label: string },
-  SpatialSkeletonCommandHistoryTransitionTicket
+  SpatialSkeletonUndoHistoryTransitionTicket
 > {
   return {
     capacity: history.capacity,
@@ -355,10 +354,10 @@ export function createSpatialSkeletonOptimisticHistoryPort(
     reset: () => history.reset(),
     canStage: (intent) =>
       intent === "undo" ? history.canUndo.value : history.canRedo.value,
-    getProjectedEntryId: (intent) =>
+    getPreviewedEntryId: (intent) =>
       (intent === "undo"
-        ? history.getProjectedUndoEntry()
-        : history.getProjectedRedoEntry()
+        ? history.getPreviewedUndoEntry()
+        : history.getPreviewedRedoEntry()
       )?.entryId,
     getRetainedEntryIds: () => history.getRetainedEntryIds(),
   };

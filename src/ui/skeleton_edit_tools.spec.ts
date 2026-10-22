@@ -17,11 +17,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import * as skeletonCommands from "#src/skeleton/edit/submit_edits.js";
 import {
-  SpatialSkeletonLogicalHandleMappings,
-  spatialSkeletonLogicalNode,
+  SpatialSkeletonStableIdHandles,
+  spatialSkeletonStableNode,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
@@ -218,7 +218,7 @@ function makeEditToolHarness(
 
   const inspectedNodes = options.inspectedNodes ?? [];
   const renderedNodes = options.renderedNodes ?? [...inspectedNodes];
-  const state = new SpatialSkeletonState();
+  const state = new SpatialSkeletonEditSession();
   const inspectedSegments = new Map<bigint, SkeletonNode[]>();
   for (const node of inspectedNodes) {
     inspectedSegments.set(node.segmentId, [
@@ -233,11 +233,11 @@ function makeEditToolHarness(
   const releasePrefetch = vi.spyOn(state, "releaseFullSegmentNodeFetchOwner");
   vi.spyOn(state, "setPendingNodePosition");
   vi.spyOn(state, "clearPendingNodePositions");
-  vi.spyOn(state, "getOptimisticEditingIdentityService").mockReturnValue({
+  vi.spyOn(state, "getEditingIdentityService").mockReturnValue({
     getOrCreateNodeHandle: (nodeId: bigint) => nodeId,
     resolveNode: (nodeId: bigint) => nodeId,
   } as unknown as ReturnType<
-    SpatialSkeletonState["getOptimisticEditingIdentityService"]
+    SpatialSkeletonEditSession["getEditingIdentityService"]
   >);
 
   const skeletonLayer = {
@@ -306,7 +306,7 @@ function makeEditToolHarness(
     skeletonSourceConnection: {
       getActionsDisabledReason: vi.fn(() => undefined),
     },
-    spatialSkeletonState: state,
+    spatialSkeletonEditSession: state,
     skeletonOverlaySegments: {
       beginTemporaryBrowseExclusion: vi.fn(() => releaseBrowseExclusion),
     },
@@ -1551,18 +1551,15 @@ describe("skeleton edit tool node drag", () => {
   function makeDragHarness() {
     const node = makeNode(7n, 4n, [1, 2, 3]);
     const harness = makeEditToolHarness({ inspectedNodes: [node] });
-    const handle = spatialSkeletonLogicalNode("dragged");
-    const mappings = new SpatialSkeletonLogicalHandleMappings<bigint, bigint>();
+    const handle = spatialSkeletonStableNode("dragged");
+    const mappings = new SpatialSkeletonStableIdHandles<bigint, bigint>();
     mappings.bindNodes([[handle, node.nodeId]]);
-    vi.spyOn(
-      harness.state,
-      "getOptimisticEditingIdentityService",
-    ).mockReturnValue({
+    vi.spyOn(harness.state, "getEditingIdentityService").mockReturnValue({
       getOrCreateNodeHandle: () => handle,
       resolveNode: (nodeHandle: typeof handle) =>
         mappings.resolveNode(nodeHandle),
     } as unknown as ReturnType<
-      SpatialSkeletonState["getOptimisticEditingIdentityService"]
+      SpatialSkeletonEditSession["getEditingIdentityService"]
     >);
     const renumber = (renumbered: SkeletonNode) => {
       harness.state.replaceCachedSegmentSnapshots([

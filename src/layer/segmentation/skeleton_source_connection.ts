@@ -16,11 +16,13 @@
 
 import type { SkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
 import type { SegmentationGroupState } from "#src/segmentation_display_state/frontend.js";
+import type {
+  SpatialSkeletonLayerContext,
+  SpatialSkeletonEditSession,
+} from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
-  ensureSpatialSkeletonOptimisticEditQueue,
+  ensureSpatialSkeletonEditQueue,
   editableSpatiallyIndexedSkeletonSourceSupportsAction,
-  type SpatialSkeletonLayerContext,
-  type SpatialSkeletonState,
 } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type { SpatialSkeletonAction } from "#src/skeleton/edit_commands.js";
 import {
@@ -29,7 +31,7 @@ import {
   isSpatialSkeletonEditAction,
   SpatialSkeletonActions,
 } from "#src/skeleton/edit_commands.js";
-import type { SpatialSkeletonResolvedProjectionUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
+import type { SpatialSkeletonResolvedPreviewUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/types.js";
 import type { SkeletonFindPathState } from "#src/skeleton/find_path/find_path.js";
 import type { SpatialSkeletonFindPathAnnotationController } from "#src/skeleton/find_path/find_path_attachment.js";
@@ -62,7 +64,7 @@ export interface SpatialSkeletonFindPathContext {
 }
 
 export interface SkeletonSourceConnectionOptions {
-  readonly spatialSkeletonState: SpatialSkeletonState;
+  readonly spatialSkeletonEditSession: SpatialSkeletonEditSession;
   readonly selection: SkeletonNodeSelection;
   readonly overlaySegments: SkeletonOverlaySegments;
   readonly segmentationGroupState: WatchableValueInterface<SegmentationGroupState>;
@@ -85,8 +87,8 @@ export class SkeletonSourceConnection
     super();
   }
 
-  get spatialSkeletonState() {
-    return this.options.spatialSkeletonState;
+  get spatialSkeletonEditSession() {
+    return this.options.spatialSkeletonEditSession;
   }
 
   getSpatiallyIndexedSkeletonLayer() {
@@ -105,7 +107,7 @@ export class SkeletonSourceConnection
       : [requiredActions as SpatialSkeletonAction];
     if (
       requirements.some((action) => isSpatialSkeletonEditAction(action)) &&
-      this.spatialSkeletonState.getOptimisticEditFatalState() !== undefined
+      this.spatialSkeletonEditSession.getReloadRequired() !== undefined
     ) {
       return SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON;
     }
@@ -131,7 +133,7 @@ export class SkeletonSourceConnection
     const previousSource = this.activeSource;
     this.activeSource = source;
     if (previousSource !== undefined && previousSource !== source) {
-      this.spatialSkeletonState.clearRuntimeState();
+      this.spatialSkeletonEditSession.clearRuntimeState();
       this.options.overlaySegments.clear();
     }
   }
@@ -142,9 +144,9 @@ export class SkeletonSourceConnection
   ): void {
     this.findPathContext = context;
     lifetime.registerDisposer(
-      this.spatialSkeletonState.nodeDataVersion.changed.add(() => {
+      this.spatialSkeletonEditSession.nodeDataVersion.changed.add(() => {
         // Invalidate before the active tool recomputes the path.
-        if (this.spatialSkeletonState.hasUnconfirmedOptimisticEdits()) {
+        if (this.spatialSkeletonEditSession.hasUnconfirmedEdits()) {
           context.state.invalidateResult();
         }
       }),
@@ -160,10 +162,12 @@ export class SkeletonSourceConnection
     return this.findPathContext;
   }
 
-  applySpatialSkeletonProjectionUiHints(
-    hints: SpatialSkeletonResolvedProjectionUiHints,
+  applySpatialSkeletonPreviewUiHints(
+    hints: SpatialSkeletonResolvedPreviewUiHints,
   ): void {
-    this.spatialSkeletonState.remapPendingNodePositions(hints.nodeIdRemappings);
+    this.spatialSkeletonEditSession.remapPendingNodePositions(
+      hints.nodeIdRemappings,
+    );
     const group = this.options.segmentationGroupState.value;
     for (const set of [
       group.visibleSegments,
@@ -185,10 +189,10 @@ export class SkeletonSourceConnection
         }
       }
     }
-    this.options.selection.applyProjectionUiHints(hints);
+    this.options.selection.applyPreviewUiHints(hints);
     const { overlaySegments } = this.options;
     if (hints.segmentIdRemappings.size !== 0) {
-      // Copied so that the layer cannot change the runtime's publication.
+      // Copied so that the layer cannot change the preview's publication.
       overlaySegments.remap(new Map(hints.segmentIdRemappings));
     }
     for (const segmentId of hints.retainSegmentIds) {
@@ -203,7 +207,7 @@ export class SkeletonSourceConnection
     const source = this.getSpatiallyIndexedSkeletonLayer()?.editableSource;
     if (source === undefined) return false;
     try {
-      ensureSpatialSkeletonOptimisticEditQueue(this, source);
+      ensureSpatialSkeletonEditQueue(this, source);
     } catch {
       // A writable source with an invalid driver contract is inspect-only.
       return false;

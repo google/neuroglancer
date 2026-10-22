@@ -17,18 +17,18 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type {
-  SpatialSkeletonMutationContext,
-  SpatialSkeletonMutationFailureDisposition,
-  SpatialSkeletonOptimisticMutationAdapter,
+  SpatialSkeletonEditRequestContext,
+  SpatialSkeletonEditRequestFailureDisposition,
+  SpatialSkeletonEditRequestAdapter,
 } from "#src/skeleton/edit_queue/api.js";
-import type { SpatialSkeletonMutationAuthorityLease } from "#src/skeleton/edit_queue/request_scheduler.js";
+import type { SpatialSkeletonEditRequestLease } from "#src/skeleton/edit_queue/request_scheduler.js";
 import {
-  SpatialSkeletonMutationAuthorityLeaseCoordinator,
-  SpatialSkeletonMutationAttemptScheduler,
-  SpatialSkeletonMutationAttemptSchedulerDisposedError,
+  SpatialSkeletonEditRequestLock,
+  SpatialSkeletonRequestScheduler,
+  SpatialSkeletonRequestSchedulerDisposedError,
 } from "#src/skeleton/edit_queue/request_scheduler.js";
 
-interface Mutation {
+interface EditRequest {
   readonly name: string;
 }
 
@@ -37,46 +37,46 @@ interface Result {
 }
 
 interface CommitCall {
-  readonly mutation: Mutation;
-  readonly context: SpatialSkeletonMutationContext;
+  readonly editRequest: EditRequest;
+  readonly context: SpatialSkeletonEditRequestContext;
   resolve(result: Result): void;
   reject(error: unknown): void;
 }
 
 interface ClassifiedError extends Error {
-  disposition: SpatialSkeletonMutationFailureDisposition;
+  disposition: SpatialSkeletonEditRequestFailureDisposition;
 }
 
 function classifiedError(
-  disposition: SpatialSkeletonMutationFailureDisposition,
+  disposition: SpatialSkeletonEditRequestFailureDisposition,
 ) {
   return Object.assign(new Error(disposition), {
     disposition,
   }) as ClassifiedError;
 }
 
-function makeAdapter(mutationScope: object = {}) {
+function makeAdapter(editRequestScope: object = {}) {
   const commits: CommitCall[] = [];
-  const getMutationScope = vi.fn(() => mutationScope);
-  const adapter: SpatialSkeletonOptimisticMutationAdapter<Mutation, Result> = {
-    get mutationScope() {
-      return getMutationScope();
+  const getEditRequestScope = vi.fn(() => editRequestScope);
+  const adapter: SpatialSkeletonEditRequestAdapter<EditRequest, Result> = {
+    get editRequestScope() {
+      return getEditRequestScope();
     },
     commit: vi.fn(
-      (mutation: Mutation, context: SpatialSkeletonMutationContext) =>
+      (editRequest: EditRequest, context: SpatialSkeletonEditRequestContext) =>
         new Promise<Result>((resolve, reject) => {
-          commits.push({ mutation, context, resolve, reject });
+          commits.push({ editRequest, context, resolve, reject });
         }),
     ),
     classifyFailure: (error) =>
       (error as ClassifiedError).disposition ?? "indeterminate",
   };
-  return { adapter, commits, getMutationScope };
+  return { adapter, commits, getEditRequestScope };
 }
 
-function attemptRequest(mutation: Mutation) {
+function attemptRequest(editRequest: EditRequest) {
   return {
-    materializeMutation: () => mutation,
+    materializeEditRequest: () => editRequest,
   };
 }
 
@@ -86,10 +86,10 @@ async function flush() {
   await Promise.resolve();
 }
 
-describe("SpatialSkeletonMutationAttemptScheduler", () => {
+describe("SpatialSkeletonRequestScheduler", () => {
   it("dispatches under one active lease and leaves settlement to the engine", async () => {
     const { adapter, commits } = makeAdapter();
-    const scheduler = new SpatialSkeletonMutationAttemptScheduler({ adapter });
+    const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     const attempt = scheduler.schedule(
       "redo",
       attemptRequest({ name: "move" }),
@@ -116,15 +116,15 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
     settlement.lease?.release();
   });
 
-  it("serializes all work in the same mutation scope across schedulers", async () => {
-    const mutationScope = {};
-    const coordinator = new SpatialSkeletonMutationAuthorityLeaseCoordinator();
-    const { adapter, commits } = makeAdapter(mutationScope);
-    const firstScheduler = new SpatialSkeletonMutationAttemptScheduler({
+  it("serializes all work in the same edit request scope across schedulers", async () => {
+    const editRequestScope = {};
+    const coordinator = new SpatialSkeletonEditRequestLock();
+    const { adapter, commits } = makeAdapter(editRequestScope);
+    const firstScheduler = new SpatialSkeletonRequestScheduler({
       adapter,
       coordinator,
     });
-    const secondScheduler = new SpatialSkeletonMutationAttemptScheduler({
+    const secondScheduler = new SpatialSkeletonRequestScheduler({
       adapter,
       coordinator,
     });
@@ -138,7 +138,9 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
     );
     await flush();
 
-    expect(commits.map(({ mutation }) => mutation.name)).toEqual(["first"]);
+    expect(commits.map(({ editRequest }) => editRequest.name)).toEqual([
+      "first",
+    ]);
     commits[0]!.resolve({ authority: "first" });
     const firstSettlement = await first.settled;
     await flush();
@@ -146,7 +148,7 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
 
     firstSettlement.lease?.release();
     await flush();
-    expect(commits.map(({ mutation }) => mutation.name)).toEqual([
+    expect(commits.map(({ editRequest }) => editRequest.name)).toEqual([
       "first",
       "second",
     ]);
@@ -154,15 +156,15 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
     (await second.settled).lease?.release();
   });
 
-  it("allows different mutation scopes to commit concurrently", async () => {
-    const coordinator = new SpatialSkeletonMutationAuthorityLeaseCoordinator();
+  it("allows different edit request scopes to commit concurrently", async () => {
+    const coordinator = new SpatialSkeletonEditRequestLock();
     const firstAdapter = makeAdapter();
     const secondAdapter = makeAdapter();
-    const firstScheduler = new SpatialSkeletonMutationAttemptScheduler({
+    const firstScheduler = new SpatialSkeletonRequestScheduler({
       adapter: firstAdapter.adapter,
       coordinator,
     });
-    const secondScheduler = new SpatialSkeletonMutationAttemptScheduler({
+    const secondScheduler = new SpatialSkeletonRequestScheduler({
       adapter: secondAdapter.adapter,
       coordinator,
     });
@@ -186,9 +188,9 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
   });
 
   it("returns an active indeterminate fence for the engine to retain", async () => {
-    const coordinator = new SpatialSkeletonMutationAuthorityLeaseCoordinator();
+    const coordinator = new SpatialSkeletonEditRequestLock();
     const { adapter, commits } = makeAdapter();
-    const scheduler = new SpatialSkeletonMutationAttemptScheduler({
+    const scheduler = new SpatialSkeletonRequestScheduler({
       adapter,
       coordinator,
     });
@@ -211,14 +213,14 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
 
     settlement.lease?.release();
     await flush();
-    expect(commits[1]!.mutation.name).toBe("blocked");
+    expect(commits[1]!.editRequest.name).toBe("blocked");
     commits[1]!.resolve({ authority: "saved" });
     (await blocked.settled).lease?.release();
   });
 
   it("reuses one lease for compound steps without letting a queued intent pass", async () => {
     const { adapter, commits } = makeAdapter();
-    const scheduler = new SpatialSkeletonMutationAttemptScheduler({ adapter });
+    const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     const first = scheduler.schedule(
       "execute",
       attemptRequest({ name: "split" }),
@@ -237,7 +239,7 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
       attemptRequest({ name: "reroot" }),
     );
     await flush();
-    expect(commits.map(({ mutation }) => mutation.name)).toEqual([
+    expect(commits.map(({ editRequest }) => editRequest.name)).toEqual([
       "split",
       "reroot",
     ]);
@@ -247,21 +249,21 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
     expect(compoundSettlement.lease).toBe(firstSettlement.lease);
     compoundSettlement.lease?.release();
     await flush();
-    expect(commits[2]!.mutation.name).toBe("later-intent");
+    expect(commits[2]!.editRequest.name).toBe("later-intent");
     commits[2]!.resolve({ authority: "later" });
     (await queuedIntent.settled).lease?.release();
   });
 
   it("cancels a FIFO waiter without materializing or invoking its adapter", async () => {
     const { adapter, commits } = makeAdapter();
-    const scheduler = new SpatialSkeletonMutationAttemptScheduler({ adapter });
+    const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     const running = scheduler.schedule(
       "execute",
       attemptRequest({ name: "running" }),
     );
     const materializeQueued = vi.fn(() => ({ name: "queued" }));
     const queued = scheduler.schedule("execute", {
-      materializeMutation: materializeQueued,
+      materializeEditRequest: materializeQueued,
     });
     await flush();
 
@@ -274,14 +276,16 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
       }),
     );
     expect(materializeQueued).not.toHaveBeenCalled();
-    expect(commits.map(({ mutation }) => mutation.name)).toEqual(["running"]);
+    expect(commits.map(({ editRequest }) => editRequest.name)).toEqual([
+      "running",
+    ]);
     commits[0]!.resolve({ authority: "running" });
     (await running.settled).lease?.release();
   });
 
   it("closes the lease-grant/commit race when cancellation wins", async () => {
     const { adapter, commits } = makeAdapter();
-    const scheduler = new SpatialSkeletonMutationAttemptScheduler({ adapter });
+    const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     const running = scheduler.schedule(
       "execute",
       attemptRequest({ name: "running" }),
@@ -295,51 +299,53 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
     const runningSettlement = await running.settled;
 
     runningSettlement.lease?.release();
-    expect(queued.cancelBeforeCommit("fatal latch")).toBe(true);
+    expect(queued.cancelBeforeCommit("Reload-required latch")).toBe(true);
     await expect(queued.settled).resolves.toEqual(
       expect.objectContaining({
         outcome: expect.objectContaining({ status: "not-started" }),
       }),
     );
-    expect(commits.map(({ mutation }) => mutation.name)).toEqual(["running"]);
+    expect(commits.map(({ editRequest }) => editRequest.name)).toEqual([
+      "running",
+    ]);
   });
 
   it("materializes authoritative identities only after acquiring the lane", async () => {
     const { adapter, commits } = makeAdapter();
-    const scheduler = new SpatialSkeletonMutationAttemptScheduler({ adapter });
+    const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     const running = scheduler.schedule(
       "execute",
       attemptRequest({ name: "running" }),
     );
     let authoritativeId = 11;
-    const materializeMutation = vi.fn(() => ({
+    const materializeEditRequest = vi.fn(() => ({
       name: `waiting:${authoritativeId}`,
     }));
-    const waiting = scheduler.schedule("execute", { materializeMutation });
+    const waiting = scheduler.schedule("execute", { materializeEditRequest });
     await flush();
-    expect(materializeMutation).not.toHaveBeenCalled();
+    expect(materializeEditRequest).not.toHaveBeenCalled();
 
     authoritativeId = 29;
     commits[0]!.resolve({ authority: "running" });
     (await running.settled).lease?.release();
     await flush();
-    expect(materializeMutation).toHaveBeenCalledTimes(1);
-    expect(commits[1]!.mutation.name).toBe("waiting:29");
+    expect(materializeEditRequest).toHaveBeenCalledTimes(1);
+    expect(commits[1]!.editRequest.name).toBe("waiting:29");
     commits[1]!.resolve({ authority: "waiting" });
     (await waiting.settled).lease?.release();
   });
 
   it("never releases a lease after ownership transfers to the engine", async () => {
-    const mutationScope = {};
-    const { adapter, commits } = makeAdapter(mutationScope);
-    const scheduler = new SpatialSkeletonMutationAttemptScheduler({ adapter });
+    const editRequestScope = {};
+    const { adapter, commits } = makeAdapter(editRequestScope);
+    const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     const error = new Error("identity is no longer resolvable");
-    let acquiredLease: SpatialSkeletonMutationAuthorityLease | undefined;
+    let acquiredLease: SpatialSkeletonEditRequestLease | undefined;
     const attempt = scheduler.schedule("execute", {
       onLeaseAcquired: (lease) => {
         acquiredLease = lease;
       },
-      materializeMutation: () => {
+      materializeEditRequest: () => {
         throw error;
       },
     });
@@ -364,16 +370,18 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
 
   it("honors re-entrant cancellation without releasing engine-owned authority", async () => {
     const { adapter, commits } = makeAdapter();
-    const scheduler = new SpatialSkeletonMutationAttemptScheduler({ adapter });
-    let acquiredLease: SpatialSkeletonMutationAuthorityLease | undefined;
+    const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
+    let acquiredLease: SpatialSkeletonEditRequestLease | undefined;
     const attempt = scheduler.schedule("execute", {
       onLeaseAcquired: (lease) => {
         acquiredLease = lease;
       },
-      materializeMutation: () => ({ name: "re-entrant" }),
+      materializeEditRequest: () => ({ name: "re-entrant" }),
       onCommitStarting: () => {
         expect(attempt.phase).toBe("waiting-for-lease");
-        expect(attempt.cancelBeforeCommit("fatal observer")).toBe(true);
+        expect(attempt.cancelBeforeCommit("Reload-required observer")).toBe(
+          true,
+        );
       },
     });
 
@@ -387,17 +395,17 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
 
   it("disposal aborts pre-commit work but does not alter transferred leases", async () => {
     const { adapter, commits } = makeAdapter();
-    const scheduler = new SpatialSkeletonMutationAttemptScheduler({ adapter });
-    let acquiredLease: SpatialSkeletonMutationAuthorityLease | undefined;
-    let resolveMaterialization!: (mutation: Mutation) => void;
-    const materialization = new Promise<Mutation>((resolve) => {
+    const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
+    let acquiredLease: SpatialSkeletonEditRequestLease | undefined;
+    let resolveMaterialization!: (editRequest: EditRequest) => void;
+    const materialization = new Promise<EditRequest>((resolve) => {
       resolveMaterialization = resolve;
     });
     const attempt = scheduler.schedule("execute", {
       onLeaseAcquired: (lease) => {
         acquiredLease = lease;
       },
-      materializeMutation: () => materialization,
+      materializeEditRequest: () => materialization,
     });
     await flush();
 
@@ -411,20 +419,20 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
     expect(commits).toEqual([]);
     expect(() =>
       scheduler.schedule("execute", attemptRequest({ name: "late" })),
-    ).toThrow(SpatialSkeletonMutationAttemptSchedulerDisposedError);
+    ).toThrow(SpatialSkeletonRequestSchedulerDisposedError);
     expect(() =>
       scheduler.runWithLease(
         acquiredLease!,
         "execute",
         attemptRequest({ name: "late-compound" }),
       ),
-    ).toThrow(SpatialSkeletonMutationAttemptSchedulerDisposedError);
+    ).toThrow(SpatialSkeletonRequestSchedulerDisposedError);
     acquiredLease?.release();
   });
 
   it("does not abort transport that already started when disposed", async () => {
     const { adapter, commits } = makeAdapter();
-    const scheduler = new SpatialSkeletonMutationAttemptScheduler({ adapter });
+    const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     const running = scheduler.schedule(
       "execute",
       attemptRequest({ name: "running" }),
@@ -440,24 +448,25 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
     settlement.lease?.release();
   });
 
-  it("snapshots mutation scope once and rejects foreign or inactive leases", async () => {
-    const coordinator = new SpatialSkeletonMutationAuthorityLeaseCoordinator();
-    const mutationScope = {};
-    const { adapter, commits, getMutationScope } = makeAdapter(mutationScope);
-    const scheduler = new SpatialSkeletonMutationAttemptScheduler({
+  it("snapshots edit request scope once and rejects foreign or inactive leases", async () => {
+    const coordinator = new SpatialSkeletonEditRequestLock();
+    const editRequestScope = {};
+    const { adapter, commits, getEditRequestScope } =
+      makeAdapter(editRequestScope);
+    const scheduler = new SpatialSkeletonRequestScheduler({
       adapter,
       coordinator,
     });
-    expect(getMutationScope).toHaveBeenCalledTimes(1);
+    expect(getEditRequestScope).toHaveBeenCalledTimes(1);
 
-    const foreignLease = await coordinator.acquire({ mutationScope: {} });
+    const foreignLease = await coordinator.acquire({ editRequestScope: {} });
     expect(() =>
       scheduler.runWithLease(
         foreignLease,
         "execute",
         attemptRequest({ name: "foreign" }),
       ),
-    ).toThrow("another mutation scope");
+    ).toThrow("another edit request scope");
     foreignLease.release();
 
     const first = scheduler.schedule(
@@ -474,8 +483,8 @@ describe("SpatialSkeletonMutationAttemptScheduler", () => {
         "execute",
         attemptRequest({ name: "retained" }),
       ),
-    ).toThrow("active workflow lease");
+    ).toThrow("active plan lease");
     lease.release();
-    expect(getMutationScope).toHaveBeenCalledTimes(1);
+    expect(getEditRequestScope).toHaveBeenCalledTimes(1);
   });
 });

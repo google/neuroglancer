@@ -14,21 +14,21 @@
  * limitations under the License.
  */
 
+import type { SpatialSkeletonStableResourceHandle } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import {
-  getSpatialSkeletonLogicalResourceKey,
-  spatialSkeletonLogicalNode,
-  spatialSkeletonLogicalSegment,
-  type SpatialSkeletonLogicalResourceHandle,
+  getSpatialSkeletonStableResourceKey,
+  spatialSkeletonStableNode,
+  spatialSkeletonStableSegment,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import type {
-  SpatialSkeletonOptimisticAuthorityReason,
-  SpatialSkeletonOptimisticIntentLifecycle,
-  SpatialSkeletonOptimisticReconciliationLifecycle,
-  SpatialSkeletonOptimisticPreviewLifecycle,
+  SpatialSkeletonAuthorityReason,
+  SpatialSkeletonIntentLifecycle,
+  SpatialSkeletonReconciliationLifecycle,
+  SpatialSkeletonPreviewLifecycle,
 } from "#src/skeleton/edit_queue/types.js";
 import {
-  createInitialSpatialSkeletonOptimisticIntentLifecycle,
-  DEFAULT_SPATIAL_SKELETON_OPTIMISTIC_EDIT_QUEUE_CAPACITY,
+  createInitialSpatialSkeletonIntentLifecycle,
+  DEFAULT_SPATIAL_SKELETON_EDIT_QUEUE_CAPACITY,
 } from "#src/skeleton/edit_queue/types.js";
 
 export type SpatialSkeletonIntentKind = "execute" | "undo" | "redo";
@@ -36,7 +36,7 @@ export type SpatialSkeletonIntentKind = "execute" | "undo" | "redo";
 export type SpatialSkeletonIntentResourceAccess = "read" | "write";
 
 export interface SpatialSkeletonIntentResource {
-  readonly handle: SpatialSkeletonLogicalResourceHandle;
+  readonly handle: SpatialSkeletonStableResourceHandle;
   readonly access: SpatialSkeletonIntentResourceAccess;
 }
 
@@ -66,11 +66,11 @@ export interface SpatialSkeletonIntentAdmission<
 }
 
 /** One authority-confirmed physical step retained by the canonical journal. */
-export interface SpatialSkeletonCommittedMutationAttempt<
-  TMutation = unknown,
+export interface SpatialSkeletonCommittedEditRequestAttempt<
+  TEditRequest = unknown,
   TResult = unknown,
 > {
-  readonly mutation: TMutation;
+  readonly editRequest: TEditRequest;
   readonly result: TResult;
 }
 
@@ -78,8 +78,8 @@ export interface SpatialSkeletonIntentRecord<
   RequestedResult,
   InverseDelta,
   Metadata,
-  CommittedMutationAttempt extends
-    SpatialSkeletonCommittedMutationAttempt = SpatialSkeletonCommittedMutationAttempt,
+  CommittedEditRequestAttempt extends
+    SpatialSkeletonCommittedEditRequestAttempt = SpatialSkeletonCommittedEditRequestAttempt,
 > {
   readonly sequence: number;
   readonly kind: SpatialSkeletonIntentKind;
@@ -92,12 +92,12 @@ export interface SpatialSkeletonIntentRecord<
   readonly inverseDelta: InverseDelta;
   readonly metadata: Metadata;
   /** Canonical user-visible lifecycle for this semantic intent. */
-  readonly lifecycle: SpatialSkeletonOptimisticIntentLifecycle;
+  readonly lifecycle: SpatialSkeletonIntentLifecycle;
   /**
-   * Immutable committed mutation/result pairs in physical workflow order.
+   * Immutable committed edit request/result pairs in physical plan order.
    * Its length is the number of commits authority has accepted for the intent.
    */
-  readonly committedMutationAttempts: readonly CommittedMutationAttempt[];
+  readonly committedEditRequestAttempts: readonly CommittedEditRequestAttempt[];
   /** Number of later active intents canceled with this root rejection. */
   readonly canceledLaterIntentCount?: number;
   readonly terminal: boolean;
@@ -109,8 +109,8 @@ interface MutableSpatialSkeletonIntentRecord<
   RequestedResult,
   InverseDelta,
   Metadata,
-  CommittedMutationAttempt extends
-    SpatialSkeletonCommittedMutationAttempt = SpatialSkeletonCommittedMutationAttempt,
+  CommittedEditRequestAttempt extends
+    SpatialSkeletonCommittedEditRequestAttempt = SpatialSkeletonCommittedEditRequestAttempt,
 > {
   readonly sequence: number;
   readonly historyTicketId: HistoryTicketId;
@@ -126,8 +126,8 @@ interface MutableSpatialSkeletonIntentRecord<
   requestedResult: RequestedResult;
   inverseDelta: InverseDelta;
   metadata: Metadata;
-  lifecycle: SpatialSkeletonOptimisticIntentLifecycle;
-  readonly committedMutationAttempts: CommittedMutationAttempt[];
+  lifecycle: SpatialSkeletonIntentLifecycle;
+  readonly committedEditRequestAttempts: CommittedEditRequestAttempt[];
   canceledLaterIntentCount?: number;
   rejectionReason: unknown;
 }
@@ -158,8 +158,8 @@ export class SpatialSkeletonIntentInvariantError extends Error {
 
 const previewTransitions: Readonly<
   Record<
-    SpatialSkeletonOptimisticPreviewLifecycle,
-    ReadonlySet<SpatialSkeletonOptimisticPreviewLifecycle>
+    SpatialSkeletonPreviewLifecycle,
+    ReadonlySet<SpatialSkeletonPreviewLifecycle>
   >
 > = {
   reserved: new Set(["preparing", "exact", "rolled-back"]),
@@ -169,20 +169,18 @@ const previewTransitions: Readonly<
   "rolled-back": new Set(),
 };
 
-function isTerminalPreviewState(
-  state: SpatialSkeletonOptimisticPreviewLifecycle,
-) {
+function isTerminalPreviewState(state: SpatialSkeletonPreviewLifecycle) {
   return state === "promoted" || state === "rolled-back";
 }
 
 function isTerminalHistoryState(
-  state: SpatialSkeletonOptimisticIntentLifecycle["history"],
+  state: SpatialSkeletonIntentLifecycle["history"],
 ) {
   return state === "advanced" || state === "rejected";
 }
 
 function isTerminalIntent(record: {
-  lifecycle: SpatialSkeletonOptimisticIntentLifecycle;
+  lifecycle: SpatialSkeletonIntentLifecycle;
 }) {
   const { lifecycle } = record;
   return (
@@ -196,7 +194,7 @@ function isTerminalIntent(record: {
 }
 
 function isRejectedIntent(record: {
-  lifecycle: SpatialSkeletonOptimisticIntentLifecycle;
+  lifecycle: SpatialSkeletonIntentLifecycle;
 }) {
   return (
     record.lifecycle.authority === "unchanged" &&
@@ -205,7 +203,7 @@ function isRejectedIntent(record: {
 }
 
 function isEffectiveResourceWriter(record: {
-  lifecycle: SpatialSkeletonOptimisticIntentLifecycle;
+  lifecycle: SpatialSkeletonIntentLifecycle;
 }) {
   return record.lifecycle.authority !== "unchanged";
 }
@@ -215,21 +213,21 @@ function normalizeResources(
 ) {
   const byKey = new Map<string, SpatialSkeletonIntentResource>();
   for (const resource of resources) {
-    const key = getSpatialSkeletonLogicalResourceKey(resource.handle);
+    const key = getSpatialSkeletonStableResourceKey(resource.handle);
     const existing = byKey.get(key);
     if (existing === undefined || resource.access === "write") {
       byKey.set(key, {
         handle:
           resource.handle.kind === "node"
-            ? spatialSkeletonLogicalNode(resource.handle.stableId)
-            : spatialSkeletonLogicalSegment(resource.handle.stableId),
+            ? spatialSkeletonStableNode(resource.handle.stableId)
+            : spatialSkeletonStableSegment(resource.handle.stableId),
         access: resource.access,
       });
     }
   }
   return [...byKey.values()].sort((a, b) =>
-    getSpatialSkeletonLogicalResourceKey(a.handle).localeCompare(
-      getSpatialSkeletonLogicalResourceKey(b.handle),
+    getSpatialSkeletonStableResourceKey(a.handle).localeCompare(
+      getSpatialSkeletonStableResourceKey(b.handle),
     ),
   );
 }
@@ -243,15 +241,15 @@ function sorted(values: Iterable<number>) {
  *
  * This class contains no reducer, rendering, or CATMAID knowledge.  It is a
  * deterministic bookkeeping primitive shared by admission, hydration, the
- * mutation lane, reconciliation, undo, and redo.
+ * edit request lane, reconciliation, undo, and redo.
  */
 export class SpatialSkeletonIntentJournal<
   HistoryTicketId = number,
   RequestedResult = unknown,
   InverseDelta = unknown,
   Metadata = undefined,
-  CommittedMutationAttempt extends
-    SpatialSkeletonCommittedMutationAttempt = SpatialSkeletonCommittedMutationAttempt,
+  CommittedEditRequestAttempt extends
+    SpatialSkeletonCommittedEditRequestAttempt = SpatialSkeletonCommittedEditRequestAttempt,
 > {
   private nextSequence = 1;
   private nextReservationRevision = 1;
@@ -263,7 +261,7 @@ export class SpatialSkeletonIntentJournal<
       RequestedResult,
       InverseDelta,
       Metadata,
-      CommittedMutationAttempt
+      CommittedEditRequestAttempt
     >
   >();
   private readonly historyTickets = new Map<HistoryTicketId, number>();
@@ -271,7 +269,7 @@ export class SpatialSkeletonIntentJournal<
   private readonly reverseDependents = new Map<number, Set<number>>();
 
   constructor(
-    readonly capacity = DEFAULT_SPATIAL_SKELETON_OPTIMISTIC_EDIT_QUEUE_CAPACITY,
+    readonly capacity = DEFAULT_SPATIAL_SKELETON_EDIT_QUEUE_CAPACITY,
   ) {
     if (!Number.isSafeInteger(capacity) || capacity <= 0) {
       throw new Error(
@@ -307,7 +305,7 @@ export class SpatialSkeletonIntentJournal<
   }
 
   /**
-   * Reserves the next sequence while a synchronous driver constructs its
+   * Reserves the next sequence while a synchronous planner constructs its
    * logical descriptor. This makes intent-owned handles deterministic without
    * admitting a partially-described record or allowing re-entrant admission
    * to steal the advertised id.
@@ -393,7 +391,7 @@ export class SpatialSkeletonIntentJournal<
     const resourceDependencies = new Set<number>();
     for (const resource of resources) {
       const lastWriter = this.lastWriterByResource.get(
-        getSpatialSkeletonLogicalResourceKey(resource.handle),
+        getSpatialSkeletonStableResourceKey(resource.handle),
       );
       if (lastWriter !== undefined) resourceDependencies.add(lastWriter);
     }
@@ -434,7 +432,7 @@ export class SpatialSkeletonIntentJournal<
       RequestedResult,
       InverseDelta,
       Metadata,
-      CommittedMutationAttempt
+      CommittedEditRequestAttempt
     > = {
       sequence,
       historyTicketId: admission.historyTicketId,
@@ -449,9 +447,9 @@ export class SpatialSkeletonIntentJournal<
       inverseDelta: admission.inverseDelta,
       metadata: admission.metadata,
       lifecycle: {
-        ...createInitialSpatialSkeletonOptimisticIntentLifecycle(),
+        ...createInitialSpatialSkeletonIntentLifecycle(),
       },
-      committedMutationAttempts: [],
+      committedEditRequestAttempts: [],
       canceledLaterIntentCount: undefined,
       rejectionReason: undefined,
     };
@@ -471,7 +469,7 @@ export class SpatialSkeletonIntentJournal<
     for (const resource of resources) {
       if (resource.access === "write") {
         this.lastWriterByResource.set(
-          getSpatialSkeletonLogicalResourceKey(resource.handle),
+          getSpatialSkeletonStableResourceKey(resource.handle),
           sequence,
         );
       }
@@ -494,7 +492,7 @@ export class SpatialSkeletonIntentJournal<
       RequestedResult,
       InverseDelta,
       Metadata,
-      CommittedMutationAttempt
+      CommittedEditRequestAttempt
     >[] = [];
     for (const record of this.records.values()) {
       if (options.includeTerminal === false && isTerminalIntent(record))
@@ -581,10 +579,7 @@ export class SpatialSkeletonIntentJournal<
     return result.sort((a, b) => a - b);
   }
 
-  setPreviewState(
-    sequence: number,
-    state: SpatialSkeletonOptimisticPreviewLifecycle,
-  ) {
+  setPreviewState(sequence: number, state: SpatialSkeletonPreviewLifecycle) {
     const record = this.requireRecord(sequence);
     const current = record.lifecycle.preview;
     if (current === state) return false;
@@ -599,13 +594,13 @@ export class SpatialSkeletonIntentJournal<
 
   /**
    * Atomically installs prepared or refolded forward/inverse artifacts and
-   * any workflow metadata rebuilt from their canonical history recipes.
+   * any plan metadata rebuilt from their canonical history recipes.
    *
    * Every record is validated before any record is changed.  The preparing
    * state is accepted because first-preview adoption notifies immediately
    * before the engine advances that same record to `exact`.
    */
-  refreshExactProjectionArtifacts(
+  refreshExactPreviewArtifacts(
     artifacts: readonly {
       readonly sequence: number;
       readonly requestedResult: RequestedResult;
@@ -619,7 +614,7 @@ export class SpatialSkeletonIntentJournal<
         RequestedResult,
         InverseDelta,
         Metadata,
-        CommittedMutationAttempt
+        CommittedEditRequestAttempt
       >;
       readonly requestedResult: RequestedResult;
       readonly inverseDelta: InverseDelta;
@@ -629,7 +624,7 @@ export class SpatialSkeletonIntentJournal<
     for (const artifact of artifacts) {
       if (seen.has(artifact.sequence)) {
         throw new SpatialSkeletonIntentInvariantError(
-          `Projection artifact refresh contains duplicate intent ${artifact.sequence}.`,
+          `Preview artifact refresh contains duplicate intent ${artifact.sequence}.`,
         );
       }
       seen.add(artifact.sequence);
@@ -639,12 +634,12 @@ export class SpatialSkeletonIntentJournal<
         record.lifecycle.preview !== "exact"
       ) {
         throw new SpatialSkeletonIntentInvariantError(
-          `Intent ${artifact.sequence} cannot refresh exact projection artifacts from preview state ${record.lifecycle.preview}.`,
+          `Intent ${artifact.sequence} cannot refresh exact preview artifacts from preview state ${record.lifecycle.preview}.`,
         );
       }
       if (isTerminalIntent(record)) {
         throw new SpatialSkeletonIntentInvariantError(
-          `Terminal intent ${artifact.sequence} cannot refresh exact projection artifacts.`,
+          `Terminal intent ${artifact.sequence} cannot refresh exact preview artifacts.`,
         );
       }
       replacements.push({
@@ -689,7 +684,7 @@ export class SpatialSkeletonIntentJournal<
 
   setReconciliationState(
     sequence: number,
-    reconciliation: SpatialSkeletonOptimisticReconciliationLifecycle,
+    reconciliation: SpatialSkeletonReconciliationLifecycle,
   ) {
     const record = this.requireRecord(sequence);
     if (record.lifecycle.reconciliation === reconciliation) return false;
@@ -698,18 +693,18 @@ export class SpatialSkeletonIntentJournal<
   }
 
   /** Advances the canonical physical cursor after one validated commit. */
-  recordCommittedMutationAttempt(
+  recordCommittedEditRequestAttempt(
     sequence: number,
-    attempt: CommittedMutationAttempt,
+    attempt: CommittedEditRequestAttempt,
   ) {
     const record = this.requireRecord(sequence);
     if (record.lifecycle.authority !== "running") {
       throw new SpatialSkeletonIntentInvariantError(
-        `Intent ${sequence} cannot record a mutation while authority is ${record.lifecycle.authority}.`,
+        `Intent ${sequence} cannot record an edit request while authority is ${record.lifecycle.authority}.`,
       );
     }
-    record.committedMutationAttempts.push(
-      Object.freeze({ ...attempt }) as CommittedMutationAttempt,
+    record.committedEditRequestAttempts.push(
+      Object.freeze({ ...attempt }) as CommittedEditRequestAttempt,
     );
     return this.snapshot(record);
   }
@@ -718,10 +713,10 @@ export class SpatialSkeletonIntentJournal<
     const record = this.requireRecord(sequence);
     if (
       record.lifecycle.authority !== "running" ||
-      record.committedMutationAttempts.length === 0
+      record.committedEditRequestAttempts.length === 0
     ) {
       throw new SpatialSkeletonIntentInvariantError(
-        `Intent ${sequence} cannot commit authority before a running mutation succeeds.`,
+        `Intent ${sequence} cannot commit authority before a running edit request succeeds.`,
       );
     }
     record.lifecycle = {
@@ -733,11 +728,11 @@ export class SpatialSkeletonIntentJournal<
   }
 
   /**
-   * Atomically claims one exact, dependency-ready logical workflow.  The
+   * Atomically claims one exact, dependency-ready logical plan.  The
    * authority lifecycle remains visibly queued while the scheduler waits for
    * a lease; `markAuthorityCommitStarted` advances it at the adapter boundary.
    */
-  claimAuthorityWorkflow(sequence: number) {
+  claimAuthorityPlan(sequence: number) {
     const record = this.requireRecord(sequence);
     if (record.lifecycle.authority !== "queued") return false;
     if (record.lifecycle.preview !== "exact") {
@@ -767,7 +762,7 @@ export class SpatialSkeletonIntentJournal<
     return true;
   }
 
-  /** Records a fatal authority outcome without falsely settling history. */
+  /** Records a Reload-required authority outcome without falsely settling history. */
   markReloadRequired(
     sequence: number,
     authority: "committed" | "indeterminate",
@@ -796,7 +791,7 @@ export class SpatialSkeletonIntentJournal<
   /** Settles one definitively unchanged intent without cascading. */
   settleUnchanged(
     sequence: number,
-    authorityReason: Exclude<SpatialSkeletonOptimisticAuthorityReason, "no-op">,
+    authorityReason: Exclude<SpatialSkeletonAuthorityReason, "no-op">,
     error: unknown,
   ) {
     const record = this.requireRecord(sequence);
@@ -969,7 +964,7 @@ export class SpatialSkeletonIntentJournal<
   rejectActiveSuffix(
     sequence: number,
     options: {
-      readonly rootReason: SpatialSkeletonOptimisticAuthorityReason;
+      readonly rootReason: SpatialSkeletonAuthorityReason;
       readonly rootError: unknown;
       readonly laterError: unknown;
     },
@@ -1087,7 +1082,7 @@ export class SpatialSkeletonIntentJournal<
         for (const resource of record.resources) {
           if (resource.access === "write") {
             expectedLastWriters.set(
-              getSpatialSkeletonLogicalResourceKey(resource.handle),
+              getSpatialSkeletonStableResourceKey(resource.handle),
               record.sequence,
             );
           }
@@ -1154,7 +1149,7 @@ export class SpatialSkeletonIntentJournal<
       RequestedResult,
       InverseDelta,
       Metadata,
-      CommittedMutationAttempt
+      CommittedEditRequestAttempt
     >,
   ) {
     if (isTerminalIntent(target)) {
@@ -1164,7 +1159,7 @@ export class SpatialSkeletonIntentJournal<
     }
     if (target.lifecycle.authority !== "queued") {
       throw new SpatialSkeletonIntentInvariantError(
-        `Cannot coalesce into intent ${target.sequence} after its workflow was claimed.`,
+        `Cannot coalesce into intent ${target.sequence} after its plan was claimed.`,
       );
     }
     const activeObserver = [
@@ -1180,10 +1175,10 @@ export class SpatialSkeletonIntentJournal<
     }
     const writeKeys = resources
       .filter((resource) => resource.access === "write")
-      .map((resource) => getSpatialSkeletonLogicalResourceKey(resource.handle));
+      .map((resource) => getSpatialSkeletonStableResourceKey(resource.handle));
     const targetWriteKeys = target.resources
       .filter((resource) => resource.access === "write")
-      .map((resource) => getSpatialSkeletonLogicalResourceKey(resource.handle));
+      .map((resource) => getSpatialSkeletonStableResourceKey(resource.handle));
     if (
       writeKeys.length === 0 ||
       writeKeys.length !== targetWriteKeys.length ||
@@ -1205,7 +1200,7 @@ export class SpatialSkeletonIntentJournal<
       for (const resource of record.resources) {
         if (resource.access === "write") {
           this.lastWriterByResource.set(
-            getSpatialSkeletonLogicalResourceKey(resource.handle),
+            getSpatialSkeletonStableResourceKey(resource.handle),
             record.sequence,
           );
         }
@@ -1225,7 +1220,7 @@ export class SpatialSkeletonIntentJournal<
     for (const record of this.records.values()) {
       if (!isEffectiveResourceWriter(record)) continue;
       for (const resource of record.resources) {
-        const resourceKey = getSpatialSkeletonLogicalResourceKey(
+        const resourceKey = getSpatialSkeletonStableResourceKey(
           resource.handle,
         );
         const dependency = this.lastWriterByResource.get(resourceKey);
@@ -1266,13 +1261,13 @@ export class SpatialSkeletonIntentJournal<
       RequestedResult,
       InverseDelta,
       Metadata,
-      CommittedMutationAttempt
+      CommittedEditRequestAttempt
     >,
   ): SpatialSkeletonIntentRecord<
     RequestedResult,
     InverseDelta,
     Metadata,
-    CommittedMutationAttempt
+    CommittedEditRequestAttempt
   > {
     return Object.freeze({
       sequence: record.sequence,
@@ -1290,8 +1285,8 @@ export class SpatialSkeletonIntentJournal<
       inverseDelta: record.inverseDelta,
       metadata: record.metadata,
       lifecycle: Object.freeze({ ...record.lifecycle }),
-      committedMutationAttempts: Object.freeze([
-        ...record.committedMutationAttempts,
+      committedEditRequestAttempts: Object.freeze([
+        ...record.committedEditRequestAttempts,
       ]),
       canceledLaterIntentCount: record.canceledLaterIntentCount,
       terminal: isTerminalIntent(record),

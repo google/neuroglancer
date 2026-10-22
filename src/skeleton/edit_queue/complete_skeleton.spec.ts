@@ -18,11 +18,11 @@ import { describe, expect, it } from "vitest";
 
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
-  createCompleteSkeletonSnapshot,
-  mergeCompleteSkeletonSnapshots,
-  patchCompleteSkeletonSnapshot,
-  remapCompleteSkeletonSnapshot,
-  splitCompleteSkeletonSnapshot,
+  createCompleteSkeleton,
+  mergeCompleteSkeletons,
+  patchCompleteSkeleton,
+  remapCompleteSkeleton,
+  splitCompleteSkeleton,
 } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import {
   getSkeletonNodeConfidence,
@@ -50,7 +50,7 @@ function makeNode(
 describe("complete skeleton snapshots", () => {
   it("captures an immutable base exactly once", () => {
     const input = [makeNode(1n, 10n), makeNode(2n, 10n, 1n)];
-    const snapshot = createCompleteSkeletonSnapshot(input);
+    const snapshot = createCompleteSkeleton(input);
     const first = snapshot.materialize();
 
     (input[0].position as Float32Array)[0] = 999;
@@ -69,12 +69,12 @@ describe("complete skeleton snapshots", () => {
   });
 
   it("stores compact patches and shares unchanged nodes", () => {
-    const base = createCompleteSkeletonSnapshot([
+    const base = createCompleteSkeleton([
       makeNode(1n, 10n),
       makeNode(2n, 10n, 1n),
       makeNode(3n, 10n, 2n),
     ]);
-    const patched = patchCompleteSkeletonSnapshot(base, [
+    const patched = patchCompleteSkeleton(base, [
       { kind: "update", nodeId: 2n, changes: { attributes: { radius: [12] } } },
       { kind: "delete", nodeId: 3n },
       { kind: "insert", node: makeNode(4n, 10n, 2n) },
@@ -97,16 +97,13 @@ describe("complete skeleton snapshots", () => {
   });
 
   it("represents both split sides as membership views over one snapshot", () => {
-    const base = createCompleteSkeletonSnapshot([
+    const base = createCompleteSkeleton([
       makeNode(1n, 10n),
       makeNode(2n, 10n, 1n),
       makeNode(3n, 10n, 2n),
       makeNode(4n, 10n, 3n),
     ]);
-    const { selected, remainder } = splitCompleteSkeletonSnapshot(base, [
-      3n,
-      4n,
-    ]);
+    const { selected, remainder } = splitCompleteSkeleton(base, [3n, 4n]);
 
     expect(selected.kind).toBe("split-view");
     expect(selected.nodeCount).toBe(2);
@@ -124,15 +121,15 @@ describe("complete skeleton snapshots", () => {
   });
 
   it("merges component views with lazy segment and endpoint overrides", () => {
-    const first = createCompleteSkeletonSnapshot([
+    const first = createCompleteSkeleton([
       makeNode(1n, 99n),
       makeNode(2n, 99n, 1n),
     ]);
-    const second = createCompleteSkeletonSnapshot([
+    const second = createCompleteSkeleton([
       makeNode(3n, 20n),
       makeNode(4n, 20n, 3n),
     ]);
-    const merged = mergeCompleteSkeletonSnapshots(
+    const merged = mergeCompleteSkeletons(
       [
         { snapshot: first, segmentId: 99n },
         { snapshot: second, segmentId: 99n },
@@ -167,14 +164,14 @@ describe("complete skeleton snapshots", () => {
   });
 
   it("materializes only the requested snapshot in a patch chain", () => {
-    const base = createCompleteSkeletonSnapshot([
+    const base = createCompleteSkeleton([
       makeNode(1n, 10n),
       makeNode(2n, 10n, 1n),
     ]);
-    const radiusSnapshot = patchCompleteSkeletonSnapshot(base, [
+    const radiusSnapshot = patchCompleteSkeleton(base, [
       { kind: "update", nodeId: 1n, changes: { attributes: { radius: [8] } } },
     ]);
-    const descriptionSnapshot = patchCompleteSkeletonSnapshot(radiusSnapshot, [
+    const descriptionSnapshot = patchCompleteSkeleton(radiusSnapshot, [
       { kind: "update", nodeId: 1n, changes: { description: "after" } },
     ]);
 
@@ -189,12 +186,12 @@ describe("complete skeleton snapshots", () => {
   });
 
   it("remaps physical ids lazily and snapshots mutable mapping inputs", () => {
-    const base = createCompleteSkeletonSnapshot([
+    const base = createCompleteSkeleton([
       makeNode(1n, 10n),
       makeNode(2n, 10n, 1n),
       makeNode(3n, 20n, 2n),
     ]);
-    const patched = patchCompleteSkeletonSnapshot(base, [
+    const patched = patchCompleteSkeleton(base, [
       { kind: "update", nodeId: 3n, changes: { attributes: { radius: [7] } } },
     ]);
     const nodeIds = new Map([[2n, 12n]]);
@@ -202,7 +199,7 @@ describe("complete skeleton snapshots", () => {
       [10n, 110n],
       [20n, 120n],
     ]);
-    const remapped = remapCompleteSkeletonSnapshot(patched, {
+    const remapped = remapCompleteSkeleton(patched, {
       nodeIds,
       segmentIds,
     });
@@ -237,13 +234,13 @@ describe("complete skeleton snapshots", () => {
   });
 
   it("rejects colliding physical node-id remaps without materializing", () => {
-    const base = createCompleteSkeletonSnapshot([
+    const base = createCompleteSkeleton([
       makeNode(1n, 10n),
       makeNode(2n, 10n, 1n),
     ]);
 
     expect(() =>
-      remapCompleteSkeletonSnapshot(base, {
+      remapCompleteSkeleton(base, {
         nodeIds: new Map([[1n, 2n]]),
       }),
     ).toThrow(/nodes 1 and 2.*duplicate node 2/);
@@ -251,7 +248,7 @@ describe("complete skeleton snapshots", () => {
   });
 
   it("retains sixty-four edits as patches without intermediate arrays", () => {
-    const base = createCompleteSkeletonSnapshot(
+    const base = createCompleteSkeleton(
       Array.from({ length: 128 }, (_, index) =>
         makeNode(
           BigInt(index + 1),
@@ -263,7 +260,7 @@ describe("complete skeleton snapshots", () => {
     const snapshots = [base];
     for (let nodeId = 1; nodeId <= 64; ++nodeId) {
       snapshots.push(
-        patchCompleteSkeletonSnapshot(snapshots.at(-1)!, [
+        patchCompleteSkeleton(snapshots.at(-1)!, [
           {
             kind: "update",
             nodeId: BigInt(nodeId),
@@ -284,16 +281,16 @@ describe("complete skeleton snapshots", () => {
     ).toBe(true);
   });
 
-  it("rebases projection chains at each private sixty-four-level boundary", () => {
-    const base = createCompleteSkeletonSnapshot([makeNode(1n, 10n)]);
+  it("rebases node view chains at each private sixty-four-level boundary", () => {
+    const base = createCompleteSkeleton([makeNode(1n, 10n)]);
     let current = base;
     const boundaries = new Map<
       number,
-      ReturnType<typeof createCompleteSkeletonSnapshot>
+      ReturnType<typeof createCompleteSkeleton>
     >();
 
     for (let edit = 1; edit <= 193; ++edit) {
-      current = patchCompleteSkeletonSnapshot(current, [
+      current = patchCompleteSkeleton(current, [
         {
           kind: "update",
           nodeId: 1n,
@@ -315,12 +312,12 @@ describe("complete skeleton snapshots", () => {
   });
 
   it("preserves handle, node, and array identity while rebasing", () => {
-    let boundary = createCompleteSkeletonSnapshot([
+    let boundary = createCompleteSkeleton([
       makeNode(1n, 10n),
       makeNode(2n, 10n, 1n),
     ]);
     for (let edit = 1; edit <= 64; ++edit) {
-      boundary = patchCompleteSkeletonSnapshot(boundary, [
+      boundary = patchCompleteSkeleton(boundary, [
         {
           kind: "update",
           nodeId: 1n,
@@ -341,7 +338,7 @@ describe("complete skeleton snapshots", () => {
     expect(nodes[0]).toBe(firstNode);
     expect(boundary.materialize()).toBe(nodes);
 
-    const child = patchCompleteSkeletonSnapshot(boundary, [
+    const child = patchCompleteSkeleton(boundary, [
       { kind: "update", nodeId: 2n, changes: { attributes: { radius: [8] } } },
     ]);
     expect(child.getNode(1n)).toBe(firstNode);
@@ -350,9 +347,9 @@ describe("complete skeleton snapshots", () => {
 
   it("applies retained inverse and forward deltas across a rebased boundary", () => {
     const initial = { ...makeNode(1n, 10n), attributes: { radius: [1] } };
-    let s62 = createCompleteSkeletonSnapshot([initial]);
+    let s62 = createCompleteSkeleton([initial]);
     for (let edit = 1; edit <= 62; ++edit) {
-      s62 = patchCompleteSkeletonSnapshot(s62, [
+      s62 = patchCompleteSkeleton(s62, [
         {
           kind: "update",
           nodeId: 1n,
@@ -360,10 +357,10 @@ describe("complete skeleton snapshots", () => {
         },
       ]);
     }
-    const s63 = patchCompleteSkeletonSnapshot(s62, [
+    const s63 = patchCompleteSkeleton(s62, [
       { kind: "update", nodeId: 1n, changes: { attributes: { radius: [2] } } },
     ]);
-    const s64 = patchCompleteSkeletonSnapshot(s63, [
+    const s64 = patchCompleteSkeleton(s63, [
       {
         kind: "update",
         nodeId: 1n,
@@ -373,14 +370,14 @@ describe("complete skeleton snapshots", () => {
     const s63BeforeRebase = s63.materialize();
     const s64Nodes = s64.materialize();
 
-    const undo64 = patchCompleteSkeletonSnapshot(s64, [
+    const undo64 = patchCompleteSkeleton(s64, [
       {
         kind: "update",
         nodeId: 1n,
         changes: { position: Object.freeze([1, 2, 3]) },
       },
     ]);
-    const undo63 = patchCompleteSkeletonSnapshot(undo64, [
+    const undo63 = patchCompleteSkeleton(undo64, [
       { kind: "update", nodeId: 1n, changes: { attributes: { radius: [1] } } },
     ]);
 
@@ -389,10 +386,10 @@ describe("complete skeleton snapshots", () => {
     expect(s63.materialize()).toBe(s63BeforeRebase);
     expect(s63.getNode(1n)).toBe(s63BeforeRebase[0]);
 
-    const redo63 = patchCompleteSkeletonSnapshot(undo63, [
+    const redo63 = patchCompleteSkeleton(undo63, [
       { kind: "update", nodeId: 1n, changes: { attributes: { radius: [2] } } },
     ]);
-    const redo64 = patchCompleteSkeletonSnapshot(redo63, [
+    const redo64 = patchCompleteSkeleton(redo63, [
       {
         kind: "update",
         nodeId: 1n,
@@ -404,9 +401,9 @@ describe("complete skeleton snapshots", () => {
   });
 
   it("builds thousands of lazy patches without unbounded traversal", () => {
-    let snapshot = createCompleteSkeletonSnapshot([makeNode(1n, 10n)]);
+    let snapshot = createCompleteSkeleton([makeNode(1n, 10n)]);
     for (let edit = 1; edit <= 4096; ++edit) {
-      snapshot = patchCompleteSkeletonSnapshot(snapshot, [
+      snapshot = patchCompleteSkeleton(snapshot, [
         {
           kind: "update",
           nodeId: 1n,
@@ -418,14 +415,14 @@ describe("complete skeleton snapshots", () => {
     expect(getSkeletonNodeRadius(snapshot.materialize()[0])).toBe(4096);
   });
 
-  it("rebases deep remap, split, and merge projections without changing topology", () => {
-    let snapshot = createCompleteSkeletonSnapshot([
+  it("rebases deep remap, split, and merge node views without changing topology", () => {
+    let snapshot = createCompleteSkeleton([
       makeNode(1n, 10n),
       makeNode(2n, 10n, 1n),
       makeNode(3n, 10n, 2n),
     ]);
     for (let edit = 1; edit <= 63; ++edit) {
-      snapshot = patchCompleteSkeletonSnapshot(snapshot, [
+      snapshot = patchCompleteSkeleton(snapshot, [
         {
           kind: "update",
           nodeId: 3n,
@@ -433,7 +430,7 @@ describe("complete skeleton snapshots", () => {
         },
       ]);
     }
-    const remapped = remapCompleteSkeletonSnapshot(snapshot, {
+    const remapped = remapCompleteSkeleton(snapshot, {
       nodeIds: new Map([
         [1n, 101n],
         [2n, 102n],
@@ -453,11 +450,11 @@ describe("complete skeleton snapshots", () => {
       },
     ]);
 
-    const { selected, remainder } = splitCompleteSkeletonSnapshot(remapped, [
+    const { selected, remainder } = splitCompleteSkeleton(remapped, [
       102n,
       103n,
     ]);
-    const merged = mergeCompleteSkeletonSnapshots([
+    const merged = mergeCompleteSkeletons([
       { snapshot: remainder },
       { snapshot: selected },
     ]);
@@ -465,10 +462,10 @@ describe("complete skeleton snapshots", () => {
     expect(remapped.materialize()).toBe(remappedNodes);
   });
 
-  it("counts a merge override patch as an additional projection level", () => {
-    let source = createCompleteSkeletonSnapshot([makeNode(1n, 10n)]);
+  it("counts a merge override patch as an additional node view level", () => {
+    let source = createCompleteSkeleton([makeNode(1n, 10n)]);
     for (let edit = 1; edit <= 62; ++edit) {
-      source = patchCompleteSkeletonSnapshot(source, [
+      source = patchCompleteSkeleton(source, [
         {
           kind: "update",
           nodeId: 1n,
@@ -476,14 +473,14 @@ describe("complete skeleton snapshots", () => {
         },
       ]);
     }
-    const merged = mergeCompleteSkeletonSnapshots([{ snapshot: source }], {
+    const merged = mergeCompleteSkeletons([{ snapshot: source }], {
       overrides: [
         { nodeId: 1n, changes: { position: Object.freeze([7, 7, 7]) } },
       ],
     });
     expect(merged.materializationCount).toBe(0);
 
-    const child = patchCompleteSkeletonSnapshot(merged, [
+    const child = patchCompleteSkeleton(merged, [
       { kind: "update", nodeId: 1n, changes: { description: "after merge" } },
     ]);
 
@@ -497,12 +494,12 @@ describe("complete skeleton snapshots", () => {
 
   it("rejects invalid patches, memberships, and overlapping merges", () => {
     expect(() =>
-      createCompleteSkeletonSnapshot([makeNode(1n, 10n), makeNode(1n, 10n)]),
+      createCompleteSkeleton([makeNode(1n, 10n), makeNode(1n, 10n)]),
     ).toThrow(/duplicate node 1/);
 
-    const first = createCompleteSkeletonSnapshot([makeNode(1n, 10n)]);
+    const first = createCompleteSkeleton([makeNode(1n, 10n)]);
     expect(() =>
-      patchCompleteSkeletonSnapshot(first, [
+      patchCompleteSkeleton(first, [
         {
           kind: "update",
           nodeId: 2n,
@@ -510,16 +507,13 @@ describe("complete skeleton snapshots", () => {
         },
       ]),
     ).toThrow(/update missing.*2/);
-    expect(() => splitCompleteSkeletonSnapshot(first, [2n])).toThrow(
+    expect(() => splitCompleteSkeleton(first, [2n])).toThrow(
       /missing.*2.*split view/,
     );
 
-    const duplicate = createCompleteSkeletonSnapshot([makeNode(1n, 20n)]);
+    const duplicate = createCompleteSkeleton([makeNode(1n, 20n)]);
     expect(() =>
-      mergeCompleteSkeletonSnapshots([
-        { snapshot: first },
-        { snapshot: duplicate },
-      ]),
+      mergeCompleteSkeletons([{ snapshot: first }, { snapshot: duplicate }]),
     ).toThrow(/merge.*duplicate node 1/);
   });
 });

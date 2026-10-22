@@ -21,10 +21,8 @@ import {
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { RenderLayerRole } from "#src/renderlayer.js";
-import {
-  SkeletonDataSourceState,
-  type SkeletonFindPathState,
-} from "#src/skeleton/find_path/find_path.js";
+import type { SkeletonFindPathState } from "#src/skeleton/find_path/find_path.js";
+import { SkeletonDataSourceState } from "#src/skeleton/find_path/find_path.js";
 import {
   SKELETON_FIND_PATH_ASSOCIATED_SEGMENTS_RELATIONSHIP,
   SpatialSkeletonFindPathAnnotations,

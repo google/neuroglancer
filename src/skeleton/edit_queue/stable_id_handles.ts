@@ -22,19 +22,19 @@
  * merge winner.  Journal entries keep the handle and the mapping is updated in
  * one place.
  */
-export interface SpatialSkeletonLogicalNodeHandle {
+export interface SpatialSkeletonStableNodeHandle {
   readonly kind: "node";
   readonly stableId: string;
 }
 
-export interface SpatialSkeletonLogicalSegmentHandle {
+export interface SpatialSkeletonStableSegmentHandle {
   readonly kind: "segment";
   readonly stableId: string;
 }
 
-export type SpatialSkeletonLogicalResourceHandle =
-  | SpatialSkeletonLogicalNodeHandle
-  | SpatialSkeletonLogicalSegmentHandle;
+export type SpatialSkeletonStableResourceHandle =
+  | SpatialSkeletonStableNodeHandle
+  | SpatialSkeletonStableSegmentHandle;
 
 function normalizeStableId(stableId: string | number) {
   const result = String(stableId);
@@ -44,40 +44,37 @@ function normalizeStableId(stableId: string | number) {
   return result;
 }
 
-export function spatialSkeletonLogicalNode(
+export function spatialSkeletonStableNode(
   stableId: string | number,
-): SpatialSkeletonLogicalNodeHandle {
+): SpatialSkeletonStableNodeHandle {
   return Object.freeze({ kind: "node", stableId: normalizeStableId(stableId) });
 }
 
-export function spatialSkeletonLogicalSegment(
+export function spatialSkeletonStableSegment(
   stableId: string | number,
-): SpatialSkeletonLogicalSegmentHandle {
+): SpatialSkeletonStableSegmentHandle {
   return Object.freeze({
     kind: "segment",
     stableId: normalizeStableId(stableId),
   });
 }
 
-export function getSpatialSkeletonLogicalResourceKey(
-  handle: SpatialSkeletonLogicalResourceHandle,
+export function getSpatialSkeletonStableResourceKey(
+  handle: SpatialSkeletonStableResourceHandle,
 ) {
   return `${handle.kind === "node" ? "n" : "s"}:${handle.stableId}`;
 }
 
-export interface SpatialSkeletonLogicalHandleMappingsSnapshot<
-  NodeId,
-  SegmentId,
-> {
+export interface SpatialSkeletonStableIdHandlesSnapshot<NodeId, SegmentId> {
   readonly baselineNodes: readonly (readonly [string, NodeId])[];
   readonly baselineSegments: readonly (readonly [string, SegmentId])[];
-  readonly overlays: readonly SpatialSkeletonLogicalHandleMappingOverlaySnapshot<
+  readonly overlays: readonly SpatialSkeletonStableIdMappingOverlaySnapshot<
     NodeId,
     SegmentId
   >[];
 }
 
-export interface SpatialSkeletonLogicalHandleMappingOverlaySnapshot<
+export interface SpatialSkeletonStableIdMappingOverlaySnapshot<
   NodeId,
   SegmentId,
 > {
@@ -87,23 +84,23 @@ export interface SpatialSkeletonLogicalHandleMappingOverlaySnapshot<
   readonly segments: readonly (readonly [string, SegmentId])[];
 }
 
-export interface SpatialSkeletonLogicalHandleMappingUpdate<NodeId, SegmentId> {
+export interface SpatialSkeletonStableIdMappingUpdate<NodeId, SegmentId> {
   readonly nodes?: readonly (readonly [
-    SpatialSkeletonLogicalNodeHandle,
+    SpatialSkeletonStableNodeHandle,
     NodeId,
   ])[];
   readonly segments?: readonly (readonly [
-    SpatialSkeletonLogicalSegmentHandle,
+    SpatialSkeletonStableSegmentHandle,
     SegmentId,
   ])[];
 }
 
-export interface SpatialSkeletonLogicalHandleMappingToken {
+export interface SpatialSkeletonStableIdMappingToken {
   readonly sequence: number;
   readonly tokenRevision: number;
 }
 
-export type SpatialSkeletonLogicalHandleMappingResolution<PhysicalId> =
+export type SpatialSkeletonStableIdMappingResolution<PhysicalId> =
   | { readonly state: "unbound" }
   | { readonly state: "authoritative"; readonly physicalId: PhysicalId }
   | {
@@ -112,21 +109,21 @@ export type SpatialSkeletonLogicalHandleMappingResolution<PhysicalId> =
       readonly ownerSequence: number;
     };
 
-interface SpatialSkeletonLogicalHandleMappingOverlay<NodeId, SegmentId> {
-  readonly token: SpatialSkeletonLogicalHandleMappingToken;
+interface SpatialSkeletonStableIdMappingOverlay<NodeId, SegmentId> {
+  readonly token: SpatialSkeletonStableIdMappingToken;
   readonly nodeIds: Map<string, NodeId>;
   readonly segmentIds: Map<string, SegmentId>;
 }
 
 /** Mapping storage that is independent from journal snapshots and deltas. */
-export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
+export class SpatialSkeletonStableIdHandles<NodeId, SegmentId> {
   private baselineNodeIds = new Map<string, NodeId>();
   private baselineSegmentIds = new Map<string, SegmentId>();
   private nodeIds = new Map<string, NodeId>();
   private segmentIds = new Map<string, SegmentId>();
   private overlays = new Map<
     number,
-    SpatialSkeletonLogicalHandleMappingOverlay<NodeId, SegmentId>
+    SpatialSkeletonStableIdMappingOverlay<NodeId, SegmentId>
   >();
   private mappingRevision = 0;
   private nextTokenRevision = 1;
@@ -140,26 +137,26 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
     return this.overlays.get(sequence)?.token;
   }
 
-  resolveNode(handle: SpatialSkeletonLogicalNodeHandle) {
+  resolveNode(handle: SpatialSkeletonStableNodeHandle) {
     return this.nodeIds.get(handle.stableId);
   }
 
-  resolveSegment(handle: SpatialSkeletonLogicalSegmentHandle) {
+  resolveSegment(handle: SpatialSkeletonStableSegmentHandle) {
     return this.segmentIds.get(handle.stableId);
   }
 
   /** Server-confirmed identity, independent of later preview overlays. */
-  resolveAuthoritativeNode(handle: SpatialSkeletonLogicalNodeHandle) {
+  resolveAuthoritativeNode(handle: SpatialSkeletonStableNodeHandle) {
     return this.baselineNodeIds.get(handle.stableId);
   }
 
-  resolveAuthoritativeSegment(handle: SpatialSkeletonLogicalSegmentHandle) {
+  resolveAuthoritativeSegment(handle: SpatialSkeletonStableSegmentHandle) {
     return this.baselineSegmentIds.get(handle.stableId);
   }
 
   resolveNodeTarget(
-    handle: SpatialSkeletonLogicalNodeHandle,
-  ): SpatialSkeletonLogicalHandleMappingResolution<NodeId> {
+    handle: SpatialSkeletonStableNodeHandle,
+  ): SpatialSkeletonStableIdMappingResolution<NodeId> {
     return this.resolveTarget(
       handle.stableId,
       this.nodeIds,
@@ -168,8 +165,8 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
   }
 
   resolveSegmentTarget(
-    handle: SpatialSkeletonLogicalSegmentHandle,
-  ): SpatialSkeletonLogicalHandleMappingResolution<SegmentId> {
+    handle: SpatialSkeletonStableSegmentHandle,
+  ): SpatialSkeletonStableIdMappingResolution<SegmentId> {
     return this.resolveTarget(
       handle.stableId,
       this.segmentIds,
@@ -178,7 +175,7 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
   }
 
   resolve(
-    handle: SpatialSkeletonLogicalResourceHandle,
+    handle: SpatialSkeletonStableResourceHandle,
   ): NodeId | SegmentId | undefined {
     return handle.kind === "node"
       ? this.nodeIds.get(handle.stableId)
@@ -187,13 +184,13 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
 
   /** Binds a complete node set with one mapping revision and one rebuild. */
   bindNodes(
-    bindings: Iterable<readonly [SpatialSkeletonLogicalNodeHandle, NodeId]>,
+    bindings: Iterable<readonly [SpatialSkeletonStableNodeHandle, NodeId]>,
   ) {
     return this.apply({ nodes: [...bindings] });
   }
 
   bindSegment(
-    handle: SpatialSkeletonLogicalSegmentHandle,
+    handle: SpatialSkeletonStableSegmentHandle,
     physicalId: SegmentId,
   ) {
     return this.apply({ segments: [[handle, physicalId]] });
@@ -203,7 +200,7 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
    * Applies a remap atomically from an observer's perspective and increments
    * the revision once, even if a reversed merge changes several handles.
    */
-  apply(update: SpatialSkeletonLogicalHandleMappingUpdate<NodeId, SegmentId>) {
+  apply(update: SpatialSkeletonStableIdMappingUpdate<NodeId, SegmentId>) {
     let changed = false;
     let nextNodeIds = this.baselineNodeIds;
     let nextSegmentIds = this.baselineSegmentIds;
@@ -255,8 +252,8 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
    */
   stage(
     sequence: number,
-    update: SpatialSkeletonLogicalHandleMappingUpdate<NodeId, SegmentId>,
-  ): SpatialSkeletonLogicalHandleMappingToken {
+    update: SpatialSkeletonStableIdMappingUpdate<NodeId, SegmentId>,
+  ): SpatialSkeletonStableIdMappingToken {
     if (!Number.isSafeInteger(sequence) || sequence <= 0) {
       throw new Error(
         "A logical mapping overlay requires a positive sequence.",
@@ -291,8 +288,8 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
   }
 
   commit(
-    token: SpatialSkeletonLogicalHandleMappingToken,
-    authoritativeUpdate?: SpatialSkeletonLogicalHandleMappingUpdate<
+    token: SpatialSkeletonStableIdMappingToken,
+    authoritativeUpdate?: SpatialSkeletonStableIdMappingUpdate<
       NodeId,
       SegmentId
     >,
@@ -303,13 +300,13 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
       authoritativeUpdate?.nodes ??
       [...overlay.nodeIds].map(
         ([stableId, physicalId]) =>
-          [spatialSkeletonLogicalNode(stableId), physicalId] as const,
+          [spatialSkeletonStableNode(stableId), physicalId] as const,
       );
     const segmentUpdates =
       authoritativeUpdate?.segments ??
       [...overlay.segmentIds].map(
         ([stableId, physicalId]) =>
-          [spatialSkeletonLogicalSegment(stableId), physicalId] as const,
+          [spatialSkeletonStableSegment(stableId), physicalId] as const,
       );
     for (const [handle, physicalId] of nodeUpdates) {
       this.baselineNodeIds.set(handle.stableId, physicalId);
@@ -322,7 +319,7 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
     return true;
   }
 
-  rollback(token: SpatialSkeletonLogicalHandleMappingToken) {
+  rollback(token: SpatialSkeletonStableIdMappingToken) {
     if (this.getOwnedOverlay(token) === undefined) return false;
     this.overlays.delete(token.sequence);
     this.rebuildEffectiveMappings();
@@ -330,10 +327,10 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
   }
 
   findNodes(physicalId: NodeId) {
-    const result: SpatialSkeletonLogicalNodeHandle[] = [];
+    const result: SpatialSkeletonStableNodeHandle[] = [];
     for (const [stableId, candidate] of this.nodeIds) {
       if (Object.is(candidate, physicalId)) {
-        result.push(spatialSkeletonLogicalNode(stableId));
+        result.push(spatialSkeletonStableNode(stableId));
       }
     }
     return result;
@@ -342,21 +339,21 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
   /** Resolves the first logical owner for many physical node ids in one scan. */
   findFirstNodes(physicalIds: Iterable<NodeId>) {
     const requested = new Set(physicalIds);
-    const result = new Map<NodeId, SpatialSkeletonLogicalNodeHandle>();
+    const result = new Map<NodeId, SpatialSkeletonStableNodeHandle>();
     if (requested.size === 0) return result;
     for (const [stableId, physicalId] of this.nodeIds) {
       if (!requested.has(physicalId) || result.has(physicalId)) continue;
-      result.set(physicalId, spatialSkeletonLogicalNode(stableId));
+      result.set(physicalId, spatialSkeletonStableNode(stableId));
       if (result.size === requested.size) break;
     }
     return result;
   }
 
   findSegments(physicalId: SegmentId) {
-    const result: SpatialSkeletonLogicalSegmentHandle[] = [];
+    const result: SpatialSkeletonStableSegmentHandle[] = [];
     for (const [stableId, candidate] of this.segmentIds) {
       if (Object.is(candidate, physicalId)) {
-        result.push(spatialSkeletonLogicalSegment(stableId));
+        result.push(spatialSkeletonStableSegment(stableId));
       }
     }
     return result;
@@ -364,10 +361,7 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
 
   /** Isolated candidate with overlays only through the requested sequence. */
   clone(throughSequence = Infinity) {
-    const result = new SpatialSkeletonLogicalHandleMappings<
-      NodeId,
-      SegmentId
-    >();
+    const result = new SpatialSkeletonStableIdHandles<NodeId, SegmentId>();
     const snapshot = this.cloneSnapshot();
     result.restoreSnapshot({
       ...snapshot,
@@ -378,10 +372,7 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
     return result;
   }
 
-  cloneSnapshot(): SpatialSkeletonLogicalHandleMappingsSnapshot<
-    NodeId,
-    SegmentId
-  > {
+  cloneSnapshot(): SpatialSkeletonStableIdHandlesSnapshot<NodeId, SegmentId> {
     return {
       baselineNodes: [...this.baselineNodeIds],
       baselineSegments: [...this.baselineSegmentIds],
@@ -395,7 +386,7 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
   }
 
   restoreSnapshot(
-    snapshot: SpatialSkeletonLogicalHandleMappingsSnapshot<NodeId, SegmentId>,
+    snapshot: SpatialSkeletonStableIdHandlesSnapshot<NodeId, SegmentId>,
   ) {
     const nextBaselineNodeIds = new Map(snapshot.baselineNodes);
     const nextBaselineSegmentIds = new Map(snapshot.baselineSegments);
@@ -441,9 +432,9 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
     stableId: string,
     values: ReadonlyMap<string, PhysicalId>,
     getOverlayValues: (
-      overlay: SpatialSkeletonLogicalHandleMappingOverlay<NodeId, SegmentId>,
+      overlay: SpatialSkeletonStableIdMappingOverlay<NodeId, SegmentId>,
     ) => ReadonlyMap<string, PhysicalId>,
-  ): SpatialSkeletonLogicalHandleMappingResolution<PhysicalId> {
+  ): SpatialSkeletonStableIdMappingResolution<PhysicalId> {
     let provisionalOwner: number | undefined;
     for (const [sequence, overlay] of [...this.overlays].sort(
       ([first], [second]) => second - first,
@@ -460,7 +451,7 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
       : { state: "provisional", physicalId, ownerSequence: provisionalOwner };
   }
 
-  private getOwnedOverlay(token: SpatialSkeletonLogicalHandleMappingToken) {
+  private getOwnedOverlay(token: SpatialSkeletonStableIdMappingToken) {
     const overlay = this.overlays.get(token.sequence);
     return overlay?.token.tokenRevision === token.tokenRevision
       ? overlay
@@ -492,7 +483,7 @@ export class SpatialSkeletonLogicalHandleMappings<NodeId, SegmentId> {
   private overlaysEqual(
     other: Map<
       number,
-      SpatialSkeletonLogicalHandleMappingOverlay<NodeId, SegmentId>
+      SpatialSkeletonStableIdMappingOverlay<NodeId, SegmentId>
     >,
   ) {
     if (this.overlays.size !== other.size) return false;

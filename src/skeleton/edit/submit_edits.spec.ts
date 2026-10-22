@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_edit/command_factories.js";
 import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   executeSpatialSkeletonAddNode,
   executeSpatialSkeletonInsertNode,
@@ -37,20 +37,20 @@ import {
 } from "#src/skeleton/edit/submit_edits.js";
 import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_queue/edit_errors.js";
-import { SpatialSkeletonOptimisticProjectionRuntime } from "#src/skeleton/edit_queue/preview.js";
-import { resetGlobalSpatialSkeletonMutationAuthorityLeaseCoordinatorForTesting } from "#src/skeleton/edit_queue/request_scheduler.js";
-import type { SpatialSkeletonOptimisticEditSettlement } from "#src/skeleton/edit_queue/types.js";
+import { SpatialSkeletonEditPreview } from "#src/skeleton/edit_queue/preview.js";
+import { resetGlobalSpatialSkeletonEditRequestLockForTesting } from "#src/skeleton/edit_queue/request_scheduler.js";
+import type { SpatialSkeletonEditSettlement } from "#src/skeleton/edit_queue/types.js";
 import {
-  SpatialSkeletonOptimisticReloadRequiredError,
-  committedSpatialSkeletonOptimisticEditSettlement,
+  SpatialSkeletonReloadRequiredError,
+  committedSpatialSkeletonEditSettlement,
 } from "#src/skeleton/edit_queue/types.js";
-import { SpatialSkeletonCommandHistory } from "#src/skeleton/edit_queue/undo_history.js";
+import { SpatialSkeletonUndoHistory } from "#src/skeleton/edit_queue/undo_history.js";
 import {
   getSkeletonNodeConfidence,
   getSkeletonNodeRadius,
 } from "#src/skeleton/node_attributes.js";
 import { StatusMessage } from "#src/status.js";
-import { SpatialSkeletonOptimisticAuthorityNotificationController } from "#src/ui/skeleton_edit_queue_tab.js";
+import { SpatialSkeletonAuthorityNotificationController } from "#src/ui/skeleton_edit_queue_tab.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import { HttpError } from "#src/util/http_request.js";
 
@@ -98,7 +98,7 @@ function cloneNodes(
 }
 
 function cachedTopologyForTest(
-  state: SpatialSkeletonState,
+  state: SpatialSkeletonEditSession,
   segmentIds: readonly bigint[],
 ) {
   return segmentIds
@@ -131,7 +131,7 @@ function makeRootRestorationNodesForTest(): SkeletonNode[] {
 }
 
 function replaceCachedSegmentForTest(
-  state: SpatialSkeletonState,
+  state: SpatialSkeletonEditSession,
   segmentId: bigint,
   nodes: readonly SkeletonNode[] | undefined,
 ) {
@@ -141,7 +141,7 @@ function replaceCachedSegmentForTest(
 }
 
 function seedCachedNodesForTest(
-  state: SpatialSkeletonState,
+  state: SpatialSkeletonEditSession,
   nodes: readonly SkeletonNode[],
 ) {
   const nodesBySegment = new Map<bigint, SkeletonNode[]>();
@@ -204,7 +204,7 @@ function makeEditableSkeletonSource(overrides: Record<string, unknown> = {}) {
   }
   const commands = makeCatmaidEditCommands(makeCatmaidClient(clientOverrides));
   return {
-    optimisticEditing: commands.optimisticEditing,
+    editPlannerProvider: commands.editPlannerProvider,
     addNodesCommand: commands.addNodesCommand,
     insertNodesCommand: commands.insertNodesCommand,
     moveNodesCommand: commands.moveNodesCommand,
@@ -238,10 +238,9 @@ function suppressStatusMessages() {
 }
 
 function attachAuthorityNotifications(layer: any) {
-  const controller =
-    new SpatialSkeletonOptimisticAuthorityNotificationController(layer);
+  const controller = new SpatialSkeletonAuthorityNotificationController(layer);
   const subscription =
-    layer.spatialSkeletonState.optimisticEditQueueVersion.changed.add(() =>
+    layer.spatialSkeletonEditSession.editQueueVersion.changed.add(() =>
       controller.update(),
     );
   return () => {
@@ -252,10 +251,10 @@ function attachAuthorityNotifications(layer: any) {
 }
 
 function expectReloadRequired(
-  state: SpatialSkeletonState,
+  state: SpatialSkeletonEditSession,
   authority: "committed" | "indeterminate",
 ) {
-  expect(state.getOptimisticEditFatalState()).toEqual(
+  expect(state.getReloadRequired()).toEqual(
     expect.objectContaining({
       authority,
       reason:
@@ -317,14 +316,14 @@ function makeAvailableInputReferences() {
     release: vi.fn(),
   });
   return {
-    assertOptimisticEditingAllowed: vi.fn(),
-    getOptimisticEditingIdentityService: vi.fn(() => ({})),
+    assertEditingAllowed: vi.fn(),
+    getEditingIdentityService: vi.fn(() => ({})),
     tryAcquireInputReference: vi.fn(makeRetainedInput),
     acquireInputReference: vi.fn(makeRetainedInput),
   };
 }
 
-function makeResolvedOptimisticExecution(value = true) {
+function makeResolvedExecution(value = true) {
   const execution = Promise.resolve(value) as Promise<boolean> & {
     acceptedByQueue: Promise<void>;
     settled: Promise<{ outcome: "unchanged"; reason: "no-op" }>;
@@ -339,7 +338,7 @@ function makeResolvedOptimisticExecution(value = true) {
   return execution;
 }
 
-function makeOptimisticAddNodeTestLayer(options: {
+function makeAddNodeTestLayer(options: {
   addNode?: ReturnType<typeof vi.fn>;
   deleteNode?: ReturnType<typeof vi.fn>;
   insertNode?: ReturnType<typeof vi.fn>;
@@ -356,14 +355,14 @@ function makeOptimisticAddNodeTestLayer(options: {
   segmentId: bigint;
   segmentIds?: readonly bigint[];
 }) {
-  const spatialSkeletonState = new SpatialSkeletonState();
+  const spatialSkeletonEditSession = new SpatialSkeletonEditSession();
   const initialNodesBySegment = new Map<bigint, SkeletonNode[]>();
   for (const node of options.initialNodes) {
     const segmentNodes = initialNodesBySegment.get(node.segmentId) ?? [];
     segmentNodes.push(node);
     initialNodesBySegment.set(node.segmentId, segmentNodes);
   }
-  spatialSkeletonState.replaceCachedSegmentSnapshots(
+  spatialSkeletonEditSession.replaceCachedSegmentSnapshots(
     [...initialNodesBySegment],
     { notify: false },
   );
@@ -371,7 +370,7 @@ function makeOptimisticAddNodeTestLayer(options: {
     options.getSkeleton ??
     vi.fn(async (requestedSegmentId: bigint) =>
       (
-        spatialSkeletonState.getCachedSegmentNodes(requestedSegmentId) ??
+        spatialSkeletonEditSession.getCachedSegmentNodes(requestedSegmentId) ??
         options.initialNodes.filter(
           (node) => node.segmentId === requestedSegmentId,
         )
@@ -408,7 +407,7 @@ function makeOptimisticAddNodeTestLayer(options: {
     editNodeConfidenceCommand: commands.editNodeConfidenceCommand,
     mergeSkeletonsCommand: commands.mergeSkeletonsCommand,
     splitSkeletonsCommand: commands.splitSkeletonsCommand,
-    optimisticEditing: commands.optimisticEditing,
+    editPlannerProvider: commands.editPlannerProvider,
     ...makeWholeSkeletonReads(getSkeleton),
   };
   const invalidateWholeSourceCache = vi.fn();
@@ -417,7 +416,7 @@ function makeOptimisticAddNodeTestLayer(options: {
     fragmentSource: skeletonSource,
     editableSource: skeletonSource,
     getNode: vi.fn((nodeId: bigint) =>
-      spatialSkeletonState.getCachedNode(nodeId),
+      spatialSkeletonEditSession.getCachedNode(nodeId),
     ),
     retainOverlaySegment: vi.fn(),
     remapOverlaySegments: vi.fn(),
@@ -435,7 +434,7 @@ function makeOptimisticAddNodeTestLayer(options: {
   const layer = {
     displayState: makeDisplayState(options.segmentIds ?? [options.segmentId]),
     manager: makePinnedManager(),
-    spatialSkeletonState,
+    spatialSkeletonEditSession,
     getSpatiallyIndexedSkeletonLayer: () => skeletonLayer,
     selectSegment: vi.fn(),
     skeletonNodeSelection: {
@@ -461,7 +460,7 @@ function makeOptimisticAddNodeTestLayer(options: {
     },
   };
   Object.assign(layer, {
-    applySpatialSkeletonProjectionUiHints: (hints: {
+    applySpatialSkeletonPreviewUiHints: (hints: {
       nodeIdRemappings: ReadonlyMap<bigint, bigint>;
       segmentIdRemappings: ReadonlyMap<bigint, bigint>;
       segmentVisibility: readonly {
@@ -478,7 +477,9 @@ function makeOptimisticAddNodeTestLayer(options: {
             position?: ArrayLike<number>;
           };
     }) => {
-      spatialSkeletonState.remapPendingNodePositions(hints.nodeIdRemappings);
+      spatialSkeletonEditSession.remapPendingNodePositions(
+        hints.nodeIdRemappings,
+      );
       const group = layer.displayState.segmentationGroupState.value;
       for (const set of [
         group.visibleSegments,
@@ -513,7 +514,7 @@ function makeOptimisticAddNodeTestLayer(options: {
           layer.skeletonNodeSelection.selected.value?.nodeId ===
             hints.selectedNode.nodeId)
       ) {
-        const cached = spatialSkeletonState.getCachedNode(
+        const cached = spatialSkeletonEditSession.getCachedNode(
           hints.selectedNode.nodeId,
         );
         layer.skeletonNodeSelection.select(hints.selectedNode.nodeId, true, {
@@ -533,7 +534,7 @@ function makeOptimisticAddNodeTestLayer(options: {
     client,
     layer,
     skeletonLayer,
-    spatialSkeletonState,
+    spatialSkeletonEditSession,
     invalidateWholeSourceCache,
   };
 }
@@ -544,13 +545,13 @@ async function waitForMicrotasks(count = 3) {
   }
 }
 
-async function waitForPresentationTurn() {
+async function waitForDisplayTurn() {
   await new Promise<void>((resolve) => {
     requestAnimationFrame(() => setTimeout(resolve, 0));
   });
 }
 
-async function afterPresentationTurnWithFakeTimers<T>(execution: Promise<T>) {
+async function afterDisplayTurnWithFakeTimers<T>(execution: Promise<T>) {
   vi.advanceTimersToNextFrame();
   await vi.advanceTimersByTimeAsync(0);
   return execution;
@@ -569,7 +570,7 @@ describe("skeleton edit commands", () => {
   });
 
   afterEach(() => {
-    resetGlobalSpatialSkeletonMutationAuthorityLeaseCoordinatorForTesting();
+    resetGlobalSpatialSkeletonEditRequestLockForTesting();
     vi.restoreAllMocks();
   });
 
@@ -581,16 +582,14 @@ describe("skeleton edit commands", () => {
       getQueueInputRequirements: vi.fn(() => ({ required: [] })),
     };
     const createCommand = vi.fn(() => command);
-    const executeOptimisticEdit = vi.fn(() =>
-      makeResolvedOptimisticExecution(),
-    );
-    const ensureOptimisticEditingEngine = vi.fn(() => ({}));
+    const executeEdit = vi.fn(() => makeResolvedExecution());
+    const ensureEditQueue = vi.fn(() => ({}));
     const layer = {
-      spatialSkeletonState: {
+      spatialSkeletonEditSession: {
         ...makeAvailableInputReferences(),
-        commandHistory: new SpatialSkeletonCommandHistory(),
-        ensureOptimisticEditingEngine,
-        executeOptimisticEdit,
+        commandHistory: new SpatialSkeletonUndoHistory(),
+        ensureEditQueue,
+        executeEdit,
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
         editableSource: {
@@ -619,8 +618,8 @@ describe("skeleton edit commands", () => {
       node,
       nextPositionInModelSpace,
     });
-    expect(ensureOptimisticEditingEngine).toHaveBeenCalledTimes(1);
-    expect(executeOptimisticEdit).toHaveBeenCalledWith(command, {
+    expect(ensureEditQueue).toHaveBeenCalledTimes(1);
+    expect(executeEdit).toHaveBeenCalledWith(command, {
       getProtectedSegmentIds: expect.any(Function),
       validate: expect.any(Function),
       acquire: expect.any(Function),
@@ -632,9 +631,9 @@ describe("skeleton edit commands", () => {
 
   it("rejects an unavailable requested command factory", () => {
     const layer = {
-      spatialSkeletonState: {
+      spatialSkeletonEditSession: {
         ...makeAvailableInputReferences(),
-        commandHistory: new SpatialSkeletonCommandHistory(),
+        commandHistory: new SpatialSkeletonUndoHistory(),
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
         editableSource: {
@@ -662,9 +661,9 @@ describe("skeleton edit commands", () => {
 
   it("reports unsupported commands clearly", () => {
     const layer = {
-      spatialSkeletonState: {
+      spatialSkeletonEditSession: {
         ...makeAvailableInputReferences(),
-        commandHistory: new SpatialSkeletonCommandHistory(),
+        commandHistory: new SpatialSkeletonUndoHistory(),
       },
       getSpatiallyIndexedSkeletonLayer: () => ({
         editableSource: {
@@ -695,11 +694,11 @@ describe("skeleton edit commands", () => {
     (kind) => {
       const source = makeEditableSkeletonSource();
       const createCommand = vi.spyOn(source.moveNodesCommand, "createCommand");
-      const ensureOptimisticEditingEngine = vi.fn();
+      const ensureEditQueue = vi.fn();
       const layer = {
-        spatialSkeletonState: {
+        spatialSkeletonEditSession: {
           ...makeAvailableInputReferences(),
-          ensureOptimisticEditingEngine,
+          ensureEditQueue,
         },
         getSpatiallyIndexedSkeletonLayer: () =>
           kind === "missing" ? undefined : { fragmentSource: source },
@@ -709,24 +708,22 @@ describe("skeleton edit commands", () => {
         "The active skeleton source does not support node movement.",
       );
       expect(createCommand).not.toHaveBeenCalled();
-      expect(ensureOptimisticEditingEngine).not.toHaveBeenCalled();
+      expect(ensureEditQueue).not.toHaveBeenCalled();
     },
   );
 
   it("keeps the pending message through acceptance and preserves final settlement", async () => {
     let finishPreview!: () => void;
-    let finishSave!: (result: SpatialSkeletonOptimisticEditSettlement) => void;
+    let finishSave!: (result: SpatialSkeletonEditSettlement) => void;
     const submitted = Object.assign(
       new Promise<void>((resolve) => {
         finishPreview = resolve;
       }),
       {
         acceptedByQueue: Promise.resolve(),
-        settled: new Promise<SpatialSkeletonOptimisticEditSettlement>(
-          (resolve) => {
-            finishSave = resolve;
-          },
-        ),
+        settled: new Promise<SpatialSkeletonEditSettlement>((resolve) => {
+          finishSave = resolve;
+        }),
       },
     );
     const dispose = vi.fn();
@@ -745,10 +742,10 @@ describe("skeleton edit commands", () => {
       },
     });
     const layer = {
-      spatialSkeletonState: {
+      spatialSkeletonEditSession: {
         ...makeAvailableInputReferences(),
-        ensureOptimisticEditingEngine: vi.fn(),
-        executeOptimisticEdit: () => submitted,
+        ensureEditQueue: vi.fn(),
+        executeEdit: () => submitted,
       },
       getSpatiallyIndexedSkeletonLayer: () => ({ editableSource: source }),
     };
@@ -765,7 +762,7 @@ describe("skeleton edit commands", () => {
     expect(dispose).toHaveBeenCalledOnce();
     expect(settled).not.toHaveBeenCalled();
 
-    const result = committedSpatialSkeletonOptimisticEditSettlement();
+    const result = committedSpatialSkeletonEditSettlement();
     finishSave(result);
     await expect(execution.settled).resolves.toEqual(result);
   });
@@ -809,15 +806,13 @@ describe("skeleton edit commands", () => {
         SpatialSkeletonActions.splitSkeletons,
       ),
     });
-    const executeOptimisticEdit = vi.fn(() =>
-      makeResolvedOptimisticExecution(),
-    );
+    const executeEdit = vi.fn(() => makeResolvedExecution());
     const layer = {
-      spatialSkeletonState: {
+      spatialSkeletonEditSession: {
         ...makeAvailableInputReferences(),
-        commandHistory: new SpatialSkeletonCommandHistory(),
-        ensureOptimisticEditingEngine: vi.fn(() => ({})),
-        executeOptimisticEdit,
+        commandHistory: new SpatialSkeletonUndoHistory(),
+        ensureEditQueue: vi.fn(() => ({})),
+        executeEdit,
       },
       getSpatiallyIndexedSkeletonLayer: () => ({ editableSource: source }),
     };
@@ -912,8 +907,8 @@ describe("skeleton edit commands", () => {
       await testCase.execute();
 
       expect(testCase.commandFactory.createCommand).toHaveBeenCalledTimes(1);
-      expect(executeOptimisticEdit).toHaveBeenCalledTimes(1);
-      executeOptimisticEdit.mockClear();
+      expect(executeEdit).toHaveBeenCalledTimes(1);
+      executeEdit.mockClear();
       if (testCase.pendingMessage === undefined) {
         expect(showMessage).not.toHaveBeenCalled();
       } else {
@@ -962,13 +957,12 @@ describe("skeleton edit commands", () => {
       parentNodeId: 1n,
       position: new Float32Array([2, 4, 6]),
     };
-    const { layer, spatialSkeletonState: state } =
-      makeOptimisticAddNodeTestLayer({
-        insertNode,
-        deleteNode,
-        initialNodes: [parent, child],
-        segmentId: 23n,
-      });
+    const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer({
+      insertNode,
+      deleteNode,
+      initialNodes: [parent, child],
+      segmentId: 23n,
+    });
     const execution = executeSpatialSkeletonInsertNode(layer as any, {
       skeletonId: 23n,
       parentNodeId: 1n,
@@ -981,9 +975,9 @@ describe("skeleton edit commands", () => {
       .find((node) => node.nodeId !== 1n && node.nodeId !== 2n)!;
     expect(preview).toMatchObject({ parentNodeId: 1n, position: [1, 2, 3] });
     expect(state.getCachedNode(2n)?.parentNodeId).toBe(preview.nodeId);
-    expect(
-      state.spatialSkeletonPresentation.value.provisionalNodeIds,
-    ).toContain(preview.nodeId);
+    expect(state.spatialSkeletonDisplay.value.provisionalNodeIds).toContain(
+      preview.nodeId,
+    );
     resolveInsert({ nodeId: 3n, segmentId: 23n });
     await execution.settled;
     expect(state.getCachedNode(3n)?.parentNodeId).toBe(1n);
@@ -1008,16 +1002,15 @@ describe("skeleton edit commands", () => {
   it("rejects an insertion if the admitted child is no longer attached to its parent", async () => {
     suppressStatusMessages();
     const insertNode = vi.fn();
-    const { layer, spatialSkeletonState: state } =
-      makeOptimisticAddNodeTestLayer({
-        insertNode,
-        segmentId: 23n,
-        initialNodes: [
-          { nodeId: 1n, segmentId: 23n, position: [0, 0, 0] },
-          { nodeId: 2n, segmentId: 23n, parentNodeId: 1n, position: [1, 1, 1] },
-          { nodeId: 3n, segmentId: 23n, parentNodeId: 2n, position: [2, 2, 2] },
-        ],
-      });
+    const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer({
+      insertNode,
+      segmentId: 23n,
+      initialNodes: [
+        { nodeId: 1n, segmentId: 23n, position: [0, 0, 0] },
+        { nodeId: 2n, segmentId: 23n, parentNodeId: 1n, position: [1, 1, 1] },
+        { nodeId: 3n, segmentId: 23n, parentNodeId: 2n, position: [2, 2, 2] },
+      ],
+    });
     const execution = executeSpatialSkeletonInsertNode(layer as any, {
       skeletonId: 23n,
       parentNodeId: 1n,
@@ -1116,7 +1109,7 @@ describe("skeleton edit commands", () => {
       resolveFirstAdd = resolve;
     });
     const addNode = vi.fn(() => firstAddPromise);
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       initialNodes: [parentNode],
       segmentId,
@@ -1137,12 +1130,13 @@ describe("skeleton edit commands", () => {
 
     expect(addNode).toHaveBeenCalledTimes(1);
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(segmentId)!
         .filter((node) => node.nodeId >= 2n ** 63n),
     ).toHaveLength(2);
     expect(
-      spatialSkeletonState.spatialSkeletonPresentation.value.provisionalNodeIds,
+      spatialSkeletonEditSession.spatialSkeletonDisplay.value
+        .provisionalNodeIds,
     ).toEqual([2n ** 63n + 1n, 2n ** 63n + 2n]);
 
     await undoSpatialSkeletonCommand(layer as any);
@@ -1150,27 +1144,26 @@ describe("skeleton edit commands", () => {
     expect(showTemporaryMessage).not.toHaveBeenCalled();
     expect(addNode).toHaveBeenCalledTimes(1);
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(segmentId)!
         .filter((node) => node.nodeId >= 2n ** 63n),
     ).toHaveLength(1);
     expect(
-      spatialSkeletonState.spatialSkeletonPresentation.value.provisionalNodeIds,
+      spatialSkeletonEditSession.spatialSkeletonDisplay.value
+        .provisionalNodeIds,
     ).toEqual([2n ** 63n + 1n]);
-    expect(spatialSkeletonState.getOptimisticEditQueueRecentActivity()).toEqual(
-      [
-        expect.objectContaining({
-          commandLabel: "Add node",
-          intent: "undo",
-          status: "reverted",
-        }),
-        expect.objectContaining({
-          commandLabel: "Add node",
-          intent: "execute",
-          status: "reverted",
-        }),
-      ],
-    );
+    expect(spatialSkeletonEditSession.getEditQueueRecentActivity()).toEqual([
+      expect.objectContaining({
+        commandLabel: "Add node",
+        intent: "undo",
+        status: "reverted",
+      }),
+      expect.objectContaining({
+        commandLabel: "Add node",
+        intent: "execute",
+        status: "reverted",
+      }),
+    ]);
 
     resolveFirstAdd!({
       nodeId: 2n,
@@ -1178,7 +1171,8 @@ describe("skeleton edit commands", () => {
     });
     await waitForMicrotasks(20);
     expect(
-      spatialSkeletonState.spatialSkeletonPresentation.value.provisionalNodeIds,
+      spatialSkeletonEditSession.spatialSkeletonDisplay.value
+        .provisionalNodeIds,
     ).toEqual([]);
   });
 
@@ -1202,7 +1196,7 @@ describe("skeleton edit commands", () => {
         nodeId: 3n,
         segmentId,
       });
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       initialNodes: [parentNode],
       segmentId,
@@ -1221,14 +1215,14 @@ describe("skeleton edit commands", () => {
     });
 
     await undoSpatialSkeletonCommand(layer as any);
-    expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(true);
+    expect(spatialSkeletonEditSession.commandHistory.canRedo.value).toBe(true);
     expect(addNode).toHaveBeenCalledTimes(1);
 
     await expect(redoSpatialSkeletonCommand(layer as any)).resolves.toBe(true);
-    expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canRedo.value).toBe(false);
     expect(
-      spatialSkeletonState
-        .getOptimisticEditQueueSnapshot()
+      spatialSkeletonEditSession
+        .getEditQueueRows()
         .some((entry) => entry.kind === "addNode" && entry.intent === "redo"),
     ).toBe(true);
     expect(addNode).toHaveBeenCalledTimes(1);
@@ -1240,7 +1234,7 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(40);
 
     expect(addNode).toHaveBeenCalledTimes(2);
-    expect(spatialSkeletonState.getCachedNode(3n)).toMatchObject({
+    expect(spatialSkeletonEditSession.getCachedNode(3n)).toMatchObject({
       parentNodeId: parentNode.nodeId,
       position: new Float32Array([10, 11, 12]),
     });
@@ -1263,7 +1257,7 @@ describe("skeleton edit commands", () => {
         }),
     );
     const getSkeleton = vi.fn(async () => [cloneNode(parentNode)]);
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       getSkeleton,
       initialNodes: [parentNode],
@@ -1276,7 +1270,11 @@ describe("skeleton edit commands", () => {
       positionInModelSpace: new Float32Array([7, 8, 9]),
     });
     await waitForMicrotasks();
-    replaceCachedSegmentForTest(spatialSkeletonState, segmentId, undefined);
+    replaceCachedSegmentForTest(
+      spatialSkeletonEditSession,
+      segmentId,
+      undefined,
+    );
 
     expect(addNode).toHaveBeenCalledTimes(1);
     const addCall = addNode.mock.calls[0] as unknown[] | undefined;
@@ -1312,7 +1310,7 @@ describe("skeleton edit commands", () => {
         segmentId,
       });
     const deleteNode = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       deleteNode,
       initialNodes: [parentNode],
@@ -1337,11 +1335,11 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(20);
 
     expect(deleteNode).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
-    expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canRedo.value).toBe(false);
     await expect(redoSpatialSkeletonCommand(layer as any)).resolves.toBe(false);
     expect(addNode).toHaveBeenCalledTimes(1);
-    expect(spatialSkeletonState.getCachedNode(3n)).toBeUndefined();
+    expect(spatialSkeletonEditSession.getCachedNode(3n)).toBeUndefined();
   });
 
   it.each(["split", "delete"] as const)(
@@ -1381,15 +1379,16 @@ describe("skeleton edit commands", () => {
       const addNode = vi
         .fn()
         .mockResolvedValue({ nodeId: 202n, segmentId: 11n });
-      const { layer, spatialSkeletonState: state } =
-        makeOptimisticAddNodeTestLayer({
+      const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer(
+        {
           initialNodes: nodes,
           segmentId: 11n,
           splitSkeleton,
           deleteNode,
           mergeSkeletons,
           addNode,
-        });
+        },
+      );
       const original =
         kind === "split"
           ? executeSpatialSkeletonSplit(layer as any, nodes[1])
@@ -1417,7 +1416,7 @@ describe("skeleton edit commands", () => {
         "committed",
         "committed",
       ]);
-      expect(state.getOptimisticEditFatalState()).toBeUndefined();
+      expect(state.getReloadRequired()).toBeUndefined();
       expect(state.commandHistory.canUndo.value).toBe(true);
       expect(state.commandHistory.canRedo.value).toBe(false);
       if (kind === "split") {
@@ -1436,9 +1435,7 @@ describe("skeleton edit commands", () => {
         ).toEqual([101n]);
       }
       expect(
-        state
-          .getOptimisticEditQueueRecentActivity()
-          .map(({ status }) => status),
+        state.getEditQueueRecentActivity().map(({ status }) => status),
       ).toEqual(["saved", "saved", "saved"]);
 
       const nextUndo = undoSpatialSkeletonCommand(layer as any);
@@ -1476,13 +1473,14 @@ describe("skeleton edit commands", () => {
         .fn()
         .mockReturnValueOnce(firstDelete.promise)
         .mockResolvedValue(undefined);
-      const { layer, spatialSkeletonState: state } =
-        makeOptimisticAddNodeTestLayer({
+      const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer(
+        {
           initialNodes: [parent],
           segmentId: 11n,
           addNode,
           deleteNode,
-        });
+        },
+      );
       const add = executeSpatialSkeletonAddNode(layer as any, {
         skeletonId: newRoot ? 0n : 11n,
         parentNodeId: newRoot ? undefined : 101n,
@@ -1527,14 +1525,10 @@ describe("skeleton edit commands", () => {
         parentNodeId: newRoot ? undefined : 101n,
         position: [4, 5, 6],
       });
-      expect(state.getOptimisticEditFatalState()).toBeUndefined();
+      expect(state.getReloadRequired()).toBeUndefined();
+      expect(state.spatialSkeletonDisplay.value.provisionalNodeIds).toEqual([]);
       expect(
-        state.spatialSkeletonPresentation.value.provisionalNodeIds,
-      ).toEqual([]);
-      expect(
-        state
-          .getOptimisticEditQueueRecentActivity()
-          .map(({ status }) => status),
+        state.getEditQueueRecentActivity().map(({ status }) => status),
       ).toEqual(["saved", "saved", "saved"]);
 
       const nextUndo = undoSpatialSkeletonCommand(layer as any);
@@ -1567,7 +1561,7 @@ describe("skeleton edit commands", () => {
         segmentId,
       });
     const deleteNode = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       deleteNode,
       initialNodes: [parentNode],
@@ -1594,9 +1588,9 @@ describe("skeleton edit commands", () => {
 
     expect(deleteNode).not.toHaveBeenCalled();
     expect(addNode).toHaveBeenCalledTimes(1);
-    expect(spatialSkeletonState.getCachedNode(3n)).toBeUndefined();
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
-    expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(false);
+    expect(spatialSkeletonEditSession.getCachedNode(3n)).toBeUndefined();
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canRedo.value).toBe(false);
   });
 
   it("preserves temporary parent identity across coalesced add-chain redo", async () => {
@@ -1623,7 +1617,7 @@ describe("skeleton edit commands", () => {
         nodeId: 4n,
         segmentId,
       });
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       initialNodes: [rootNode],
       segmentId,
@@ -1640,7 +1634,7 @@ describe("skeleton edit commands", () => {
       parentNodeId: rootNode.nodeId,
       positionInModelSpace: new Float32Array([7, 8, 9]),
     });
-    const firstParentPreview = spatialSkeletonState
+    const firstParentPreview = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)
       ?.find((node) => node.position[0] === 7);
     expect(firstParentPreview).toBeDefined();
@@ -1657,10 +1651,10 @@ describe("skeleton edit commands", () => {
     const redoChild = redoSpatialSkeletonCommand(layer as any);
     await expect(redoChild).resolves.toBe(true);
 
-    const redoneParentPreview = spatialSkeletonState
+    const redoneParentPreview = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)
       ?.find((node) => node.position[0] === 7);
-    const redoneChildPreview = spatialSkeletonState
+    const redoneChildPreview = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)
       ?.find((node) => node.position[0] === 10);
     expect(redoneParentPreview).toBeDefined();
@@ -1677,10 +1671,10 @@ describe("skeleton edit commands", () => {
     await redoChild.settled;
 
     expect(addNode).toHaveBeenCalledTimes(3);
-    expect(spatialSkeletonState.getCachedNode(3n)).toMatchObject({
+    expect(spatialSkeletonEditSession.getCachedNode(3n)).toMatchObject({
       parentNodeId: rootNode.nodeId,
     });
-    expect(spatialSkeletonState.getCachedNode(4n)).toMatchObject({
+    expect(spatialSkeletonEditSession.getCachedNode(4n)).toMatchObject({
       parentNodeId: 3n,
     });
   });
@@ -1703,7 +1697,7 @@ describe("skeleton edit commands", () => {
     });
     const addNode = vi.fn(() => addPromise);
     const deleteNode = vi.fn().mockResolvedValue({});
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       deleteNode,
       initialNodes: [parentNode],
@@ -1725,7 +1719,7 @@ describe("skeleton edit commands", () => {
     await undoSpatialSkeletonCommand(layer as any);
     expect(requestOptions?.signal).toBeUndefined();
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(segmentId)!
         .some((node) => node.nodeId >= 2n ** 63n),
     ).toBe(false);
@@ -1738,7 +1732,7 @@ describe("skeleton edit commands", () => {
 
     expect(deleteNode).toHaveBeenCalledWith(2n);
     expect(showTemporaryMessage).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(false);
   });
 
   it("requires reload without an inverse POST when a disposed add later commits", async () => {
@@ -1757,7 +1751,7 @@ describe("skeleton edit commands", () => {
     });
     const addNode = vi.fn(() => addPromise);
     const deleteNode = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       deleteNode,
       initialNodes: [parentNode],
@@ -1771,8 +1765,8 @@ describe("skeleton edit commands", () => {
     });
     await forwardExecution;
     await waitForMicrotasks();
-    const queue = (spatialSkeletonState as any).optimisticEditQueue;
-    expect(spatialSkeletonState.clearRuntimeState()).toBe(true);
+    const queue = (spatialSkeletonEditSession as any).editQueue;
+    expect(spatialSkeletonEditSession.clearRuntimeState()).toBe(true);
     const disposal = queue.dispose();
 
     resolveAdd({
@@ -1784,8 +1778,8 @@ describe("skeleton edit commands", () => {
 
     expect(deleteNode).not.toHaveBeenCalled();
     expect(showErrorMessage).not.toHaveBeenCalled();
-    expectReloadRequired(spatialSkeletonState, "committed");
-    expect(spatialSkeletonState.canUndoOptimisticEdit()).toBe(false);
+    expectReloadRequired(spatialSkeletonEditSession, "committed");
+    expect(spatialSkeletonEditSession.canUndoEdit()).toBe(false);
 
     expect(() =>
       executeSpatialSkeletonAddNode(layer as any, {
@@ -1793,7 +1787,7 @@ describe("skeleton edit commands", () => {
         parentNodeId: parentNode.nodeId,
         positionInModelSpace: new Float32Array([10, 11, 12]),
       }),
-    ).toThrow(SpatialSkeletonOptimisticReloadRequiredError);
+    ).toThrow(SpatialSkeletonReloadRequiredError);
     expect(addNode).toHaveBeenCalledTimes(1);
 
     let forwardSettled = false;
@@ -1825,8 +1819,8 @@ describe("skeleton edit commands", () => {
         segmentId,
       });
     const deleteNode = vi.fn();
-    const { layer, skeletonLayer, spatialSkeletonState } =
-      makeOptimisticAddNodeTestLayer({
+    const { layer, skeletonLayer, spatialSkeletonEditSession } =
+      makeAddNodeTestLayer({
         addNode,
         deleteNode,
         initialNodes: [parentNode],
@@ -1841,19 +1835,19 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks();
 
     expect(addNode).toHaveBeenCalledTimes(1);
-    const retiredTempNode = spatialSkeletonState
+    const retiredTempNode = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)!
       .find((node) => node.nodeId >= 2n ** 63n);
     expect(retiredTempNode).toBeDefined();
     const retiredTempNodeId = retiredTempNode!.nodeId;
 
-    const oldQueue = (spatialSkeletonState as any).optimisticEditQueue;
-    expect(spatialSkeletonState.clearRuntimeState()).toBe(true);
+    const oldQueue = (spatialSkeletonEditSession as any).editQueue;
+    expect(spatialSkeletonEditSession.clearRuntimeState()).toBe(true);
     const disposal = oldQueue.dispose();
     expect(
-      spatialSkeletonState.getCachedNode(retiredTempNodeId),
+      spatialSkeletonEditSession.getCachedNode(retiredTempNodeId),
     ).toBeUndefined();
-    seedCachedNodesForTest(spatialSkeletonState, [parentNode]);
+    seedCachedNodesForTest(spatialSkeletonEditSession, [parentNode]);
     const replacementCommands = makeCatmaidEditCommands(
       makeCatmaidClient({ addNode, deleteNode }),
     );
@@ -1879,7 +1873,7 @@ describe("skeleton edit commands", () => {
     await replacement;
     await waitForMicrotasks(5);
 
-    const replacementTempNodeId = spatialSkeletonState
+    const replacementTempNodeId = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)!
       .find((node) => node.nodeId >= 2n ** 63n)!.nodeId;
 
@@ -1887,7 +1881,7 @@ describe("skeleton edit commands", () => {
     // POST cannot pass the disposed queue's still-active source lane.
     expect(addNode).toHaveBeenCalledTimes(1);
     expect(
-      spatialSkeletonState.getCachedNode(replacementTempNodeId),
+      spatialSkeletonEditSession.getCachedNode(replacementTempNodeId),
     ).toMatchObject({
       parentNodeId: parentNode.nodeId,
       position: new Float32Array([10, 11, 12]),
@@ -1902,8 +1896,8 @@ describe("skeleton edit commands", () => {
 
     expect(deleteNode).not.toHaveBeenCalled();
     expect(addNode).toHaveBeenCalledTimes(1);
-    expectReloadRequired(spatialSkeletonState, "committed");
-    expect(spatialSkeletonState.getCachedNode(2n)).toBeUndefined();
+    expectReloadRequired(spatialSkeletonEditSession, "committed");
+    expect(spatialSkeletonEditSession.getCachedNode(2n)).toBeUndefined();
   });
 
   it("runs replacement writes FIFO after a disposed request is definitively rejected", async () => {
@@ -1937,7 +1931,7 @@ describe("skeleton edit commands", () => {
         segmentId: secondSegmentId,
       });
     const deleteNode = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       deleteNode,
       initialNodes: [firstParent, secondParent],
@@ -1953,8 +1947,11 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks();
     expect(addNode).toHaveBeenCalledTimes(1);
 
-    spatialSkeletonState.clearRuntimeState();
-    seedCachedNodesForTest(spatialSkeletonState, [firstParent, secondParent]);
+    spatialSkeletonEditSession.clearRuntimeState();
+    seedCachedNodesForTest(spatialSkeletonEditSession, [
+      firstParent,
+      secondParent,
+    ]);
 
     await executeSpatialSkeletonAddNode(layer as any, {
       skeletonId: firstSegmentId,
@@ -1970,15 +1967,15 @@ describe("skeleton edit commands", () => {
 
     // Both replacement intents already own exact local previews, but neither
     // may cross the CATMAID transport boundary while the detached source-wide
-    // workflow lease remains active.
+    // plan lease remains active.
     expect(addNode).toHaveBeenCalledTimes(1);
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(firstSegmentId)
         ?.some((node) => node.parentNodeId === firstParent.nodeId),
     ).toBe(true);
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(secondSegmentId)
         ?.some((node) => node.parentNodeId === secondParent.nodeId),
     ).toBe(true);
@@ -1996,11 +1993,11 @@ describe("skeleton edit commands", () => {
     expect(addNode).toHaveBeenCalledTimes(3);
     expect(addNode.mock.calls[1]).toEqual([10, 11, 12, firstParent.nodeId]);
     expect(addNode.mock.calls[2]).toEqual([13, 14, 15, secondParent.nodeId]);
-    expect(spatialSkeletonState.getCachedNode(3n)).toMatchObject({
+    expect(spatialSkeletonEditSession.getCachedNode(3n)).toMatchObject({
       segmentId: firstSegmentId,
       parentNodeId: firstParent.nodeId,
     });
-    expect(spatialSkeletonState.getCachedNode(30n)).toMatchObject({
+    expect(spatialSkeletonEditSession.getCachedNode(30n)).toMatchObject({
       segmentId: secondSegmentId,
       parentNodeId: secondParent.nodeId,
     });
@@ -2023,7 +2020,7 @@ describe("skeleton edit commands", () => {
       .fn()
       .mockReturnValueOnce(oldMove)
       .mockResolvedValueOnce({});
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       moveNode,
       initialNodes: [node],
       segmentId,
@@ -2036,8 +2033,8 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks();
     expect(moveNode).toHaveBeenCalledTimes(1);
 
-    spatialSkeletonState.clearRuntimeState();
-    seedCachedNodesForTest(spatialSkeletonState, [node]);
+    spatialSkeletonEditSession.clearRuntimeState();
+    seedCachedNodesForTest(spatialSkeletonEditSession, [node]);
     await executeSpatialSkeletonMoveNode(layer as any, {
       node,
       nextPositionInModelSpace: new Float32Array([7, 8, 9]),
@@ -2055,7 +2052,7 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(20);
 
     // The explicit response proves non-commit, so the replacement POST may
-    // drain immediately without an inverse mutation.
+    // drain immediately without an inverse edit request.
     expect(moveNode).toHaveBeenCalledTimes(2);
     expect(moveNode.mock.calls[1]).toEqual([node.nodeId, 7, 8, 9]);
   });
@@ -2081,7 +2078,7 @@ describe("skeleton edit commands", () => {
     const getSkeleton = vi.fn(async () => [
       { ...node, position: new Float32Array(node.position) },
     ]);
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       moveNode,
       getSkeleton,
       initialNodes: [node],
@@ -2093,8 +2090,8 @@ describe("skeleton edit commands", () => {
       nextPositionInModelSpace: new Float32Array([4, 5, 6]),
     });
     await waitForMicrotasks();
-    spatialSkeletonState.clearRuntimeState();
-    seedCachedNodesForTest(spatialSkeletonState, [node]);
+    spatialSkeletonEditSession.clearRuntimeState();
+    seedCachedNodesForTest(spatialSkeletonEditSession, [node]);
     await executeSpatialSkeletonMoveNode(layer as any, {
       node,
       nextPositionInModelSpace: new Float32Array([7, 8, 9]),
@@ -2112,12 +2109,12 @@ describe("skeleton edit commands", () => {
 
     expect(moveNode).toHaveBeenCalledTimes(1);
     expect(showErrorMessage).not.toHaveBeenCalled();
-    expectReloadRequired(spatialSkeletonState, "indeterminate");
+    expectReloadRequired(spatialSkeletonEditSession, "indeterminate");
     expect(getSkeleton).not.toHaveBeenCalled();
-    spatialSkeletonState.dispose();
+    spatialSkeletonEditSession.dispose();
   });
 
-  it("retains a visible global mutation fence after an ambiguous move failure", async () => {
+  it("retains a visible global edit request fence after an ambiguous move failure", async () => {
     suppressStatusMessages();
     const showErrorMessage = vi.mocked(StatusMessage.showErrorMessage);
 
@@ -2138,7 +2135,7 @@ describe("skeleton edit commands", () => {
     const getSkeleton = vi.fn(async () => [
       { ...node, position: new Float32Array(node.position) },
     ]);
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       moveNode,
       getSkeleton,
       initialNodes: [node],
@@ -2153,7 +2150,9 @@ describe("skeleton edit commands", () => {
 
     expect(moveNode).toHaveBeenCalledTimes(1);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual([4, 5, 6]);
 
     rejectFirstMove(
@@ -2166,16 +2165,18 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(20);
 
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual(Array.from(node.position));
     expect(showErrorMessage).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getOptimisticEditFatalState()).toEqual(
+    expect(spatialSkeletonEditSession.getReloadRequired()).toEqual(
       expect.objectContaining({
         reason: "authority-indeterminate",
         authority: "indeterminate",
       }),
     );
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual([
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual([
       expect.objectContaining({
         kind: "moveNode",
         lifecycle: expect.objectContaining({
@@ -2188,36 +2189,40 @@ describe("skeleton edit commands", () => {
 
     expect(() =>
       executeSpatialSkeletonMoveNode(layer as any, {
-        node: spatialSkeletonState.getCachedNode(node.nodeId)!,
+        node: spatialSkeletonEditSession.getCachedNode(node.nodeId)!,
         nextPositionInModelSpace: new Float32Array([7, 8, 9]),
       }),
-    ).toThrow(SpatialSkeletonOptimisticReloadRequiredError);
+    ).toThrow(SpatialSkeletonReloadRequiredError);
 
-    // Fatal admission is rejected before a second speculative frame or POST.
+    // Reload-required admission is rejected before a second speculative frame or POST.
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual(Array.from(node.position));
     expect(moveNode).toHaveBeenCalledTimes(1);
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual([
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual([
       expect.objectContaining({
         kind: "moveNode",
         lifecycle: expect.objectContaining({ authority: "indeterminate" }),
       }),
     ]);
-    expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(true);
+    expect(spatialSkeletonEditSession.hasUnconfirmedEdits()).toBe(true);
 
     expect(getSkeleton).not.toHaveBeenCalled();
     expect(moveNode).toHaveBeenCalledTimes(1);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual(Array.from(node.position));
     expect(
-      spatialSkeletonState
-        .getOptimisticEditQueueSnapshot()
+      spatialSkeletonEditSession
+        .getEditQueueRows()
         .some((entry) => entry.lifecycle.authority === "indeterminate"),
     ).toBe(true);
 
-    spatialSkeletonState.dispose();
+    spatialSkeletonEditSession.dispose();
   });
 
   it("requires a page reload when an outcome-unknown root add has no authoritative skeleton id", async () => {
@@ -2231,7 +2236,7 @@ describe("skeleton edit commands", () => {
         }),
     );
     const getSkeleton = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       getSkeleton,
       initialNodes: [],
@@ -2254,21 +2259,21 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(20);
 
     expect(showErrorMessage).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getOptimisticEditFatalState()).toEqual(
+    expect(spatialSkeletonEditSession.getReloadRequired()).toEqual(
       expect.objectContaining({
         reason: "authority-indeterminate",
         authority: "indeterminate",
       }),
     );
     expect(getSkeleton).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual([
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual([
       expect.objectContaining({
         kind: "addNode",
         lifecycle: expect.objectContaining({ authority: "indeterminate" }),
       }),
     ]);
 
-    spatialSkeletonState.dispose();
+    spatialSkeletonEditSession.dispose();
   });
 
   it("requires a page reload when an outcome-unknown split has no new skeleton id", async () => {
@@ -2295,7 +2300,7 @@ describe("skeleton edit commands", () => {
         }),
     );
     const getSkeleton = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       splitSkeleton,
       getSkeleton,
       initialNodes: [root, child],
@@ -2314,16 +2319,16 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(20);
 
     expect(showErrorMessage).not.toHaveBeenCalled();
-    expectReloadRequired(spatialSkeletonState, "indeterminate");
+    expectReloadRequired(spatialSkeletonEditSession, "indeterminate");
     expect(getSkeleton).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual([
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual([
       expect.objectContaining({
         kind: "splitSkeleton",
         lifecycle: expect.objectContaining({ authority: "indeterminate" }),
       }),
     ]);
 
-    spatialSkeletonState.dispose();
+    spatialSkeletonEditSession.dispose();
   });
 
   it("does not adopt or reverse a late commit after runtime state is cleared", async () => {
@@ -2343,7 +2348,7 @@ describe("skeleton edit commands", () => {
         }),
     );
     const deleteNode = vi.fn().mockResolvedValue({});
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       deleteNode,
       initialNodes: [parentNode],
@@ -2356,12 +2361,12 @@ describe("skeleton edit commands", () => {
       positionInModelSpace: new Float32Array([7, 8, 9]),
     });
     await waitForMicrotasks();
-    expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(true);
+    expect(spatialSkeletonEditSession.hasUnconfirmedEdits()).toBe(true);
 
-    const oldQueue = (spatialSkeletonState as any).optimisticEditQueue;
-    expect(spatialSkeletonState.clearRuntimeState()).toBe(true);
+    const oldQueue = (spatialSkeletonEditSession as any).editQueue;
+    expect(spatialSkeletonEditSession.clearRuntimeState()).toBe(true);
     const disposal = oldQueue.dispose();
-    expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(false);
+    expect(spatialSkeletonEditSession.hasUnconfirmedEdits()).toBe(false);
 
     resolveAdd!({
       nodeId: 2n,
@@ -2370,8 +2375,8 @@ describe("skeleton edit commands", () => {
     await disposal;
 
     expect(deleteNode).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getCachedNode(2n)).toBeUndefined();
-    expectReloadRequired(spatialSkeletonState, "committed");
+    expect(spatialSkeletonEditSession.getCachedNode(2n)).toBeUndefined();
+    expectReloadRequired(spatialSkeletonEditSession, "committed");
   });
 
   it("warns without aborting or rolling back when an in-flight optimistic edit takes too long", async () => {
@@ -2394,7 +2399,7 @@ describe("skeleton edit commands", () => {
         resolveAdd = resolve;
       });
       const addNode = vi.fn(() => addPromise);
-      const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
         addNode,
         initialNodes: [parentNode],
         segmentId,
@@ -2412,15 +2417,17 @@ describe("skeleton edit commands", () => {
         addNode.mock.calls[0] as unknown[] | undefined
       )?.[6] as { signal?: AbortSignal } | undefined;
       expect(requestOptions?.signal).toBeUndefined();
-      expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(true);
+      expect(spatialSkeletonEditSession.hasUnconfirmedEdits()).toBe(true);
 
       vi.advanceTimersByTime(30_000);
 
       expect(showErrorMessage).toHaveBeenCalledWith(
-        "CATMAID has not confirmed the optimistic skeleton edit yet. The server mutation lane is stalled, but you may continue previewing independent edits while the request remains in order.",
+        "CATMAID has not confirmed the optimistic skeleton edit yet. The server edit request lane is stalled, but you may continue previewing independent edits while the request remains in order.",
       );
-      expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(true);
-      expect(spatialSkeletonState.getCachedSegmentNodes(segmentId)).toEqual(
+      expect(spatialSkeletonEditSession.hasUnconfirmedEdits()).toBe(true);
+      expect(
+        spatialSkeletonEditSession.getCachedSegmentNodes(segmentId),
+      ).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ nodeId: 2n ** 63n + 1n }),
         ]),
@@ -2452,7 +2459,7 @@ describe("skeleton edit commands", () => {
       rejectFirstAdd = reject;
     });
     const addNode = vi.fn(() => firstAddPromise);
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       initialNodes: [parentNode],
       segmentId,
@@ -2465,33 +2472,33 @@ describe("skeleton edit commands", () => {
     });
     await waitForMicrotasks();
 
-    const optimisticParent = spatialSkeletonState
+    const previewParent = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)!
       .find((node) => node.nodeId >= 2n ** 63n);
-    expect(optimisticParent).toBeDefined();
+    expect(previewParent).toBeDefined();
 
     await executeSpatialSkeletonAddNode(layer as any, {
       skeletonId: segmentId,
-      parentNodeId: optimisticParent!.nodeId,
+      parentNodeId: previewParent!.nodeId,
       positionInModelSpace: new Float32Array([10, 11, 12]),
     });
     await waitForMicrotasks();
 
-    const optimisticChild = spatialSkeletonState
+    const previewChild = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)!
-      .find((node) => node.parentNodeId === optimisticParent!.nodeId);
-    expect(optimisticChild).toBeDefined();
+      .find((node) => node.parentNodeId === previewParent!.nodeId);
+    expect(previewChild).toBeDefined();
 
     await executeSpatialSkeletonAddNode(layer as any, {
       skeletonId: segmentId,
-      parentNodeId: optimisticChild!.nodeId,
+      parentNodeId: previewChild!.nodeId,
       positionInModelSpace: new Float32Array([13, 14, 15]),
     });
     await waitForMicrotasks();
 
     expect(addNode).toHaveBeenCalledTimes(1);
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(segmentId)!
         .filter((node) => node.nodeId >= 2n ** 63n),
     ).toHaveLength(3);
@@ -2500,10 +2507,10 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(5);
 
     expect(showErrorMessage).not.toHaveBeenCalled();
-    expectReloadRequired(spatialSkeletonState, "indeterminate");
+    expectReloadRequired(spatialSkeletonEditSession, "indeterminate");
     expect(addNode).toHaveBeenCalledTimes(1);
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(segmentId)!
         .some((node) => node.nodeId >= 2n ** 63n),
     ).toBe(false);
@@ -2524,7 +2531,7 @@ describe("skeleton edit commands", () => {
     });
     const addNode = vi.fn(() => addPromise);
     const moveNode = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       moveNode,
       initialNodes: [parentNode],
@@ -2538,13 +2545,13 @@ describe("skeleton edit commands", () => {
     });
     await waitForMicrotasks();
 
-    const optimisticNode = spatialSkeletonState
+    const previewNode = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)!
       .find((node) => node.nodeId >= 2n ** 63n);
-    expect(optimisticNode).toBeDefined();
+    expect(previewNode).toBeDefined();
 
     await executeSpatialSkeletonMoveNode(layer as any, {
-      node: optimisticNode!,
+      node: previewNode!,
       nextPositionInModelSpace: new Float32Array([10, 11, 12]),
     });
     await waitForMicrotasks();
@@ -2552,7 +2559,7 @@ describe("skeleton edit commands", () => {
     expect(moveNode).not.toHaveBeenCalled();
     expect(
       Array.from(
-        spatialSkeletonState.getCachedNode(optimisticNode!.nodeId)!.position,
+        spatialSkeletonEditSession.getCachedNode(previewNode!.nodeId)!.position,
       ),
     ).toEqual([10, 11, 12]);
 
@@ -2561,7 +2568,7 @@ describe("skeleton edit commands", () => {
 
     expect(moveNode).not.toHaveBeenCalled();
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(segmentId)!
         .some((node) => node.nodeId >= 2n ** 63n),
     ).toBe(false);
@@ -2580,12 +2587,13 @@ describe("skeleton edit commands", () => {
       const updateDescription = vi.fn(async (_id, description: string) => ({
         description: description === "before" ? description : undefined,
       }));
-      const { layer, spatialSkeletonState: state } =
-        makeOptimisticAddNodeTestLayer({
+      const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer(
+        {
           initialNodes: [node],
           segmentId: 23n,
           updateDescription,
-        });
+        },
+      );
       await executeSpatialSkeletonNodeDescriptionUpdate(layer as any, {
         node,
         nextDescription: input,
@@ -2626,14 +2634,13 @@ describe("skeleton edit commands", () => {
       )
       .mockResolvedValue({});
     const addNode = vi.fn();
-    const { layer, spatialSkeletonState: state } =
-      makeOptimisticAddNodeTestLayer({
-        updateDescription,
-        moveNode,
-        addNode,
-        initialNodes: [node],
-        segmentId,
-      });
+    const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer({
+      updateDescription,
+      moveNode,
+      addNode,
+      initialNodes: [node],
+      segmentId,
+    });
     const description = executeSpatialSkeletonNodeDescriptionUpdate(
       layer as any,
       {
@@ -2668,9 +2675,9 @@ describe("skeleton edit commands", () => {
     expect(state.getCachedNode(1n)!.description).toBe("checked");
     expect(addNode).not.toHaveBeenCalled();
     expect(
-      state.getOptimisticEditQueueRecentActivity().map(({ status }) => status),
+      state.getEditQueueRecentActivity().map(({ status }) => status),
     ).toEqual(["not-saved", "not-saved", "saved"]);
-    expect(state.hasUnconfirmedOptimisticEdits()).toBe(false);
+    expect(state.hasUnconfirmedEdits()).toBe(false);
     expect(state.commandHistory.canUndo.value).toBe(true);
     expect(state.commandHistory.canRedo.value).toBe(false);
 
@@ -2703,7 +2710,7 @@ describe("skeleton edit commands", () => {
           rejectFirstMove = reject;
         }),
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       moveNode,
       initialNodes: [node],
       segmentId,
@@ -2714,9 +2721,11 @@ describe("skeleton edit commands", () => {
       node,
       nextPositionInModelSpace: new Float32Array([4, 5, 6]),
     });
-    const projectedNode = spatialSkeletonState.getCachedNode(node.nodeId)!;
+    const previewedNode = spatialSkeletonEditSession.getCachedNode(
+      node.nodeId,
+    )!;
     await executeSpatialSkeletonMoveNode(layer as any, {
-      node: projectedNode,
+      node: previewedNode,
       nextPositionInModelSpace: new Float32Array([7, 8, 9]),
     });
     await waitForMicrotasks();
@@ -2731,28 +2740,26 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(20);
 
     expect(moveNode).toHaveBeenCalledTimes(1);
-    expect(spatialSkeletonState.getOptimisticEditQueueRecentActivity()).toEqual(
-      [
-        expect.objectContaining({
-          commandLabel: "Move node",
-          status: "not-saved",
-          reason: "Canceled because an earlier edit was not saved.",
-          authorityReason: "not-started",
-        }),
-        expect.objectContaining({
-          commandLabel: "Move node",
-          status: "not-saved",
-          reason: "Request failed with HTTP 409 (Conflict).",
-          canceledLaterIntentCount: 1,
-        }),
-      ],
-    );
+    expect(spatialSkeletonEditSession.getEditQueueRecentActivity()).toEqual([
+      expect.objectContaining({
+        commandLabel: "Move node",
+        status: "not-saved",
+        reason: "Canceled because an earlier edit was not saved.",
+        authorityReason: "not-started",
+      }),
+      expect.objectContaining({
+        commandLabel: "Move node",
+        status: "not-saved",
+        reason: "Request failed with HTTP 409 (Conflict).",
+        canceledLaterIntentCount: 1,
+      }),
+    ]);
     expect(showErrorMessage).toHaveBeenCalledWith(
       "CATMAID rejected node movement. The optimistic preview was removed. Request failed with HTTP 409 (Conflict). 1 later queued edit was also canceled.",
     );
-    expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(false);
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
-    expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(false);
+    expect(spatialSkeletonEditSession.hasUnconfirmedEdits()).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canRedo.value).toBe(false);
     detachAuthorityNotifications();
   });
 
@@ -2771,7 +2778,7 @@ describe("skeleton edit commands", () => {
           rejectMove = reject;
         }),
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       moveNode,
       initialNodes: [node],
       segmentId,
@@ -2793,16 +2800,18 @@ describe("skeleton edit commands", () => {
       await execution;
       await waitForMicrotasks();
       expect(
-        Array.from(spatialSkeletonState.getCachedNode(1n)!.position),
+        Array.from(spatialSkeletonEditSession.getCachedNode(1n)!.position),
       ).toEqual([4, 5, 6]);
       rejectMove(error);
       await execution.settled;
       await waitForMicrotasks(10);
       expect(
-        Array.from(spatialSkeletonState.getCachedNode(1n)!.position),
+        Array.from(spatialSkeletonEditSession.getCachedNode(1n)!.position),
       ).toEqual([1, 2, 3]);
-      expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
-      expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(false);
+      expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(
+        false,
+      );
+      expect(spatialSkeletonEditSession.hasUnconfirmedEdits()).toBe(false);
       expect(StatusMessage.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining(instructions),
       );
@@ -2835,7 +2844,7 @@ describe("skeleton edit commands", () => {
           rejectMove = reject;
         }),
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       moveNode,
       initialNodes: [parentNode],
@@ -2847,26 +2856,26 @@ describe("skeleton edit commands", () => {
       parentNodeId: parentNode.nodeId,
       positionInModelSpace: new Float32Array([7, 8, 9]),
     });
-    const optimisticNode = spatialSkeletonState
+    const previewNode = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)!
       .find((node) => node.nodeId >= 2n ** 63n)!;
-    spatialSkeletonState.setPendingNodePosition(
-      optimisticNode.nodeId,
+    spatialSkeletonEditSession.setPendingNodePosition(
+      previewNode.nodeId,
       [8, 8, 8],
     );
 
     await executeSpatialSkeletonMoveNode(layer as any, {
-      node: optimisticNode,
+      node: previewNode,
       nextPositionInModelSpace: new Float32Array([10, 11, 12]),
     });
     expect(
       Array.from(
-        spatialSkeletonState.getCachedNode(optimisticNode.nodeId)!.position,
+        spatialSkeletonEditSession.getCachedNode(previewNode.nodeId)!.position,
       ),
     ).toEqual([10, 11, 12]);
     expect(
       Array.from(
-        spatialSkeletonState.getPendingNodePosition(optimisticNode.nodeId)!,
+        spatialSkeletonEditSession.getPendingNodePosition(previewNode.nodeId)!,
       ),
     ).toEqual([8, 8, 8]);
     expect(moveNode).not.toHaveBeenCalled();
@@ -2878,13 +2887,17 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(12);
 
     expect(
-      spatialSkeletonState.getPendingNodePosition(optimisticNode.nodeId),
+      spatialSkeletonEditSession.getPendingNodePosition(previewNode.nodeId),
     ).toBeUndefined();
     expect(
-      Array.from(spatialSkeletonState.getPendingNodePosition(realNodeId)!),
+      Array.from(
+        spatialSkeletonEditSession.getPendingNodePosition(realNodeId)!,
+      ),
     ).toEqual([8, 8, 8]);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(realNodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(realNodeId)!.position,
+      ),
     ).toEqual([10, 11, 12]);
     expect(moveNode).toHaveBeenCalledWith(realNodeId, 10, 11, 12);
 
@@ -2897,14 +2910,18 @@ describe("skeleton edit commands", () => {
     );
     await waitForMicrotasks(12);
     expect(
-      Array.from(spatialSkeletonState.getPendingNodePosition(realNodeId)!),
+      Array.from(
+        spatialSkeletonEditSession.getPendingNodePosition(realNodeId)!,
+      ),
     ).toEqual([8, 8, 8]);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(realNodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(realNodeId)!.position,
+      ),
     ).toEqual([7, 8, 9]);
-    expect(spatialSkeletonState.clearPendingNodePositions()).toBe(true);
+    expect(spatialSkeletonEditSession.clearPendingNodePositions()).toBe(true);
     expect(
-      spatialSkeletonState.getPendingNodePosition(realNodeId),
+      spatialSkeletonEditSession.getPendingNodePosition(realNodeId),
     ).toBeUndefined();
   });
 
@@ -2923,7 +2940,7 @@ describe("skeleton edit commands", () => {
     });
     const addNode = vi.fn(() => addPromise);
     const deleteNode = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       deleteNode,
       initialNodes: [parentNode],
@@ -2937,17 +2954,17 @@ describe("skeleton edit commands", () => {
     });
     await waitForMicrotasks();
 
-    const optimisticNode = spatialSkeletonState
+    const previewNode = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)!
       .find((node) => node.nodeId >= 2n ** 63n);
-    expect(optimisticNode).toBeDefined();
+    expect(previewNode).toBeDefined();
 
-    await executeSpatialSkeletonDeleteNode(layer as any, optimisticNode!);
+    await executeSpatialSkeletonDeleteNode(layer as any, previewNode!);
     await waitForMicrotasks();
 
     expect(deleteNode).not.toHaveBeenCalled();
     expect(
-      spatialSkeletonState.getCachedNode(optimisticNode!.nodeId),
+      spatialSkeletonEditSession.getCachedNode(previewNode!.nodeId),
     ).toBeUndefined();
 
     rejectAdd!(new Error("server rejected"));
@@ -2955,7 +2972,7 @@ describe("skeleton edit commands", () => {
 
     expect(deleteNode).not.toHaveBeenCalled();
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(segmentId)!
         .some((node) => node.nodeId >= 2n ** 63n),
     ).toBe(false);
@@ -2976,7 +2993,7 @@ describe("skeleton edit commands", () => {
       segmentId,
     });
     const deleteNode = vi.fn().mockResolvedValue({});
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       deleteNode,
       initialNodes: [parentNode],
@@ -2990,7 +3007,7 @@ describe("skeleton edit commands", () => {
     });
     await waitForMicrotasks(5);
 
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual([
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual([
       expect.objectContaining({
         kind: "addNode",
         lifecycle: expect.objectContaining({
@@ -3000,19 +3017,19 @@ describe("skeleton edit commands", () => {
         }),
       }),
     ]);
-    expect(spatialSkeletonState.getCachedNode(2n)).toMatchObject({
+    expect(spatialSkeletonEditSession.getCachedNode(2n)).toMatchObject({
       nodeId: 2n,
       segmentId,
       parentNodeId: parentNode.nodeId,
     });
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(true);
     expect(showTemporaryMessage).not.toHaveBeenCalled();
 
     await undoSpatialSkeletonCommand(layer as any);
     await waitForMicrotasks();
 
     expect(deleteNode).toHaveBeenCalledWith(2n);
-    expect(spatialSkeletonState.getCachedNode(2n)).toBeUndefined();
+    expect(spatialSkeletonEditSession.getCachedNode(2n)).toBeUndefined();
   });
 
   it("previews and reconciles root add-node when optimistic edits are enabled", async () => {
@@ -3026,7 +3043,7 @@ describe("skeleton edit commands", () => {
         resolveAdd = resolve;
       }),
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       initialNodes: [],
       segmentId,
@@ -3039,12 +3056,13 @@ describe("skeleton edit commands", () => {
     });
     await waitForMicrotasks();
 
-    const pendingEntry =
-      spatialSkeletonState.getOptimisticEditQueueSnapshot()[0];
+    const pendingEntry = spatialSkeletonEditSession.getEditQueueRows()[0];
     expect(pendingEntry).toMatchObject({
       kind: "addNode",
     });
-    const previewRoot = spatialSkeletonState.getCachedNode(2n ** 63n + 1n)!;
+    const previewRoot = spatialSkeletonEditSession.getCachedNode(
+      2n ** 63n + 1n,
+    )!;
     expect(previewRoot).toMatchObject({
       parentNodeId: undefined,
     });
@@ -3058,14 +3076,14 @@ describe("skeleton edit commands", () => {
 
     expect(addNode).toHaveBeenCalledTimes(1);
     expect((addNode.mock.calls[0] as unknown[])[4]).toBeUndefined();
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual([
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual([
       expect.objectContaining({
         kind: "addNode",
         lifecycle: expect.objectContaining({ authority: "committed" }),
       }),
     ]);
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
-    expect(spatialSkeletonState.getCachedNode(2n)).toMatchObject({
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(true);
+    expect(spatialSkeletonEditSession.getCachedNode(2n)).toMatchObject({
       nodeId: 2n,
       segmentId,
       parentNodeId: undefined,
@@ -3085,7 +3103,7 @@ describe("skeleton edit commands", () => {
           resolveAdd = resolve;
         }),
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       initialNodes: [],
       segmentId: realSegmentId,
@@ -3097,7 +3115,9 @@ describe("skeleton edit commands", () => {
       parentNodeId: undefined,
       positionInModelSpace: new Float32Array([7, 8, 9]),
     });
-    const previewRoot = spatialSkeletonState.getCachedNode(2n ** 63n + 1n)!;
+    const previewRoot = spatialSkeletonEditSession.getCachedNode(
+      2n ** 63n + 1n,
+    )!;
     const tempSegment = previewRoot.segmentId;
     const realSegment = realSegmentId;
     const groupState = layer.displayState.segmentationGroupState.value;
@@ -3148,7 +3168,7 @@ describe("skeleton edit commands", () => {
           }),
       );
     const splitSkeleton = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       splitSkeleton,
       initialNodes: [],
@@ -3160,7 +3180,9 @@ describe("skeleton edit commands", () => {
       parentNodeId: undefined,
       positionInModelSpace: new Float32Array([1, 2, 3]),
     });
-    const previewRoot = spatialSkeletonState.getCachedNode(2n ** 63n + 1n)!;
+    const previewRoot = spatialSkeletonEditSession.getCachedNode(
+      2n ** 63n + 1n,
+    )!;
     const tempRootNodeId = previewRoot.nodeId;
     const tempRootSegmentId = previewRoot.segmentId;
 
@@ -3169,18 +3191,20 @@ describe("skeleton edit commands", () => {
       parentNodeId: tempRootNodeId,
       positionInModelSpace: new Float32Array([4, 5, 6]),
     });
-    const tempChild = spatialSkeletonState
+    const tempChild = spatialSkeletonEditSession
       .getCachedSegmentNodes(tempRootSegmentId)!
       .find((node) => node.nodeId !== tempRootNodeId)!;
 
     await executeSpatialSkeletonSplit(layer as any, tempChild);
-    const tempSplitSegmentId = spatialSkeletonState.getCachedNode(
+    const tempSplitSegmentId = spatialSkeletonEditSession.getCachedNode(
       tempChild.nodeId,
     )!.segmentId;
 
     expect(addNode).toHaveBeenCalledTimes(1);
     expect(splitSkeleton).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getCachedNode(tempChild.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(tempChild.nodeId),
+    ).toMatchObject({
       segmentId: tempSplitSegmentId,
       parentNodeId: undefined,
     });
@@ -3195,19 +3219,21 @@ describe("skeleton edit commands", () => {
     // the split's historical snapshot before the child POST is allowed out.
     expect(addNode).toHaveBeenCalledTimes(2);
     expect(splitSkeleton).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getCachedNode(realRootNodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(realRootNodeId),
+    ).toMatchObject({
       segmentId: realSegmentId,
       parentNodeId: undefined,
     });
     expect(
-      spatialSkeletonState.getCachedSegmentNodes(tempRootSegmentId),
+      spatialSkeletonEditSession.getCachedSegmentNodes(tempRootSegmentId),
     ).toBeUndefined();
 
     rejectChildAdd?.(new Error("child add rejected"));
     await waitForMicrotasks(40);
 
     expect(splitSkeleton).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual(
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           kind: "addNode",
@@ -3220,18 +3246,18 @@ describe("skeleton edit commands", () => {
       ]),
     );
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(realSegmentId)
         ?.map((node) => node.nodeId),
     ).toEqual([realRootNodeId]);
     expect(
-      spatialSkeletonState.getCachedSegmentNodes(tempRootSegmentId),
+      spatialSkeletonEditSession.getCachedSegmentNodes(tempRootSegmentId),
     ).toBeUndefined();
     expect(
-      spatialSkeletonState.getCachedSegmentNodes(tempSplitSegmentId),
+      spatialSkeletonEditSession.getCachedSegmentNodes(tempSplitSegmentId),
     ).toBeUndefined();
     expect(showErrorMessage).not.toHaveBeenCalled();
-    expectReloadRequired(spatialSkeletonState, "indeterminate");
+    expectReloadRequired(spatialSkeletonEditSession, "indeterminate");
     expect(
       showErrorMessage.mock.calls.some(([message]) =>
         /rollback.*failed|failed.*rollback|trusted.*handle/i.test(message),
@@ -3281,8 +3307,8 @@ describe("skeleton edit commands", () => {
           }),
       );
       const moveNode = vi.fn().mockResolvedValue(undefined);
-      const { layer, spatialSkeletonState: state } =
-        makeOptimisticAddNodeTestLayer({
+      const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer(
+        {
           initialNodes: nodes,
           segmentId: 11n,
           segmentIds: [11n, 17n],
@@ -3290,7 +3316,8 @@ describe("skeleton edit commands", () => {
           splitSkeleton: saveInput,
           mergeSkeletons,
           moveNode,
-        });
+        },
+      );
       const input =
         kind === "new root"
           ? executeSpatialSkeletonAddNode(layer as any, {
@@ -3319,7 +3346,7 @@ describe("skeleton edit commands", () => {
           ].sort((a, b) => bigintCompare(a[0]!, b[0]!)),
         );
         expect(
-          state.spatialSkeletonPresentation.value.numericAliases,
+          state.spatialSkeletonDisplay.value.numericAliases,
         ).toContainEqual(
           expect.objectContaining({
             segmentId: previewId,
@@ -3373,7 +3400,7 @@ describe("skeleton edit commands", () => {
       });
       expect(state.getCachedSegmentNodes(previewId)).toBeUndefined();
       expect(group.visibleSegments).toEqual(new Set([11n, resultSegmentId]));
-      expect(state.getOptimisticEditFatalState()).toBeUndefined();
+      expect(state.getReloadRequired()).toBeUndefined();
     },
   );
 
@@ -3402,7 +3429,7 @@ describe("skeleton edit commands", () => {
           rejectMerge = reject;
         }),
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       mergeSkeletons,
       initialNodes: [existingRoot],
@@ -3415,19 +3442,21 @@ describe("skeleton edit commands", () => {
       parentNodeId: undefined,
       positionInModelSpace: new Float32Array([1, 2, 3]),
     });
-    const tempRoot = spatialSkeletonState.getCachedNode(2n ** 63n + 1n)!;
+    const tempRoot = spatialSkeletonEditSession.getCachedNode(2n ** 63n + 1n)!;
     const tempRootNodeId = tempRoot.nodeId;
     const tempRootSegmentId = tempRoot.segmentId;
 
     // The existing skeleton is the preview winner and the pending root's
     // temporary segment is the losing side.
     await executeSpatialSkeletonMerge(layer as any, existingRoot, tempRoot);
-    const mergedPreviewId = spatialSkeletonState.getCachedNode(
+    const mergedPreviewId = spatialSkeletonEditSession.getCachedNode(
       existingRoot.nodeId,
     )!.segmentId;
     expect(mergedPreviewId).not.toBe(existingSegmentId);
     expect(mergeSkeletons).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getCachedNode(tempRootNodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(tempRootNodeId),
+    ).toMatchObject({
       segmentId: mergedPreviewId,
       parentNodeId: existingRoot.nodeId,
     });
@@ -3439,18 +3468,20 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(30);
 
     expect(mergeSkeletons).toHaveBeenCalledTimes(1);
-    expect(spatialSkeletonState.getCachedNode(realRootNodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(realRootNodeId),
+    ).toMatchObject({
       segmentId: mergedPreviewId,
       parentNodeId: existingRoot.nodeId,
     });
     expect(
-      spatialSkeletonState.getCachedSegmentNodes(tempRootSegmentId),
+      spatialSkeletonEditSession.getCachedSegmentNodes(tempRootSegmentId),
     ).toBeUndefined();
 
     rejectMerge?.(new Error("merge rejected"));
     await waitForMicrotasks(40);
 
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual(
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           kind: "addNode",
@@ -3467,22 +3498,24 @@ describe("skeleton edit commands", () => {
       ]),
     );
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(existingSegmentId)
         ?.map((node) => node.nodeId),
     ).toEqual([existingRoot.nodeId]);
-    expect(spatialSkeletonState.getCachedNode(realRootNodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(realRootNodeId),
+    ).toMatchObject({
       nodeId: realRootNodeId,
       segmentId: realRootSegmentId,
       parentNodeId: undefined,
     });
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(realRootSegmentId)
         ?.map((node) => node.nodeId),
     ).toEqual([realRootNodeId]);
     expect(showErrorMessage).not.toHaveBeenCalled();
-    expectReloadRequired(spatialSkeletonState, "indeterminate");
+    expectReloadRequired(spatialSkeletonEditSession, "indeterminate");
     expect(
       showErrorMessage.mock.calls.some(([message]) =>
         /rollback.*failed|failed.*rollback|trusted.*handle/i.test(message),
@@ -3507,7 +3540,7 @@ describe("skeleton edit commands", () => {
         }),
     );
     const getSkeleton = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       getSkeleton,
       initialNodes: [parentNode],
@@ -3521,17 +3554,18 @@ describe("skeleton edit commands", () => {
     });
     await execution;
     await vi.waitFor(() => expect(addNode).toHaveBeenCalledTimes(1));
-    const tempNodeId = spatialSkeletonState
+    const tempNodeId = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)!
       .find((node) => node.nodeId >= 2n ** 63n)!.nodeId;
     replaceCachedSegmentForTest(
-      spatialSkeletonState,
+      spatialSkeletonEditSession,
       segmentId,
-      cloneNodes(spatialSkeletonState.getCachedSegmentNodes(segmentId)).map(
-        (node) =>
-          node.nodeId === tempNodeId
-            ? { ...node, position: new Float32Array([40, 50, 60]) }
-            : node,
+      cloneNodes(
+        spatialSkeletonEditSession.getCachedSegmentNodes(segmentId),
+      ).map((node) =>
+        node.nodeId === tempNodeId
+          ? { ...node, position: new Float32Array([40, 50, 60]) }
+          : node,
       ),
     );
     resolveAdd({
@@ -3541,7 +3575,7 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(20);
 
     expect(getSkeleton).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual([
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual([
       expect.objectContaining({
         kind: "addNode",
         lifecycle: expect.objectContaining({
@@ -3552,7 +3586,7 @@ describe("skeleton edit commands", () => {
       }),
     ]);
     expect(showErrorMessage).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getOptimisticEditFatalState()).toEqual(
+    expect(spatialSkeletonEditSession.getReloadRequired()).toEqual(
       expect.objectContaining({
         reason: "committed-local-publication-failed",
         authority: "committed",
@@ -3564,7 +3598,7 @@ describe("skeleton edit commands", () => {
         parentNodeId: parentNode.nodeId,
         positionInModelSpace: new Float32Array([7, 8, 9]),
       }),
-    ).toThrow(SpatialSkeletonOptimisticReloadRequiredError);
+    ).toThrow(SpatialSkeletonReloadRequiredError);
     let settled = false;
     void execution.settled.then(() => (settled = true));
     await waitForMicrotasks();
@@ -3592,7 +3626,7 @@ describe("skeleton edit commands", () => {
         segmentId: 29n,
       });
     const deleteNode = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       deleteNode,
       initialNodes: [],
@@ -3608,8 +3642,8 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks();
     expect(addNode).toHaveBeenCalledTimes(1);
 
-    const oldQueue = (spatialSkeletonState as any).optimisticEditQueue;
-    spatialSkeletonState.clearRuntimeState();
+    const oldQueue = (spatialSkeletonEditSession as any).editQueue;
+    spatialSkeletonEditSession.clearRuntimeState();
     const disposal = oldQueue.dispose();
     const replacement = executeSpatialSkeletonAddNode(layer as any, {
       skeletonId: 0n,
@@ -3621,8 +3655,8 @@ describe("skeleton edit commands", () => {
 
     expect(addNode).toHaveBeenCalledTimes(1);
     const replacementTempNode =
-      spatialSkeletonState.spatialSkeletonPresentation.value.provisionalNodeIds
-        .map((nodeId) => spatialSkeletonState.getCachedNode(nodeId))
+      spatialSkeletonEditSession.spatialSkeletonDisplay.value.provisionalNodeIds
+        .map((nodeId) => spatialSkeletonEditSession.getCachedNode(nodeId))
         .find((node) => node !== undefined);
     expect(replacementTempNode).toMatchObject({
       position: new Float32Array([4, 5, 6]),
@@ -3637,8 +3671,8 @@ describe("skeleton edit commands", () => {
 
     expect(deleteNode).not.toHaveBeenCalled();
     expect(addNode).toHaveBeenCalledTimes(1);
-    expectReloadRequired(spatialSkeletonState, "committed");
-    expect(spatialSkeletonState.getCachedNode(2n)).toBeUndefined();
+    expectReloadRequired(spatialSkeletonEditSession, "committed");
+    expect(spatialSkeletonEditSession.getCachedNode(2n)).toBeUndefined();
   });
 
   it("retains restored topology when a later split is rejected", async () => {
@@ -3677,7 +3711,7 @@ describe("skeleton edit commands", () => {
           rejectSplit = reject;
         }),
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       insertNode,
       deleteNode: vi.fn().mockResolvedValue(undefined),
       splitSkeleton,
@@ -3688,7 +3722,7 @@ describe("skeleton edit commands", () => {
     await executeSpatialSkeletonDeleteNode(layer as any, deletedNode);
     await waitForMicrotasks(20);
     await undoSpatialSkeletonCommand(layer as any);
-    const tempInsertedNodeId = spatialSkeletonState
+    const tempInsertedNodeId = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)!
       .find(
         ({ nodeId }) =>
@@ -3696,11 +3730,13 @@ describe("skeleton edit commands", () => {
       )!.nodeId;
     await executeSpatialSkeletonSplit(
       layer as any,
-      spatialSkeletonState.getCachedNode(childNode.nodeId)!,
+      spatialSkeletonEditSession.getCachedNode(childNode.nodeId)!,
     );
 
     expect(splitSkeleton).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getCachedNode(childNode.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(childNode.nodeId),
+    ).toMatchObject({
       parentNodeId: undefined,
     });
     resolveInsert?.({
@@ -3715,13 +3751,17 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(20);
 
     expect(
-      spatialSkeletonState.getCachedNode(tempInsertedNodeId),
+      spatialSkeletonEditSession.getCachedNode(tempInsertedNodeId),
     ).toBeUndefined();
-    expect(spatialSkeletonState.getCachedNode(insertedNodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(insertedNodeId),
+    ).toMatchObject({
       segmentId,
       parentNodeId: rootNode.nodeId,
     });
-    expect(spatialSkeletonState.getCachedNode(childNode.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(childNode.nodeId),
+    ).toMatchObject({
       segmentId,
       parentNodeId: insertedNodeId,
     });
@@ -3750,7 +3790,7 @@ describe("skeleton edit commands", () => {
     const toggleTrueEnd = vi.fn(async () => ({}));
     const updateRadius = vi.fn(async () => ({}));
     const updateConfidence = vi.fn(async () => ({}));
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       updateDescription,
       toggleTrueEnd,
       updateRadius,
@@ -3760,27 +3800,27 @@ describe("skeleton edit commands", () => {
     });
 
     await executeSpatialSkeletonNodeDescriptionUpdate(layer as any, {
-      node: spatialSkeletonState.getCachedNode(node.nodeId)!,
+      node: spatialSkeletonEditSession.getCachedNode(node.nodeId)!,
       nextDescription: "after",
     });
     await waitForMicrotasks(6);
     const descriptionUndo = undoSpatialSkeletonCommand(layer as any);
     await descriptionUndo;
-    expect(spatialSkeletonState.getCachedNode(node.nodeId)?.description).toBe(
-      "before",
-    );
+    expect(
+      spatialSkeletonEditSession.getCachedNode(node.nodeId)?.description,
+    ).toBe("before");
     await descriptionUndo.settled;
     await waitForMicrotasks(6);
     const descriptionRedo = redoSpatialSkeletonCommand(layer as any);
     await descriptionRedo;
-    expect(spatialSkeletonState.getCachedNode(node.nodeId)?.description).toBe(
-      "after",
-    );
+    expect(
+      spatialSkeletonEditSession.getCachedNode(node.nodeId)?.description,
+    ).toBe("after");
     await descriptionRedo.settled;
     await waitForMicrotasks(6);
 
     await executeSpatialSkeletonNodeTrueEndUpdate(layer as any, {
-      node: spatialSkeletonState.getCachedNode(node.nodeId)!,
+      node: spatialSkeletonEditSession.getCachedNode(node.nodeId)!,
       nextIsTrueEnd: true,
     });
     await waitForMicrotasks(6);
@@ -3791,7 +3831,7 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(6);
 
     await executeSpatialSkeletonNodeRadiusUpdate(layer as any, {
-      node: spatialSkeletonState.getCachedNode(node.nodeId)!,
+      node: spatialSkeletonEditSession.getCachedNode(node.nodeId)!,
       nextRadius: 8,
     });
     await waitForMicrotasks(6);
@@ -3801,7 +3841,7 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(6);
 
     await executeSpatialSkeletonNodeConfidenceUpdate(layer as any, {
-      node: spatialSkeletonState.getCachedNode(node.nodeId)!,
+      node: spatialSkeletonEditSession.getCachedNode(node.nodeId)!,
       nextConfidence: 75,
     });
     await waitForMicrotasks(6);
@@ -3814,10 +3854,12 @@ describe("skeleton edit commands", () => {
     expect(toggleTrueEnd).toHaveBeenCalledTimes(3);
     expect(updateRadius).toHaveBeenCalledTimes(3);
     expect(updateConfidence).toHaveBeenCalledTimes(3);
-    expect(spatialSkeletonState.getCachedNode(node.nodeId)).toMatchObject({
-      description: "after",
-      attributes: { true_end: [1], radius: [8], confidence: [75] },
-    });
+    expect(spatialSkeletonEditSession.getCachedNode(node.nodeId)).toMatchObject(
+      {
+        description: "after",
+        attributes: { true_end: [1], radius: [8], confidence: [75] },
+      },
+    );
   });
 
   it.each(["reroot", "merge"] as const)(
@@ -3825,8 +3867,8 @@ describe("skeleton edit commands", () => {
     async (operation) => {
       suppressStatusMessages();
       const updateConfidence = vi.fn(async () => undefined);
-      const { layer, spatialSkeletonState: state } =
-        makeOptimisticAddNodeTestLayer({
+      const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer(
+        {
           initialNodes: [],
           segmentId: 23n,
           addNode: vi
@@ -3844,7 +3886,8 @@ describe("skeleton edit commands", () => {
             newSegmentId: 25n,
           })),
           updateConfidence,
-        });
+        },
+      );
       await executeSpatialSkeletonAddNode(layer as any, {
         skeletonId: 0n,
         parentNodeId: undefined,
@@ -3891,7 +3934,7 @@ describe("skeleton edit commands", () => {
       expect(state.getCachedNode(1n)!.segmentId).toBe(
         operation === "reroot" ? 23n : 25n,
       );
-      expect(state.getOptimisticEditFatalState()).toBeUndefined();
+      expect(state.getReloadRequired()).toBeUndefined();
     },
   );
 
@@ -3918,7 +3961,7 @@ describe("skeleton edit commands", () => {
     };
     const rerootSkeleton = vi.fn(async () => ({}));
     const getSkeleton = vi.fn(async () => []);
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       rerootSkeleton,
       getSkeleton,
       initialNodes: [rootNode, middleNode, leafNode],
@@ -3927,13 +3970,17 @@ describe("skeleton edit commands", () => {
 
     await executeSpatialSkeletonReroot(layer as any, leafNode);
     await waitForMicrotasks(10);
-    expect(spatialSkeletonState.getCachedNode(leafNode.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(leafNode.nodeId),
+    ).toMatchObject({
       parentNodeId: undefined,
     });
 
     await expect(undoSpatialSkeletonCommand(layer as any)).resolves.toBe(true);
     await waitForMicrotasks(10);
-    expect(spatialSkeletonState.getCachedNode(rootNode.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(rootNode.nodeId),
+    ).toMatchObject({
       parentNodeId: undefined,
     });
 
@@ -3945,10 +3992,12 @@ describe("skeleton edit commands", () => {
     expect(rerootSkeleton).toHaveBeenNthCalledWith(2, rootNode.nodeId);
     expect(rerootSkeleton).toHaveBeenNthCalledWith(3, leafNode.nodeId);
     expect(getSkeleton).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getCachedNode(leafNode.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(leafNode.nodeId),
+    ).toMatchObject({
       parentNodeId: undefined,
     });
-    spatialSkeletonState.clearRuntimeState();
+    spatialSkeletonEditSession.clearRuntimeState();
   });
 
   it("restores every parent link across branched reroot undo and redo", async () => {
@@ -3958,7 +4007,7 @@ describe("skeleton edit commands", () => {
     );
     const rerootSkeleton = vi.fn().mockResolvedValue({});
     const getSkeleton = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: nodes,
       segmentId: 17n,
       rerootSkeleton,
@@ -3981,7 +4030,7 @@ describe("skeleton edit commands", () => {
 
     const reroot = executeSpatialSkeletonReroot(layer as any, nodes[2]!);
     await reroot;
-    expect(cachedTopologyForTest(spatialSkeletonState, [17n])).toEqual(
+    expect(cachedTopologyForTest(spatialSkeletonEditSession, [17n])).toEqual(
       rerootedTopology,
     );
     await expect(reroot.settled).resolves.toMatchObject({
@@ -3990,18 +4039,18 @@ describe("skeleton edit commands", () => {
 
     const undo = undoSpatialSkeletonCommand(layer as any);
     await expect(undo).resolves.toBe(true);
-    expect(cachedTopologyForTest(spatialSkeletonState, [17n])).toEqual(
+    expect(cachedTopologyForTest(spatialSkeletonEditSession, [17n])).toEqual(
       originalTopology,
     );
     await expect(undo.settled).resolves.toMatchObject({ outcome: "committed" });
 
     const redo = redoSpatialSkeletonCommand(layer as any);
     await expect(redo).resolves.toBe(true);
-    expect(cachedTopologyForTest(spatialSkeletonState, [17n])).toEqual(
+    expect(cachedTopologyForTest(spatialSkeletonEditSession, [17n])).toEqual(
       rerootedTopology,
     );
     await expect(redo.settled).resolves.toMatchObject({ outcome: "committed" });
-    expect(cachedTopologyForTest(spatialSkeletonState, [17n])).toEqual(
+    expect(cachedTopologyForTest(spatialSkeletonEditSession, [17n])).toEqual(
       rerootedTopology,
     );
     expect(rerootSkeleton.mock.calls).toEqual([[203n], [201n], [203n]]);
@@ -4029,7 +4078,7 @@ describe("skeleton edit commands", () => {
       directionAdjusted: false,
     });
     const getSkeleton = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: nodes,
       segmentId: 17n,
       splitSkeleton,
@@ -4038,7 +4087,10 @@ describe("skeleton edit commands", () => {
     });
     const expectSplitTopology = (splitSegmentId: bigint) => {
       expect(
-        cachedTopologyForTest(spatialSkeletonState, [17n, splitSegmentId]),
+        cachedTopologyForTest(spatialSkeletonEditSession, [
+          17n,
+          splitSegmentId,
+        ]),
       ).toEqual([
         [201n, 17n, null],
         [202n, splitSegmentId, null],
@@ -4048,7 +4100,7 @@ describe("skeleton edit commands", () => {
       ]);
     };
     const expectOriginalTopology = () => {
-      expect(cachedTopologyForTest(spatialSkeletonState, [17n])).toEqual([
+      expect(cachedTopologyForTest(spatialSkeletonEditSession, [17n])).toEqual([
         [201n, 17n, null],
         [202n, 17n, 201n],
         [203n, 17n, 202n],
@@ -4059,7 +4111,8 @@ describe("skeleton edit commands", () => {
 
     const split = executeSpatialSkeletonSplit(layer as any, nodes[1]!);
     await split;
-    const firstPreviewId = spatialSkeletonState.getCachedNode(202n)!.segmentId;
+    const firstPreviewId =
+      spatialSkeletonEditSession.getCachedNode(202n)!.segmentId;
     expect(firstPreviewId).not.toBe(17n);
     expectSplitTopology(firstPreviewId);
     resolveSplit({ existingSegmentId: 17n, newSegmentId: 31n });
@@ -4068,7 +4121,7 @@ describe("skeleton edit commands", () => {
     });
     expectSplitTopology(31n);
     expect(
-      spatialSkeletonState.getCachedSegmentNodes(firstPreviewId),
+      spatialSkeletonEditSession.getCachedSegmentNodes(firstPreviewId),
     ).toBeUndefined();
 
     const undo = undoSpatialSkeletonCommand(layer as any);
@@ -4076,19 +4129,24 @@ describe("skeleton edit commands", () => {
     expectOriginalTopology();
     await expect(undo.settled).resolves.toMatchObject({ outcome: "committed" });
     expectOriginalTopology();
-    expect(spatialSkeletonState.getCachedSegmentNodes(31n)).toBeUndefined();
+    expect(
+      spatialSkeletonEditSession.getCachedSegmentNodes(31n),
+    ).toBeUndefined();
 
     const redo = redoSpatialSkeletonCommand(layer as any);
     await expect(redo).resolves.toBe(true);
-    const redoPreviewId = spatialSkeletonState.getCachedNode(202n)!.segmentId;
+    const redoPreviewId =
+      spatialSkeletonEditSession.getCachedNode(202n)!.segmentId;
     expect(redoPreviewId).not.toBe(17n);
     expectSplitTopology(redoPreviewId);
     resolveSplit({ existingSegmentId: 17n, newSegmentId: 37n });
     await expect(redo.settled).resolves.toMatchObject({ outcome: "committed" });
     expectSplitTopology(37n);
-    expect(spatialSkeletonState.getCachedSegmentNodes(31n)).toBeUndefined();
     expect(
-      spatialSkeletonState.getCachedSegmentNodes(redoPreviewId),
+      spatialSkeletonEditSession.getCachedSegmentNodes(31n),
+    ).toBeUndefined();
+    expect(
+      spatialSkeletonEditSession.getCachedSegmentNodes(redoPreviewId),
     ).toBeUndefined();
     expect(splitSkeleton.mock.calls).toEqual([[202n], [202n]]);
     expect(mergeSkeletons.mock.calls).toEqual([[201n, 202n]]);
@@ -4116,7 +4174,7 @@ describe("skeleton edit commands", () => {
       .mockResolvedValueOnce({ existingSegmentId: 11n, newSegmentId: 23n });
     const rerootSkeleton = vi.fn().mockResolvedValue({});
     const getSkeleton = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: nodes,
       segmentId: 11n,
       segmentIds: [11n, 17n],
@@ -4127,7 +4185,10 @@ describe("skeleton edit commands", () => {
     });
     const expectRestoredTopology = (restoredSegmentId: bigint) => {
       expect(
-        cachedTopologyForTest(spatialSkeletonState, [11n, restoredSegmentId]),
+        cachedTopologyForTest(spatialSkeletonEditSession, [
+          11n,
+          restoredSegmentId,
+        ]),
       ).toEqual([
         [101n, 11n, null],
         [102n, 11n, 101n],
@@ -4155,9 +4216,9 @@ describe("skeleton edit commands", () => {
           : redoSpatialSkeletonCommand(layer as any);
       await merge;
       const mergedPreviewId =
-        spatialSkeletonState.getCachedNode(101n)!.segmentId;
+        spatialSkeletonEditSession.getCachedNode(101n)!.segmentId;
       expect(
-        cachedTopologyForTest(spatialSkeletonState, [mergedPreviewId]),
+        cachedTopologyForTest(spatialSkeletonEditSession, [mergedPreviewId]),
       ).toEqual(
         mergedTopology.map(([nodeId, , parentId]) => [
           nodeId,
@@ -4168,25 +4229,31 @@ describe("skeleton edit commands", () => {
       await expect(merge.settled).resolves.toMatchObject({
         outcome: "committed",
       });
-      expect(cachedTopologyForTest(spatialSkeletonState, [11n])).toEqual(
+      expect(cachedTopologyForTest(spatialSkeletonEditSession, [11n])).toEqual(
         mergedTopology,
       );
 
       const undo = undoSpatialSkeletonCommand(layer as any);
       await expect(undo).resolves.toBe(true);
       const restoredPreviewId =
-        spatialSkeletonState.getCachedNode(201n)!.segmentId;
+        spatialSkeletonEditSession.getCachedNode(201n)!.segmentId;
       expect(restoredPreviewId).not.toBe(11n);
       expectRestoredTopology(restoredPreviewId);
       await expect(undo.settled).resolves.toMatchObject({
         outcome: "committed",
       });
       expectRestoredTopology(restoredSegmentId);
-      expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(true);
+      expect(spatialSkeletonEditSession.commandHistory.canRedo.value).toBe(
+        true,
+      );
     }
 
-    expect(spatialSkeletonState.getCachedSegmentNodes(17n)).toBeUndefined();
-    expect(spatialSkeletonState.getCachedSegmentNodes(19n)).toBeUndefined();
+    expect(
+      spatialSkeletonEditSession.getCachedSegmentNodes(17n),
+    ).toBeUndefined();
+    expect(
+      spatialSkeletonEditSession.getCachedSegmentNodes(19n),
+    ).toBeUndefined();
     expect(mergeSkeletons.mock.calls).toEqual([
       [102n, 203n],
       [102n, 203n],
@@ -4229,7 +4296,7 @@ describe("skeleton edit commands", () => {
       requestOrder.push("move");
       return {};
     });
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: nodes,
       segmentId: 11n,
       segmentIds: [11n, 17n],
@@ -4251,12 +4318,12 @@ describe("skeleton edit commands", () => {
     void undo.settled.then(undoSettled);
     await expect(undo).resolves.toBe(true);
     const move = executeSpatialSkeletonMoveNode(layer as any, {
-      node: spatialSkeletonState.getCachedNode(201n)!,
+      node: spatialSkeletonEditSession.getCachedNode(201n)!,
       nextPositionInModelSpace: new Float32Array([40, 50, 60]),
     });
     await move;
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(201n)!.position),
+      Array.from(spatialSkeletonEditSession.getCachedNode(201n)!.position),
     ).toEqual([40, 50, 60]);
     expect(moveNode).not.toHaveBeenCalled();
     expect(rerootSkeleton).not.toHaveBeenCalled();
@@ -4277,7 +4344,9 @@ describe("skeleton edit commands", () => {
     expect(undoSettled).toHaveBeenCalledTimes(1);
     expect(requestOrder).toEqual(["merge", "split", "reroot", "move"]);
     expect(moveNode).toHaveBeenCalledTimes(1);
-    expect(cachedTopologyForTest(spatialSkeletonState, [11n, 19n])).toEqual([
+    expect(
+      cachedTopologyForTest(spatialSkeletonEditSession, [11n, 19n]),
+    ).toEqual([
       [101n, 11n, null],
       [102n, 11n, 101n],
       [201n, 19n, null],
@@ -4287,7 +4356,7 @@ describe("skeleton edit commands", () => {
       [205n, 19n, 203n],
     ]);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(201n)!.position),
+      Array.from(spatialSkeletonEditSession.getCachedNode(201n)!.position),
     ).toEqual([40, 50, 60]);
   });
 
@@ -4304,7 +4373,7 @@ describe("skeleton edit commands", () => {
       nodeId: 2n,
       segmentId,
     });
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       initialNodes: [parentNode],
       segmentId,
@@ -4317,7 +4386,7 @@ describe("skeleton edit commands", () => {
     });
     await waitForMicrotasks(5);
 
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual([
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual([
       expect.objectContaining({
         kind: "addNode",
         lifecycle: expect.objectContaining({
@@ -4327,12 +4396,10 @@ describe("skeleton edit commands", () => {
         }),
       }),
     ]);
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(true);
 
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toHaveLength(
-      1,
-    );
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toHaveLength(1);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(true);
   });
 
   it("retains committed optimistic dependencies until their pending dependents settle", async () => {
@@ -4360,7 +4427,7 @@ describe("skeleton edit commands", () => {
       .fn()
       .mockReturnValueOnce(parentAddPromise)
       .mockReturnValueOnce(childAddPromise);
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       initialNodes: [parentNode],
       segmentId,
@@ -4373,14 +4440,14 @@ describe("skeleton edit commands", () => {
     });
     await waitForMicrotasks();
 
-    const optimisticParent = spatialSkeletonState
+    const previewParent = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)!
       .find((node) => node.nodeId >= 2n ** 63n);
-    expect(optimisticParent).toBeDefined();
+    expect(previewParent).toBeDefined();
 
     await executeSpatialSkeletonAddNode(layer as any, {
       skeletonId: segmentId,
-      parentNodeId: optimisticParent!.nodeId,
+      parentNodeId: previewParent!.nodeId,
       positionInModelSpace: new Float32Array([10, 11, 12]),
     });
     await waitForMicrotasks();
@@ -4392,7 +4459,7 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(10);
 
     expect(addNode).toHaveBeenCalledTimes(2);
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual(
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           kind: "addNode",
@@ -4415,8 +4482,8 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(5);
 
     expect(
-      spatialSkeletonState
-        .getOptimisticEditQueueSnapshot()
+      spatialSkeletonEditSession
+        .getEditQueueRows()
         .filter((entry) => entry.lifecycle.authority === "committed"),
     ).toHaveLength(2);
   });
@@ -4435,7 +4502,7 @@ describe("skeleton edit commands", () => {
           rejectDelete = reject;
         }),
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       deleteNode,
       initialNodes: [node],
       segmentId: node.segmentId,
@@ -4444,7 +4511,9 @@ describe("skeleton edit commands", () => {
     const execution = executeSpatialSkeletonDeleteNode(layer as any, node);
     await execution;
     await waitForMicrotasks();
-    expect(spatialSkeletonState.getCachedNode(node.nodeId)).toBeUndefined();
+    expect(
+      spatialSkeletonEditSession.getCachedNode(node.nodeId),
+    ).toBeUndefined();
     expect(layer.skeletonNodeSelection.selected.value).toBeUndefined();
     rejectDelete(
       new HttpError(
@@ -4457,16 +4526,18 @@ describe("skeleton edit commands", () => {
       outcome: "unchanged",
       reason: "rejected",
     });
-    expect(spatialSkeletonState.getCachedNode(node.nodeId)).toMatchObject(node);
+    expect(spatialSkeletonEditSession.getCachedNode(node.nodeId)).toMatchObject(
+      node,
+    );
     expect(
-      spatialSkeletonState.spatialSkeletonPresentation.value.removedSegmentIds,
+      spatialSkeletonEditSession.spatialSkeletonDisplay.value.removedSegmentIds,
     ).not.toContain(node.segmentId);
     expect(layer.skeletonNodeSelection.selected.value).toMatchObject({
       nodeId: node.nodeId,
       segmentId: node.segmentId,
     });
-    expect(spatialSkeletonState.getOptimisticEditFatalState()).toBeUndefined();
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
+    expect(spatialSkeletonEditSession.getReloadRequired()).toBeUndefined();
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(false);
   });
 
   it("restores a pending delete rollback with a remapped real parent id", async () => {
@@ -4494,7 +4565,7 @@ describe("skeleton edit commands", () => {
       .fn()
       .mockReturnValueOnce(parentAddPromise)
       .mockReturnValueOnce(childAddPromise);
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       initialNodes: [rootNode],
       segmentId,
@@ -4507,24 +4578,24 @@ describe("skeleton edit commands", () => {
     });
     await waitForMicrotasks();
 
-    const optimisticParent = spatialSkeletonState
+    const previewParent = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)!
       .find((node) => node.nodeId >= 2n ** 63n);
-    expect(optimisticParent).toBeDefined();
+    expect(previewParent).toBeDefined();
 
     await executeSpatialSkeletonAddNode(layer as any, {
       skeletonId: segmentId,
-      parentNodeId: optimisticParent!.nodeId,
+      parentNodeId: previewParent!.nodeId,
       positionInModelSpace: new Float32Array([10, 11, 12]),
     });
     await waitForMicrotasks();
 
-    const optimisticChild = spatialSkeletonState
+    const previewChild = spatialSkeletonEditSession
       .getCachedSegmentNodes(segmentId)!
-      .find((node) => node.parentNodeId === optimisticParent!.nodeId);
-    expect(optimisticChild).toBeDefined();
+      .find((node) => node.parentNodeId === previewParent!.nodeId);
+    expect(previewChild).toBeDefined();
 
-    await executeSpatialSkeletonDeleteNode(layer as any, optimisticChild!);
+    await executeSpatialSkeletonDeleteNode(layer as any, previewChild!);
     await waitForMicrotasks();
 
     resolveParentAdd!({
@@ -4536,9 +4607,9 @@ describe("skeleton edit commands", () => {
     await undoSpatialSkeletonCommand(layer as any);
 
     expect(
-      spatialSkeletonState.getCachedNode(optimisticChild!.nodeId),
+      spatialSkeletonEditSession.getCachedNode(previewChild!.nodeId),
     ).toMatchObject({
-      nodeId: optimisticChild!.nodeId,
+      nodeId: previewChild!.nodeId,
       parentNodeId: 2n,
     });
 
@@ -4566,7 +4637,7 @@ describe("skeleton edit commands", () => {
     });
     const addNode = vi.fn(() => addPromise);
     const moveNode = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       moveNode,
       initialNodes: [parentNode],
@@ -4588,7 +4659,7 @@ describe("skeleton edit commands", () => {
     expect(moveNode).not.toHaveBeenCalled();
     expect(
       Array.from(
-        spatialSkeletonState.getCachedNode(parentNode.nodeId)!.position,
+        spatialSkeletonEditSession.getCachedNode(parentNode.nodeId)!.position,
       ),
     ).toEqual([10, 11, 12]);
 
@@ -4597,7 +4668,7 @@ describe("skeleton edit commands", () => {
     expect(moveNode).not.toHaveBeenCalled();
     expect(
       Array.from(
-        spatialSkeletonState.getCachedNode(parentNode.nodeId)!.position,
+        spatialSkeletonEditSession.getCachedNode(parentNode.nodeId)!.position,
       ),
     ).toEqual([4, 5, 6]);
     await moveUndo;
@@ -4627,7 +4698,7 @@ describe("skeleton edit commands", () => {
       .fn()
       .mockReturnValueOnce(movePromise)
       .mockResolvedValueOnce({});
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       moveNode,
       initialNodes: [node],
       segmentId,
@@ -4642,7 +4713,9 @@ describe("skeleton edit commands", () => {
 
     expect(moveNode).toHaveBeenCalledWith(node.nodeId, 10, 11, 12);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual([10, 11, 12]);
 
     const undoExecution = undoSpatialSkeletonCommand(layer as any);
@@ -4650,7 +4723,9 @@ describe("skeleton edit commands", () => {
 
     expect(moveNode).toHaveBeenCalledTimes(1);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual([4, 5, 6]);
 
     resolveMove!();
@@ -4664,7 +4739,7 @@ describe("skeleton edit commands", () => {
     expect(moveNode).toHaveBeenCalledTimes(2);
     expect(moveNode).toHaveBeenLastCalledWith(node.nodeId, 4, 5, 6);
     expect(showTemporaryMessage).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(false);
   });
 
   it("fences later writes while an explicit move undo is ambiguous", async () => {
@@ -4692,7 +4767,7 @@ describe("skeleton edit commands", () => {
     const getSkeleton = vi.fn(
       () => new Promise<readonly SkeletonNode[]>(() => {}),
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       moveNode,
       getSkeleton,
       initialNodes: [node],
@@ -4718,7 +4793,7 @@ describe("skeleton edit commands", () => {
       ),
     );
     await waitForMicrotasks(20);
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual(
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           kind: "moveNode",
@@ -4737,17 +4812,17 @@ describe("skeleton edit commands", () => {
         }),
       ]),
     );
-    expectReloadRequired(spatialSkeletonState, "indeterminate");
+    expectReloadRequired(spatialSkeletonEditSession, "indeterminate");
 
     expect(() =>
       executeSpatialSkeletonMoveNode(layer as any, {
         node,
         nextPositionInModelSpace: new Float32Array([20, 21, 22]),
       }),
-    ).toThrow(SpatialSkeletonOptimisticReloadRequiredError);
+    ).toThrow(SpatialSkeletonReloadRequiredError);
 
     expect(moveNode).toHaveBeenCalledTimes(2);
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual(
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           kind: "moveNode",
@@ -4756,7 +4831,7 @@ describe("skeleton edit commands", () => {
         }),
       ]),
     );
-    spatialSkeletonState.dispose();
+    spatialSkeletonEditSession.dispose();
   });
 
   it("records a confirmed optimistic move-node in undo history", async () => {
@@ -4773,8 +4848,8 @@ describe("skeleton edit commands", () => {
       .fn()
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({});
-    const { layer, spatialSkeletonState, invalidateWholeSourceCache } =
-      makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession, invalidateWholeSourceCache } =
+      makeAddNodeTestLayer({
         moveNode,
         initialNodes: [node],
         segmentId,
@@ -4786,9 +4861,11 @@ describe("skeleton edit commands", () => {
     });
     await waitForMicrotasks(5);
 
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(true);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual([10, 11, 12]);
     expect(showTemporaryMessage).not.toHaveBeenCalled();
 
@@ -4796,7 +4873,9 @@ describe("skeleton edit commands", () => {
     await undo;
 
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual([4, 5, 6]);
     await undo.settled;
     expect(moveNode).toHaveBeenCalledTimes(2);
@@ -4813,7 +4892,7 @@ describe("skeleton edit commands", () => {
     };
     const getSkeleton = vi.fn();
     const moveNode = vi.fn().mockResolvedValue({});
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       moveNode,
       getSkeleton,
       initialNodes: [node],
@@ -4826,7 +4905,7 @@ describe("skeleton edit commands", () => {
     });
     await waitForMicrotasks(6);
     replaceCachedSegmentForTest(
-      spatialSkeletonState,
+      spatialSkeletonEditSession,
       node.segmentId,
       undefined,
     );
@@ -4834,14 +4913,16 @@ describe("skeleton edit commands", () => {
     const undo = undoSpatialSkeletonCommand(layer as any);
     await expect(undo).resolves.toBe(true);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual([4, 5, 6]);
     await undo.settled;
 
     expect(moveNode).toHaveBeenCalledTimes(2);
     expect(getSkeleton).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
-    expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(true);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canRedo.value).toBe(true);
   });
 
   it("redoes directly from retained history after manager-cache eviction", async () => {
@@ -4857,7 +4938,7 @@ describe("skeleton edit commands", () => {
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({});
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       moveNode,
       getSkeleton,
       initialNodes: [node],
@@ -4873,7 +4954,7 @@ describe("skeleton edit commands", () => {
     await undo;
     await undo.settled;
     replaceCachedSegmentForTest(
-      spatialSkeletonState,
+      spatialSkeletonEditSession,
       node.segmentId,
       undefined,
     );
@@ -4881,14 +4962,16 @@ describe("skeleton edit commands", () => {
     const redo = redoSpatialSkeletonCommand(layer as any);
     await expect(redo).resolves.toBe(true);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual([10, 11, 12]);
     await redo.settled;
 
     expect(moveNode).toHaveBeenCalledTimes(3);
     expect(getSkeleton).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
-    expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(true);
+    expect(spatialSkeletonEditSession.commandHistory.canRedo.value).toBe(false);
   });
 
   it("releases journal capacity after more than 64 sequential confirmations", async () => {
@@ -4900,7 +4983,7 @@ describe("skeleton edit commands", () => {
       position: new Float32Array([0, 0, 0]),
     };
     const moveNode = vi.fn().mockResolvedValue({});
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       moveNode,
       initialNodes: [node],
       segmentId,
@@ -4908,14 +4991,14 @@ describe("skeleton edit commands", () => {
 
     for (let index = 1; index <= 70; ++index) {
       await executeSpatialSkeletonMoveNode(layer as any, {
-        node: spatialSkeletonState.getCachedNode(node.nodeId)!,
+        node: spatialSkeletonEditSession.getCachedNode(node.nodeId)!,
         nextPositionInModelSpace: new Float32Array([index, index, index]),
       });
       await waitForMicrotasks(5);
     }
 
     expect(moveNode).toHaveBeenCalledTimes(70);
-    const retained = spatialSkeletonState.getOptimisticEditQueueSnapshot();
+    const retained = spatialSkeletonEditSession.getEditQueueRows();
     expect(retained).toHaveLength(64);
     expect(
       retained.every(
@@ -4924,9 +5007,11 @@ describe("skeleton edit commands", () => {
           entry.lifecycle.reconciliation === "complete",
       ),
     ).toBe(true);
-    expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(false);
+    expect(spatialSkeletonEditSession.hasUnconfirmedEdits()).toBe(false);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual([70, 70, 70]);
   });
 
@@ -4945,7 +5030,7 @@ describe("skeleton edit commands", () => {
           resolveFirstMove = resolve;
         }),
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       moveNode,
       initialNodes: [node],
       segmentId,
@@ -4960,7 +5045,7 @@ describe("skeleton edit commands", () => {
 
     for (let index = 2; index <= 71; ++index) {
       await executeSpatialSkeletonMoveNode(layer as any, {
-        node: spatialSkeletonState.getCachedNode(node.nodeId)!,
+        node: spatialSkeletonEditSession.getCachedNode(node.nodeId)!,
         nextPositionInModelSpace: new Float32Array([index, index, index]),
       });
       expect(await undoSpatialSkeletonCommand(layer as any)).toBe(true);
@@ -4970,17 +5055,19 @@ describe("skeleton edit commands", () => {
     // was physically unsent and coalesced with its undo.
     expect(moveNode).toHaveBeenCalledTimes(1);
     expect(
-      spatialSkeletonState
-        .getOptimisticEditQueueSnapshot()
+      spatialSkeletonEditSession
+        .getEditQueueRows()
         .filter((entry) => entry.lifecycle.authority === "running"),
     ).toHaveLength(1);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual([1, 1, 1]);
 
     resolveFirstMove?.();
     await waitForMicrotasks(6);
-    expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(false);
+    expect(spatialSkeletonEditSession.hasUnconfirmedEdits()).toBe(false);
   });
 
   it("keeps previewing to the 64-intent limit and resumes after a held POST", async () => {
@@ -5004,7 +5091,7 @@ describe("skeleton edit commands", () => {
       .fn()
       .mockReturnValueOnce(heldMove)
       .mockResolvedValue(undefined);
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       moveNode,
       initialNodes: nodes,
       segmentId,
@@ -5014,7 +5101,7 @@ describe("skeleton edit commands", () => {
     for (let index = 0; index < 64; ++index) {
       const nextPosition = new Float32Array([index, index + 10, index + 20]);
       const execution = executeSpatialSkeletonMoveNode(layer as any, {
-        node: spatialSkeletonState.getCachedNode(nodes[index].nodeId)!,
+        node: spatialSkeletonEditSession.getCachedNode(nodes[index].nodeId)!,
         nextPositionInModelSpace: nextPosition,
       });
       executions.push(execution);
@@ -5022,27 +5109,24 @@ describe("skeleton edit commands", () => {
       await execution;
       expect(
         Array.from(
-          spatialSkeletonState.getCachedNode(nodes[index].nodeId)!.position,
+          spatialSkeletonEditSession.getCachedNode(nodes[index].nodeId)!
+            .position,
         ),
       ).toEqual(Array.from(nextPosition));
     }
 
     expect(moveNode).toHaveBeenCalledTimes(1);
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toHaveLength(
-      64,
-    );
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toHaveLength(64);
 
     const overflow = executeSpatialSkeletonMoveNode(layer as any, {
-      node: spatialSkeletonState.getCachedNode(nodes[64].nodeId)!,
+      node: spatialSkeletonEditSession.getCachedNode(nodes[64].nodeId)!,
       nextPositionInModelSpace: new Float32Array([64, 74, 84]),
     });
     await expect(overflow).rejects.toThrow(
       "Optimistic edit queue has reached its 64-edit safety limit. Wait for the skeleton source to confirm some edits.",
     );
     expect(moveNode).toHaveBeenCalledTimes(1);
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toHaveLength(
-      64,
-    );
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toHaveLength(64);
 
     resolveFirstMove?.();
     await Promise.all(executions.map((execution) => execution.settled));
@@ -5050,10 +5134,10 @@ describe("skeleton edit commands", () => {
     // Settlement itself triggers the generation latch; no extra user event
     // is needed to submit the remaining ordered intents.
     expect(moveNode).toHaveBeenCalledTimes(64);
-    expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(false);
+    expect(spatialSkeletonEditSession.hasUnconfirmedEdits()).toBe(false);
     expect(
-      spatialSkeletonState
-        .getOptimisticEditQueueSnapshot()
+      spatialSkeletonEditSession
+        .getEditQueueRows()
         .every((entry) => entry.lifecycle.authority === "committed"),
     ).toBe(true);
   });
@@ -5079,7 +5163,7 @@ describe("skeleton edit commands", () => {
       .fn()
       .mockReturnValueOnce(firstMovePromise)
       .mockReturnValueOnce(secondMovePromise);
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       moveNode,
       initialNodes: [node],
       segmentId,
@@ -5091,17 +5175,21 @@ describe("skeleton edit commands", () => {
     });
     await waitForMicrotasks();
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual([10, 11, 12]);
 
     await executeSpatialSkeletonMoveNode(layer as any, {
-      node: spatialSkeletonState.getCachedNode(node.nodeId)!,
+      node: spatialSkeletonEditSession.getCachedNode(node.nodeId)!,
       nextPositionInModelSpace: new Float32Array([20, 21, 22]),
     });
     await waitForMicrotasks();
     expect(moveNode).toHaveBeenCalledTimes(1);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual([20, 21, 22]);
 
     resolveFirstMove!();
@@ -5109,14 +5197,18 @@ describe("skeleton edit commands", () => {
 
     expect(moveNode).toHaveBeenCalledTimes(2);
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual([20, 21, 22]);
 
     resolveSecondMove!();
     await waitForMicrotasks(20);
 
     expect(
-      Array.from(spatialSkeletonState.getCachedNode(node.nodeId)!.position),
+      Array.from(
+        spatialSkeletonEditSession.getCachedNode(node.nodeId)!.position,
+      ),
     ).toEqual([20, 21, 22]);
   });
 
@@ -5149,7 +5241,7 @@ describe("skeleton edit commands", () => {
     });
     const addNode = vi.fn(() => addPromise);
     const deleteNode = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       deleteNode,
       initialNodes: [rootNode, deletedNode, childNode],
@@ -5167,23 +5259,23 @@ describe("skeleton edit commands", () => {
 
     expect(deleteNode).not.toHaveBeenCalled();
     expect(
-      spatialSkeletonState.getCachedNode(deletedNode.nodeId),
+      spatialSkeletonEditSession.getCachedNode(deletedNode.nodeId),
     ).toBeUndefined();
     expect(
-      spatialSkeletonState.getCachedNode(childNode.nodeId)?.parentNodeId,
+      spatialSkeletonEditSession.getCachedNode(childNode.nodeId)?.parentNodeId,
     ).toBe(rootNode.nodeId);
 
     await undoSpatialSkeletonCommand(layer as any);
 
     expect(deleteNode).not.toHaveBeenCalled();
     expect(
-      spatialSkeletonState.getCachedNode(deletedNode.nodeId),
+      spatialSkeletonEditSession.getCachedNode(deletedNode.nodeId),
     ).toMatchObject({
       nodeId: deletedNode.nodeId,
       parentNodeId: rootNode.nodeId,
     });
     expect(
-      spatialSkeletonState.getCachedNode(childNode.nodeId)?.parentNodeId,
+      spatialSkeletonEditSession.getCachedNode(childNode.nodeId)?.parentNodeId,
     ).toBe(deletedNode.nodeId);
 
     resolveAdd!({
@@ -5214,7 +5306,7 @@ describe("skeleton edit commands", () => {
       nodeId: 20n,
       segmentId,
     });
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       addNode,
       deleteNode,
       initialNodes: [rootNode, deletedNode],
@@ -5225,22 +5317,22 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(5);
 
     expect(
-      spatialSkeletonState.getCachedNode(deletedNode.nodeId),
+      spatialSkeletonEditSession.getCachedNode(deletedNode.nodeId),
     ).toBeUndefined();
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(true);
     expect(showTemporaryMessage).not.toHaveBeenCalled();
 
     const undo = undoSpatialSkeletonCommand(layer as any);
     await undo;
 
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(segmentId)
         ?.some((node) => node.nodeId >= 2n ** 63n),
     ).toBe(true);
     await undo.settled;
     expect(addNode).toHaveBeenCalledWith(4, 5, 6, rootNode.nodeId);
-    expect(spatialSkeletonState.getCachedNode(20n)).toMatchObject({
+    expect(spatialSkeletonEditSession.getCachedNode(20n)).toMatchObject({
       nodeId: 20n,
       parentNodeId: rootNode.nodeId,
     });
@@ -5296,8 +5388,8 @@ describe("skeleton edit commands", () => {
       }
       return [];
     });
-    const { layer, skeletonLayer, spatialSkeletonState } =
-      makeOptimisticAddNodeTestLayer({
+    const { layer, skeletonLayer, spatialSkeletonEditSession } =
+      makeAddNodeTestLayer({
         initialNodes: [rootNode, splitNode, childNode],
         segmentId,
         splitSkeleton,
@@ -5309,21 +5401,21 @@ describe("skeleton edit commands", () => {
     // the exact warm topology publishes after the presentation turn.
     expect(execution.acceptedByQueue).toBeInstanceOf(Promise);
     await execution.acceptedByQueue;
-    await waitForPresentationTurn();
+    await waitForDisplayTurn();
     await execution;
-    const previewSplitNode = spatialSkeletonState.getCachedNode(
+    const previewSplitNode = spatialSkeletonEditSession.getCachedNode(
       splitNode.nodeId,
     )!;
     const tempSegmentId = previewSplitNode.segmentId;
     expect(tempSegmentId).not.toBe(segmentId);
     expect(previewSplitNode.parentNodeId).toBeUndefined();
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(tempSegmentId)
         ?.map((node) => node.nodeId),
     ).toEqual([splitNode.nodeId, childNode.nodeId]);
     expect(
-      spatialSkeletonState.spatialSkeletonPresentation.value.numericAliases,
+      spatialSkeletonEditSession.spatialSkeletonDisplay.value.numericAliases,
     ).toContainEqual(
       expect.objectContaining({
         segmentId: tempSegmentId,
@@ -5335,15 +5427,17 @@ describe("skeleton edit commands", () => {
     resolveSplit?.({ existingSegmentId: segmentId, newSegmentId });
     await waitForMicrotasks(12);
 
-    expect(spatialSkeletonState.getCachedSegmentNodes(tempSegmentId)).toBe(
-      undefined,
-    );
-    expect(spatialSkeletonState.getCachedNode(splitNode.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedSegmentNodes(tempSegmentId),
+    ).toBe(undefined);
+    expect(
+      spatialSkeletonEditSession.getCachedNode(splitNode.nodeId),
+    ).toMatchObject({
       segmentId: newSegmentId,
       parentNodeId: undefined,
     });
     expect(
-      spatialSkeletonState.spatialSkeletonPresentation.value.numericAliases,
+      spatialSkeletonEditSession.spatialSkeletonDisplay.value.numericAliases,
     ).toContainEqual(
       expect.objectContaining({
         segmentId: newSegmentId,
@@ -5351,7 +5445,7 @@ describe("skeleton edit commands", () => {
       }),
     );
     expect(
-      spatialSkeletonState.spatialSkeletonPresentation.value.numericAliases,
+      spatialSkeletonEditSession.spatialSkeletonDisplay.value.numericAliases,
     ).not.toContainEqual(
       expect.objectContaining({
         segmentId: tempSegmentId,
@@ -5362,7 +5456,7 @@ describe("skeleton edit commands", () => {
       new Map([[tempSegmentId, newSegmentId]]),
     );
     expect(getSkeleton).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(true);
   });
 
   it("undoes a retained split without hydrating an evicted manager cache", async () => {
@@ -5398,7 +5492,7 @@ describe("skeleton edit commands", () => {
     const getSkeleton = vi.fn(async (requestedSegmentId: bigint) =>
       requestedSegmentId === segmentId ? [rootNode] : splitSideNodes,
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [rootNode, splitNode],
       segmentId,
       splitSkeleton,
@@ -5410,12 +5504,18 @@ describe("skeleton edit commands", () => {
     await expect(split.settled).resolves.toMatchObject({
       outcome: "committed",
     });
-    replaceCachedSegmentForTest(spatialSkeletonState, newSegmentId, undefined);
+    replaceCachedSegmentForTest(
+      spatialSkeletonEditSession,
+      newSegmentId,
+      undefined,
+    );
     getSkeleton.mockClear();
 
     const undo = undoSpatialSkeletonCommand(layer as any);
     await expect(undo).resolves.toBe(true);
-    expect(spatialSkeletonState.getCachedNode(splitNode.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(splitNode.nodeId),
+    ).toMatchObject({
       segmentId,
       parentNodeId: rootNode.nodeId,
     });
@@ -5464,7 +5564,7 @@ describe("skeleton edit commands", () => {
     const getSkeleton = vi.fn(async (requestedSegmentId: bigint) =>
       requestedSegmentId === segmentId ? [rootNode, splitNode] : [],
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [rootNode, splitNode],
       segmentId,
       splitSkeleton,
@@ -5474,9 +5574,11 @@ describe("skeleton edit commands", () => {
 
     await executeSpatialSkeletonSplit(layer as any, splitNode);
     const splitUndo = undoSpatialSkeletonCommand(layer as any);
-    await waitForPresentationTurn();
+    await waitForDisplayTurn();
 
-    expect(spatialSkeletonState.getCachedNode(splitNode.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(splitNode.nodeId),
+    ).toMatchObject({
       segmentId,
       parentNodeId: rootNode.nodeId,
     });
@@ -5492,7 +5594,7 @@ describe("skeleton edit commands", () => {
       rootNode.nodeId,
       splitNode.nodeId,
     );
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(false);
   });
 
   it("retains the source lane without merging back a disposed split that commits", async () => {
@@ -5541,7 +5643,7 @@ describe("skeleton edit commands", () => {
       }
       return [];
     });
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [rootNode, splitNode, independentRoot],
       segmentId,
       segmentIds: [segmentId, splitSegmentId, independentSegmentId],
@@ -5555,10 +5657,10 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks();
     expect(splitSkeleton).toHaveBeenCalledTimes(1);
 
-    const oldQueue = (spatialSkeletonState as any).optimisticEditQueue;
-    spatialSkeletonState.clearRuntimeState();
+    const oldQueue = (spatialSkeletonEditSession as any).editQueue;
+    spatialSkeletonEditSession.clearRuntimeState();
     const disposal = oldQueue.dispose();
-    seedCachedNodesForTest(spatialSkeletonState, [
+    seedCachedNodesForTest(spatialSkeletonEditSession, [
       rootNode,
       splitNode,
       independentRoot,
@@ -5575,7 +5677,7 @@ describe("skeleton edit commands", () => {
     // unknown allocated skeleton id, so no replacement POST may bypass it.
     expect(addNode).not.toHaveBeenCalled();
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(independentSegmentId)
         ?.some((node) => node.nodeId >= 2n ** 63n),
     ).toBe(true);
@@ -5590,8 +5692,8 @@ describe("skeleton edit commands", () => {
     expect(mergeSkeletons).not.toHaveBeenCalled();
     expect(getSkeleton).not.toHaveBeenCalled();
     expect(addNode).not.toHaveBeenCalled();
-    expectReloadRequired(spatialSkeletonState, "committed");
-    expect(spatialSkeletonState.getCachedNode(11n)).toBeUndefined();
+    expectReloadRequired(spatialSkeletonEditSession, "committed");
+    expect(spatialSkeletonEditSession.getCachedNode(11n)).toBeUndefined();
   });
 
   it("keeps an optimistic merge visible while reconciling a reversed direction", async () => {
@@ -5638,7 +5740,7 @@ describe("skeleton edit commands", () => {
         }),
     );
     const getSkeleton = vi.fn(async () => []);
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [firstRoot, firstNode, secondRoot, secondNode],
       segmentId: firstSegmentId,
       segmentIds: [firstSegmentId, secondSegmentId],
@@ -5653,19 +5755,19 @@ describe("skeleton edit commands", () => {
     );
     await execution;
 
-    expect(spatialSkeletonState.getCachedSegmentNodes(secondSegmentId)).toBe(
-      undefined,
-    );
-    const mergedPreviewId = spatialSkeletonState.getCachedNode(
+    expect(
+      spatialSkeletonEditSession.getCachedSegmentNodes(secondSegmentId),
+    ).toBe(undefined);
+    const mergedPreviewId = spatialSkeletonEditSession.getCachedNode(
       firstNode.nodeId,
     )!.segmentId;
     expect(mergedPreviewId).not.toBe(firstSegmentId);
-    expect(spatialSkeletonState.getCachedNode(secondNode.nodeId)).toMatchObject(
-      {
-        segmentId: mergedPreviewId,
-        parentNodeId: firstNode.nodeId,
-      },
-    );
+    expect(
+      spatialSkeletonEditSession.getCachedNode(secondNode.nodeId),
+    ).toMatchObject({
+      segmentId: mergedPreviewId,
+      parentNodeId: firstNode.nodeId,
+    });
     expect(mergeSkeletons).toHaveBeenCalledWith(
       firstNode.nodeId,
       secondNode.nodeId,
@@ -5675,13 +5777,13 @@ describe("skeleton edit commands", () => {
       first: bigint[] | undefined;
       second: bigint[] | undefined;
     }> = [];
-    const unsubscribePresentation =
-      spatialSkeletonState.spatialSkeletonPresentation.changed.add(() => {
+    const unsubscribeDisplay =
+      spatialSkeletonEditSession.spatialSkeletonDisplay.changed.add(() => {
         publishedReconciliationFrames.push({
-          first: spatialSkeletonState
+          first: spatialSkeletonEditSession
             .getCachedSegmentNodes(firstSegmentId)
             ?.map((node) => node.nodeId),
-          second: spatialSkeletonState
+          second: spatialSkeletonEditSession
             .getCachedSegmentNodes(secondSegmentId)
             ?.map((node) => node.nodeId)
             .sort(bigintCompare),
@@ -5697,7 +5799,7 @@ describe("skeleton edit commands", () => {
 
     expect(getSkeleton).not.toHaveBeenCalled();
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(secondSegmentId)
         ?.map((node) => node.nodeId)
         .sort(bigintCompare),
@@ -5708,7 +5810,7 @@ describe("skeleton edit commands", () => {
       secondNode.nodeId,
     ]);
     expect(
-      spatialSkeletonState.getCachedSegmentNodes(firstSegmentId),
+      spatialSkeletonEditSession.getCachedSegmentNodes(firstSegmentId),
     ).toBeUndefined();
     expect(publishedReconciliationFrames).toEqual([
       {
@@ -5722,15 +5824,17 @@ describe("skeleton edit commands", () => {
       },
     ]);
 
-    expect(spatialSkeletonState.getCachedNode(firstNode.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(firstNode.nodeId),
+    ).toMatchObject({
       segmentId: secondSegmentId,
       parentNodeId: secondNode.nodeId,
     });
     expect(
-      spatialSkeletonState.getCachedSegmentNodes(firstSegmentId),
+      spatialSkeletonEditSession.getCachedSegmentNodes(firstSegmentId),
     ).toBeUndefined();
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
-    unsubscribePresentation();
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(true);
+    unsubscribeDisplay();
   });
 
   it("retains a hidden merge target fetch while resolving an optimistic preview", async () => {
@@ -5781,7 +5885,7 @@ describe("skeleton edit commands", () => {
       deletedSegmentId: secondSegmentId,
       directionAdjusted: false,
     });
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [firstNode],
       segmentId: firstSegmentId,
       mergeSkeletons,
@@ -5804,19 +5908,17 @@ describe("skeleton edit commands", () => {
       expect.anything(),
     );
     await execution.acceptedByQueue;
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toMatchObject(
-      [
-        {
-          intent: "execute",
-          operationId: 1,
-          lifecycle: { preview: "preparing", authority: "queued" },
-        },
-      ],
-    );
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toMatchObject([
+      {
+        intent: "execute",
+        operationId: 1,
+        lifecycle: { preview: "preparing", authority: "queued" },
+      },
+    ]);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(true);
     expect(mergeSkeletons).not.toHaveBeenCalled();
     expect(
-      spatialSkeletonState.evictInactiveSegmentNodes([firstSegmentId]),
+      spatialSkeletonEditSession.evictInactiveSegmentNodes([firstSegmentId]),
     ).toBe(false);
     expect(secondFetchSignal?.aborted).toBe(false);
 
@@ -5826,7 +5928,7 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(12);
 
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(firstSegmentId)
         ?.map((node) => node.nodeId),
     ).toEqual([firstNode.nodeId, secondNode.nodeId]);
@@ -5836,7 +5938,7 @@ describe("skeleton edit commands", () => {
     );
   });
 
-  it("orders a cold merge, a warm merge, and a property edit using the preceding projected ownership", async () => {
+  it("orders a cold merge, a warm merge, and a property edit using the preceding previewed ownership", async () => {
     suppressStatusMessages();
     const first = {
       nodeId: 101n,
@@ -5873,7 +5975,7 @@ describe("skeleton edit commands", () => {
         directionAdjusted: false,
       });
     const updateRadius = vi.fn().mockResolvedValue(undefined);
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [first, warm],
       segmentId: 11n,
       getSkeleton,
@@ -5893,13 +5995,13 @@ describe("skeleton edit commands", () => {
     ]);
     await waitForMicrotasks(12);
     expect(
-      spatialSkeletonState
-        .getOptimisticEditQueueSnapshot()
+      spatialSkeletonEditSession
+        .getEditQueueRows()
         .map(({ operationId }) => operationId),
     ).toEqual([1, 2, 3]);
-    expect(spatialSkeletonState.getCachedNode(first.nodeId)?.segmentId).toBe(
-      11n,
-    );
+    expect(
+      spatialSkeletonEditSession.getCachedNode(first.nodeId)?.segmentId,
+    ).toBe(11n);
     expect(mergeSkeletons).not.toHaveBeenCalled();
     expect(updateRadius).not.toHaveBeenCalled();
     expect(getSkeleton).toHaveBeenCalledOnce();
@@ -5915,13 +6017,13 @@ describe("skeleton edit commands", () => {
       updateRadius.mock.invocationCallOrder[0],
     );
     expect(
-      spatialSkeletonState
+      spatialSkeletonEditSession
         .getCachedSegmentNodes(11n)
         ?.map(({ nodeId }) => nodeId)
         .sort(),
     ).toEqual([101n, 201n, 301n]);
     expect(
-      getSkeletonNodeRadius(spatialSkeletonState.getCachedNode(101n)!),
+      getSkeletonNodeRadius(spatialSkeletonEditSession.getCachedNode(101n)!),
     ).toBe(50);
   });
 
@@ -5964,17 +6066,16 @@ describe("skeleton edit commands", () => {
       .mockResolvedValue({ existingSegmentId: 17n, newSegmentId: 29n });
     const rerootSkeleton = vi.fn().mockResolvedValue(undefined);
     const updateConfidence = vi.fn().mockResolvedValue(undefined);
-    const { layer, spatialSkeletonState: state } =
-      makeOptimisticAddNodeTestLayer({
-        initialNodes: nodes,
-        segmentId: 11n,
-        segmentIds: [11n, 17n],
-        mergeSkeletons,
-        getSkeleton,
-        splitSkeleton,
-        rerootSkeleton,
-        updateConfidence,
-      });
+    const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer({
+      initialNodes: nodes,
+      segmentId: 11n,
+      segmentIds: [11n, 17n],
+      mergeSkeletons,
+      getSkeleton,
+      splitSkeleton,
+      rerootSkeleton,
+      updateConfidence,
+    });
     const first = executeSpatialSkeletonMerge(layer as any, nodes[1], nodes[4]);
     await first;
     const waiting = executeSpatialSkeletonMerge(
@@ -6018,7 +6119,7 @@ describe("skeleton edit commands", () => {
       segmentId: 29n,
       parentNodeId: undefined,
     });
-    expect(state.getOptimisticEditFatalState()).toBeUndefined();
+    expect(state.getReloadRequired()).toBeUndefined();
   });
 
   it("redos a cold merge canceled before recipe construction using retained complete inputs", async () => {
@@ -6048,7 +6149,7 @@ describe("skeleton edit commands", () => {
       deletedSegmentId: 17n,
       directionAdjusted: false,
     });
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [first],
       segmentId: 11n,
       getSkeleton,
@@ -6060,18 +6161,18 @@ describe("skeleton edit commands", () => {
     const undo = undoSpatialSkeletonCommand(layer as any);
     await Promise.all([original, undo]);
     expect(mergeSkeletons).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(true);
+    expect(spatialSkeletonEditSession.commandHistory.canRedo.value).toBe(true);
     const redo = redoSpatialSkeletonCommand(layer as any);
     await redo;
     await redo.settled;
     expect(mergeSkeletons).toHaveBeenCalledWith(101n, 201n);
-    expect(spatialSkeletonState.getCachedNode(201n)).toMatchObject({
+    expect(spatialSkeletonEditSession.getCachedNode(201n)).toMatchObject({
       segmentId: 11n,
       parentNodeId: 101n,
     });
     resolveOldRead([target]);
     await waitForMicrotasks(12);
-    expect(spatialSkeletonState.getCachedNode(201n)?.segmentId).toBe(11n);
+    expect(spatialSkeletonEditSession.getCachedNode(201n)?.segmentId).toBe(11n);
     expect(mergeSkeletons).toHaveBeenCalledOnce();
   });
 
@@ -6091,17 +6192,16 @@ describe("skeleton edit commands", () => {
     const barrier = new Promise<void>((resolve) => {
       releasePreview = resolve;
     });
-    const prepare =
-      SpatialSkeletonOptimisticProjectionRuntime.prototype.prepareExact;
-    const projectionPort: {
+    const prepare = SpatialSkeletonEditPreview.prototype.prepareExact;
+    const previewPort: {
       prepareExact: (
         ...args: Parameters<typeof prepare>
       ) => ReturnType<typeof prepare> | Promise<ReturnType<typeof prepare>>;
-    } = SpatialSkeletonOptimisticProjectionRuntime.prototype;
+    } = SpatialSkeletonEditPreview.prototype;
     const prepareSpy = vi
-      .spyOn(projectionPort, "prepareExact")
+      .spyOn(previewPort, "prepareExact")
       .mockImplementationOnce(async function (
-        this: SpatialSkeletonOptimisticProjectionRuntime,
+        this: SpatialSkeletonEditPreview,
         ...args
       ) {
         const prepared = prepare.apply(this, args);
@@ -6113,13 +6213,12 @@ describe("skeleton edit commands", () => {
       deletedSegmentId: 17n,
       directionAdjusted: false,
     });
-    const { layer, spatialSkeletonState: state } =
-      makeOptimisticAddNodeTestLayer({
-        initialNodes: [first, target],
-        segmentId: 11n,
-        segmentIds: [11n, 17n],
-        mergeSkeletons,
-      });
+    const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer({
+      initialNodes: [first, target],
+      segmentId: 11n,
+      segmentIds: [11n, 17n],
+      mergeSkeletons,
+    });
     try {
       const original = executeSpatialSkeletonMerge(layer as any, first, target);
       await original.acceptedByQueue;
@@ -6141,7 +6240,7 @@ describe("skeleton edit commands", () => {
       await waitForMicrotasks(12);
       expect(mergeSkeletons).toHaveBeenCalledOnce();
       expect(state.getCachedNode(201n)?.segmentId).toBe(11n);
-      expect(state.getOptimisticEditFatalState()).toBeUndefined();
+      expect(state.getReloadRequired()).toBeUndefined();
     } finally {
       releasePreview();
       prepareSpy.mockRestore();
@@ -6162,7 +6261,7 @@ describe("skeleton edit commands", () => {
     };
     const getSkeleton = vi.fn();
     const mergeSkeletons = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [],
       segmentId: firstNode.segmentId,
       segmentIds: [firstNode.segmentId, secondNode.segmentId],
@@ -6184,8 +6283,8 @@ describe("skeleton edit commands", () => {
 
     expect(getSkeleton).not.toHaveBeenCalled();
     expect(mergeSkeletons).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual([]);
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual([]);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(false);
   });
 
   it("rejects a node action when only its picked node is known", async () => {
@@ -6197,7 +6296,7 @@ describe("skeleton edit commands", () => {
     };
     const getSkeleton = vi.fn();
     const moveNode = vi.fn().mockResolvedValue({});
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [],
       segmentId: node.segmentId,
       getSkeleton,
@@ -6216,7 +6315,7 @@ describe("skeleton edit commands", () => {
 
     expect(getSkeleton).not.toHaveBeenCalled();
     expect(moveNode).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getOptimisticEditQueueSnapshot()).toEqual([]);
+    expect(spatialSkeletonEditSession.getEditQueueRows()).toEqual([]);
   });
 
   it("keeps an active drag above an older move during merge replay", async () => {
@@ -6261,7 +6360,7 @@ describe("skeleton edit commands", () => {
           );
         }),
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [firstNode, secondNode],
       segmentId: firstSegmentId,
       segmentIds: [firstSegmentId, secondSegmentId],
@@ -6273,20 +6372,20 @@ describe("skeleton edit commands", () => {
     await executeSpatialSkeletonMerge(layer as any, firstNode, secondNode);
     const nextPosition = new Float32Array([10, 20, 30]);
     await executeSpatialSkeletonMoveNode(layer as any, {
-      node: spatialSkeletonState.getCachedNode(firstNode.nodeId)!,
+      node: spatialSkeletonEditSession.getCachedNode(firstNode.nodeId)!,
       nextPositionInModelSpace: nextPosition,
     });
     expect(moveNode).not.toHaveBeenCalled();
 
     const interactionPosition = new Float32Array([40, 50, 60]);
-    spatialSkeletonState.setPendingNodePosition(
+    spatialSkeletonEditSession.setPendingNodePosition(
       firstNode.nodeId,
       interactionPosition,
     );
-    // Removing the projected complete snapshot forces confirmation through
+    // Removing the previewed complete snapshot forces confirmation through
     // rollback/rebase/replay, while the interaction override stays visible.
     replaceCachedSegmentForTest(
-      spatialSkeletonState,
+      spatialSkeletonEditSession,
       firstSegmentId,
       undefined,
     );
@@ -6300,30 +6399,30 @@ describe("skeleton edit commands", () => {
     expect(moveNode).toHaveBeenCalledTimes(1);
     expect(
       Array.from(
-        spatialSkeletonState.getPendingNodePosition(firstNode.nodeId)!,
+        spatialSkeletonEditSession.getPendingNodePosition(firstNode.nodeId)!,
       ),
     ).toEqual(Array.from(interactionPosition));
     const updatedInteractionPosition = new Float32Array([70, 80, 90]);
-    spatialSkeletonState.setPendingNodePosition(
+    spatialSkeletonEditSession.setPendingNodePosition(
       firstNode.nodeId,
       updatedInteractionPosition,
     );
     expect(
       Array.from(
-        spatialSkeletonState.getPendingNodePosition(firstNode.nodeId)!,
+        spatialSkeletonEditSession.getPendingNodePosition(firstNode.nodeId)!,
       ),
     ).toEqual(Array.from(updatedInteractionPosition));
 
-    spatialSkeletonState.clearPendingNodePositions();
+    spatialSkeletonEditSession.clearPendingNodePositions();
     expect(
-      spatialSkeletonState.getPendingNodePosition(firstNode.nodeId),
+      spatialSkeletonEditSession.getPendingNodePosition(firstNode.nodeId),
     ).toBeUndefined();
     expect(
       Array.from(
-        spatialSkeletonState.getCachedNode(firstNode.nodeId)!.position,
+        spatialSkeletonEditSession.getCachedNode(firstNode.nodeId)!.position,
       ),
     ).toEqual(Array.from(nextPosition));
-    spatialSkeletonState.clearRuntimeState();
+    spatialSkeletonEditSession.clearRuntimeState();
   });
 
   it("does not verify topology after a committed optimistic merge", async () => {
@@ -6351,7 +6450,7 @@ describe("skeleton edit commands", () => {
         deletedSegmentId: secondSegmentId,
         directionAdjusted: false,
       });
-      const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+      const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
         initialNodes: [firstNode, secondNode],
         segmentId: firstSegmentId,
         segmentIds: [firstSegmentId, secondSegmentId],
@@ -6359,7 +6458,7 @@ describe("skeleton edit commands", () => {
         getSkeleton,
       });
 
-      await afterPresentationTurnWithFakeTimers(
+      await afterDisplayTurnWithFakeTimers(
         executeSpatialSkeletonMerge(layer as any, firstNode, secondNode),
       );
       await waitForMicrotasks(20);
@@ -6371,7 +6470,7 @@ describe("skeleton edit commands", () => {
       await waitForMicrotasks(20);
       expect(getSkeleton).not.toHaveBeenCalled();
 
-      spatialSkeletonState.clearRuntimeState();
+      spatialSkeletonEditSession.clearRuntimeState();
     } finally {
       vi.useRealTimers();
     }
@@ -6420,7 +6519,7 @@ describe("skeleton edit commands", () => {
       }
       return [];
     });
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [firstNode, secondNode],
       segmentId: firstSegmentId,
       segmentIds: [firstSegmentId, secondSegmentId],
@@ -6437,9 +6536,9 @@ describe("skeleton edit commands", () => {
     await execution;
     await vi.waitFor(() => expect(mergeSkeletons).toHaveBeenCalledTimes(1));
     const mergeUndo = undoSpatialSkeletonCommand(layer as any);
-    await waitForPresentationTurn();
+    await waitForDisplayTurn();
 
-    const restoredPreview = spatialSkeletonState.getCachedNode(
+    const restoredPreview = spatialSkeletonEditSession.getCachedNode(
       secondNode.nodeId,
     )!;
     expect(restoredPreview.parentNodeId).toBeUndefined();
@@ -6461,13 +6560,13 @@ describe("skeleton edit commands", () => {
     await expect(mergeUndo.settled).resolves.toMatchObject({
       outcome: "committed",
     });
-    expect(spatialSkeletonState.getCachedNode(secondNode.nodeId)).toMatchObject(
-      {
-        segmentId: restoredSegmentId,
-        parentNodeId: undefined,
-      },
-    );
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
+    expect(
+      spatialSkeletonEditSession.getCachedNode(secondNode.nodeId),
+    ).toMatchObject({
+      segmentId: restoredSegmentId,
+      parentNodeId: undefined,
+    });
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(false);
   });
 
   it("keeps rapid chained merge undos logically distinct while the first split is in flight", async () => {
@@ -6547,7 +6646,7 @@ describe("skeleton edit commands", () => {
       }
       return [];
     });
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [firstRoot, secondRoot, thirdRoot],
       segmentId: resultSegmentId,
       segmentIds: [
@@ -6569,7 +6668,7 @@ describe("skeleton edit commands", () => {
     await firstMerge.settled;
     const secondMerge = executeSpatialSkeletonMerge(
       layer as any,
-      spatialSkeletonState.getCachedNode(firstRoot.nodeId)!,
+      spatialSkeletonEditSession.getCachedNode(firstRoot.nodeId)!,
       thirdRoot,
     );
     await secondMerge;
@@ -6583,29 +6682,31 @@ describe("skeleton edit commands", () => {
     await expect(undoSecond).resolves.toBe(true);
     await waitForMicrotasks(8);
 
-    const undoEntries = spatialSkeletonState
-      .getOptimisticEditQueueSnapshot()
+    const undoEntries = spatialSkeletonEditSession
+      .getEditQueueRows()
       .filter(
         (entry) => entry.kind === "mergeSkeletons" && entry.intent === "undo",
       );
     expect(undoEntries).toHaveLength(2);
-    const thirdUndoSegmentId = spatialSkeletonState.getCachedNode(
+    const thirdUndoSegmentId = spatialSkeletonEditSession.getCachedNode(
       thirdRoot.nodeId,
     )!.segmentId;
-    const secondUndoSegmentId = spatialSkeletonState.getCachedNode(
+    const secondUndoSegmentId = spatialSkeletonEditSession.getCachedNode(
       secondRoot.nodeId,
     )!.segmentId;
     expect(thirdUndoSegmentId).not.toBe(secondUndoSegmentId);
-    expect(spatialSkeletonState.getCachedNode(thirdRoot.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(thirdRoot.nodeId),
+    ).toMatchObject({
       parentNodeId: undefined,
       segmentId: thirdUndoSegmentId,
     });
-    expect(spatialSkeletonState.getCachedNode(secondRoot.nodeId)).toMatchObject(
-      {
-        parentNodeId: undefined,
-        segmentId: secondUndoSegmentId,
-      },
-    );
+    expect(
+      spatialSkeletonEditSession.getCachedNode(secondRoot.nodeId),
+    ).toMatchObject({
+      parentNodeId: undefined,
+      segmentId: secondUndoSegmentId,
+    });
     expect(splitSkeleton).toHaveBeenCalledTimes(1);
 
     splitResolvers[0]!({
@@ -6641,13 +6742,12 @@ describe("skeleton edit commands", () => {
       ),
     ).toBe(false);
     expect(
-      spatialSkeletonState.getCachedNode(secondRoot.nodeId)?.segmentId,
+      spatialSkeletonEditSession.getCachedNode(secondRoot.nodeId)?.segmentId,
     ).toBe(firstRestoredSegmentId);
     expect(
-      spatialSkeletonState.getCachedNode(thirdRoot.nodeId)?.segmentId,
+      spatialSkeletonEditSession.getCachedNode(thirdRoot.nodeId)?.segmentId,
     ).toBe(secondRestoredSegmentId);
-    const identities =
-      spatialSkeletonState.getOptimisticEditingIdentityService();
+    const identities = spatialSkeletonEditSession.getEditingIdentityService();
     expect(
       identities.resolveSegment(
         identities.getOrCreateSegmentHandle(firstDeletedSegmentId),
@@ -6658,7 +6758,7 @@ describe("skeleton edit commands", () => {
         identities.getOrCreateSegmentHandle(secondDeletedSegmentId),
       ),
     ).toBe(secondRestoredSegmentId);
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(false);
   });
 
   it.each([false, true])(
@@ -6689,15 +6789,16 @@ describe("skeleton edit commands", () => {
         .mockResolvedValueOnce({ existingSegmentId: 17n, newSegmentId: 23n })
         .mockResolvedValueOnce({ existingSegmentId: 17n, newSegmentId: 29n });
       const rerootSkeleton = vi.fn(async () => undefined);
-      const { layer, spatialSkeletonState: state } =
-        makeOptimisticAddNodeTestLayer({
+      const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer(
+        {
           initialNodes: nodes,
           segmentId: 11n,
           segmentIds: [11n, 17n],
           mergeSkeletons,
           splitSkeleton,
           rerootSkeleton,
-        });
+        },
+      );
       const merge = executeSpatialSkeletonMerge(
         layer as any,
         nodes[1],
@@ -6723,7 +6824,7 @@ describe("skeleton edit commands", () => {
       await expect(undo.settled).resolves.toMatchObject({
         outcome: "committed",
       });
-      expect(state.getOptimisticEditFatalState()).toBeUndefined();
+      expect(state.getReloadRequired()).toBeUndefined();
       expect(splitSkeleton).toHaveBeenCalledWith(102n);
       expect(rerootSkeleton).toHaveBeenCalledWith(101n);
       if (!queueRedo) {
@@ -6757,7 +6858,7 @@ describe("skeleton edit commands", () => {
         segmentId: 17n,
         parentNodeId: undefined,
       });
-      expect(state.getOptimisticEditFatalState()).toBeUndefined();
+      expect(state.getReloadRequired()).toBeUndefined();
     },
   );
 
@@ -6781,15 +6882,16 @@ describe("skeleton edit commands", () => {
       );
       const rerootSkeleton = vi.fn(async () => undefined);
       const updateConfidence = vi.fn(async () => undefined);
-      const { layer, spatialSkeletonState: state } =
-        makeOptimisticAddNodeTestLayer({
+      const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer(
+        {
           initialNodes: nodes,
           segmentId: 11n,
           segmentIds: [11n, 17n],
           mergeSkeletons,
           rerootSkeleton,
           updateConfidence,
-        });
+        },
+      );
       const merge = executeSpatialSkeletonMerge(
         layer as any,
         nodes[1],
@@ -6846,7 +6948,7 @@ describe("skeleton edit commands", () => {
               [201n, confidence],
             ],
       );
-      expect(state.getOptimisticEditFatalState()).toBeUndefined();
+      expect(state.getReloadRequired()).toBeUndefined();
     },
   );
 
@@ -6890,8 +6992,8 @@ describe("skeleton edit commands", () => {
         .mockResolvedValueOnce({ existingSegmentId: 17n, newSegmentId: 23n })
         .mockResolvedValueOnce({ existingSegmentId: 17n, newSegmentId: 29n });
       const updateConfidence = vi.fn().mockResolvedValue(undefined);
-      const { layer, spatialSkeletonState: state } =
-        makeOptimisticAddNodeTestLayer({
+      const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer(
+        {
           initialNodes: nodes,
           segmentId: 11n,
           segmentIds: [11n, 17n],
@@ -6900,7 +7002,8 @@ describe("skeleton edit commands", () => {
           insertNode,
           splitSkeleton,
           updateConfidence,
-        });
+        },
+      );
       const merge = executeSpatialSkeletonMerge(
         layer as any,
         nodes[1],
@@ -6996,7 +7099,7 @@ describe("skeleton edit commands", () => {
           }
         }
       }
-      expect(state.getOptimisticEditFatalState()).toBeUndefined();
+      expect(state.getReloadRequired()).toBeUndefined();
     },
   );
 
@@ -7041,8 +7144,8 @@ describe("skeleton edit commands", () => {
         .mockResolvedValueOnce({ existingSegmentId: 23n, newSegmentId: 31n });
       const rerootSkeleton = vi.fn().mockResolvedValue(undefined);
       const updateConfidence = vi.fn().mockResolvedValue(undefined);
-      const { layer, spatialSkeletonState: state } =
-        makeOptimisticAddNodeTestLayer({
+      const { layer, spatialSkeletonEditSession: state } = makeAddNodeTestLayer(
+        {
           initialNodes: nodes,
           segmentId: 11n,
           segmentIds: [11n, 17n, 23n],
@@ -7050,7 +7153,8 @@ describe("skeleton edit commands", () => {
           splitSkeleton,
           rerootSkeleton,
           updateConfidence,
-        });
+        },
+      );
       const first = executeSpatialSkeletonMerge(
         layer as any,
         nodes[1],
@@ -7070,7 +7174,7 @@ describe("skeleton edit commands", () => {
         directionAdjusted: true,
       });
       await waitForMicrotasks(16);
-      expect(state.getOptimisticEditFatalState()).toBeUndefined();
+      expect(state.getReloadRequired()).toBeUndefined();
       await expect(first.settled).resolves.toMatchObject({
         outcome: "committed",
       });
@@ -7107,7 +7211,7 @@ describe("skeleton edit commands", () => {
           expect(mergeSkeletons).toHaveBeenLastCalledWith(301n, 102n);
         }
       }
-      expect(state.getOptimisticEditFatalState()).toBeUndefined();
+      expect(state.getReloadRequired()).toBeUndefined();
     },
   );
 
@@ -7142,7 +7246,7 @@ describe("skeleton edit commands", () => {
           },
         ),
     );
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [firstRoot, secondRoot],
       segmentId: firstSegmentId,
       segmentIds: [firstSegmentId, winningSegmentId],
@@ -7160,29 +7264,30 @@ describe("skeleton edit commands", () => {
     await expect(merge.settled).resolves.toMatchObject({
       outcome: "committed",
     });
-    const identities =
-      spatialSkeletonState.getOptimisticEditingIdentityService();
+    const identities = spatialSkeletonEditSession.getEditingIdentityService();
     expect(
       identities.resolveSegment(
         identities.getOrCreateSegmentHandle(firstSegmentId),
       ),
     ).toBe(winningSegmentId);
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(true);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(true);
     const undo = undoSpatialSkeletonCommand(layer as any);
     await expect(undo.acceptedByQueue).resolves.toBeUndefined();
     await expect(undo).resolves.toBe(true);
 
-    const undoEntry = spatialSkeletonState
-      .getOptimisticEditQueueSnapshot()
+    const undoEntry = spatialSkeletonEditSession
+      .getEditQueueRows()
       .find(
         (entry) => entry.kind === "mergeSkeletons" && entry.intent === "undo",
       );
     expect(undoEntry).toBeDefined();
-    const restoredPreviewSegmentId = spatialSkeletonState.getCachedNode(
+    const restoredPreviewSegmentId = spatialSkeletonEditSession.getCachedNode(
       firstRoot.nodeId,
     )!.segmentId;
     expect(restoredPreviewSegmentId).not.toBe(winningSegmentId);
-    expect(spatialSkeletonState.getCachedNode(firstRoot.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(firstRoot.nodeId),
+    ).toMatchObject({
       parentNodeId: undefined,
       segmentId: restoredPreviewSegmentId,
     });
@@ -7192,7 +7297,9 @@ describe("skeleton edit commands", () => {
     });
     await waitForMicrotasks(16);
     expect(splitSkeleton).toHaveBeenCalledWith(firstRoot.nodeId);
-    expect(spatialSkeletonState.getCachedNode(firstRoot.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(firstRoot.nodeId),
+    ).toMatchObject({
       segmentId: restoredSegmentId,
     });
   });
@@ -7244,7 +7351,7 @@ describe("skeleton edit commands", () => {
     const rerootSkeleton = vi.fn().mockRejectedValue(error);
     const moveNode = vi.fn().mockResolvedValue({});
     const getSkeleton = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [firstRoot, secondRoot, secondAttach],
       segmentId: firstSegmentId,
       segmentIds: [firstSegmentId, secondSegmentId],
@@ -7264,13 +7371,13 @@ describe("skeleton edit commands", () => {
     const undo = undoSpatialSkeletonCommand(layer as any);
     await expect(undo.acceptedByQueue).resolves.toBeUndefined();
     const move = executeSpatialSkeletonMoveNode(layer as any, {
-      node: spatialSkeletonState.getCachedNode(secondRoot.nodeId)!,
+      node: spatialSkeletonEditSession.getCachedNode(secondRoot.nodeId)!,
       nextPositionInModelSpace: new Float32Array([40, 50, 60]),
     });
     await move;
     expect(
       Array.from(
-        spatialSkeletonState.getCachedNode(secondRoot.nodeId)!.position,
+        spatialSkeletonEditSession.getCachedNode(secondRoot.nodeId)!.position,
       ),
     ).toEqual([40, 50, 60]);
     expect(moveNode).not.toHaveBeenCalled();
@@ -7283,7 +7390,7 @@ describe("skeleton edit commands", () => {
 
     expect(splitSkeleton).toHaveBeenCalledWith(secondAttach.nodeId);
     expect(rerootSkeleton).toHaveBeenCalledWith(secondRoot.nodeId);
-    expectReloadRequired(spatialSkeletonState, "committed");
+    expectReloadRequired(spatialSkeletonEditSession, "committed");
     expect(undoSettled).not.toHaveBeenCalled();
     await expect(move.settled).resolves.toMatchObject({
       outcome: "unchanged",
@@ -7291,8 +7398,8 @@ describe("skeleton edit commands", () => {
     });
     expect(getSkeleton).not.toHaveBeenCalled();
     expect(moveNode).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.commandHistory.canUndo.value).toBe(false);
-    expect(spatialSkeletonState.commandHistory.canRedo.value).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canUndo.value).toBe(false);
+    expect(spatialSkeletonEditSession.commandHistory.canRedo.value).toBe(false);
   });
 
   it("rolls back an optimistic move that depends on a rejected split", async () => {
@@ -7317,7 +7424,7 @@ describe("skeleton edit commands", () => {
         }),
     );
     const moveNode = vi.fn();
-    const { layer, spatialSkeletonState } = makeOptimisticAddNodeTestLayer({
+    const { layer, spatialSkeletonEditSession } = makeAddNodeTestLayer({
       initialNodes: [rootNode, splitNode],
       segmentId,
       splitSkeleton,
@@ -7325,14 +7432,16 @@ describe("skeleton edit commands", () => {
     });
 
     await executeSpatialSkeletonSplit(layer as any, splitNode);
-    const splitPreview = spatialSkeletonState.getCachedNode(splitNode.nodeId)!;
+    const splitPreview = spatialSkeletonEditSession.getCachedNode(
+      splitNode.nodeId,
+    )!;
     await executeSpatialSkeletonMoveNode(layer as any, {
       node: splitPreview,
       nextPositionInModelSpace: new Float32Array([40, 50, 60]),
     });
     expect(
       Array.from(
-        spatialSkeletonState.getCachedNode(splitNode.nodeId)!.position,
+        spatialSkeletonEditSession.getCachedNode(splitNode.nodeId)!.position,
       ),
     ).toEqual([40, 50, 60]);
 
@@ -7340,13 +7449,16 @@ describe("skeleton edit commands", () => {
     await waitForMicrotasks(10);
 
     expect(moveNode).not.toHaveBeenCalled();
-    expect(spatialSkeletonState.getCachedNode(splitNode.nodeId)).toMatchObject({
+    expect(
+      spatialSkeletonEditSession.getCachedNode(splitNode.nodeId),
+    ).toMatchObject({
       segmentId,
       parentNodeId: rootNode.nodeId,
     });
     expect(
       Array.from(
-        spatialSkeletonState.getCachedNode(splitNode.nodeId)?.position ?? [],
+        spatialSkeletonEditSession.getCachedNode(splitNode.nodeId)?.position ??
+          [],
       ),
     ).toEqual(Array.from(splitNode.position));
   });
@@ -7386,9 +7498,9 @@ describe("skeleton edit failure messages", () => {
 
 describe("skeleton reroot command", () => {
   it("rerooting the root node is refused and says it is already root", () => {
-    const executeOptimisticEdit = vi.fn();
+    const executeEdit = vi.fn();
     const layer = {
-      spatialSkeletonState: { executeOptimisticEdit },
+      spatialSkeletonEditSession: { executeEdit },
       getSpatiallyIndexedSkeletonLayer: () => undefined,
     };
     expect(() =>
@@ -7398,6 +7510,6 @@ describe("skeleton reroot command", () => {
         position: new Float32Array([1, 2, 3]),
       }),
     ).toThrow("Node 17 is already root.");
-    expect(executeOptimisticEdit).not.toHaveBeenCalled();
+    expect(executeEdit).not.toHaveBeenCalled();
   });
 });

@@ -16,17 +16,17 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { SpatialSkeletonOptimisticEditSettlement } from "#src/skeleton/edit_queue/types.js";
+import type { SpatialSkeletonEditSettlement } from "#src/skeleton/edit_queue/types.js";
 import {
-  committedSpatialSkeletonOptimisticEditSettlement,
-  createInitialSpatialSkeletonOptimisticIntentLifecycle,
-  unchangedSpatialSkeletonOptimisticEditSettlement,
+  committedSpatialSkeletonEditSettlement,
+  createInitialSpatialSkeletonIntentLifecycle,
+  unchangedSpatialSkeletonEditSettlement,
 } from "#src/skeleton/edit_queue/types.js";
 
 describe("spatial skeleton optimistic lifecycle", () => {
   it("creates an independent lifecycle with every generic axis", () => {
-    const first = createInitialSpatialSkeletonOptimisticIntentLifecycle();
-    const second = createInitialSpatialSkeletonOptimisticIntentLifecycle();
+    const first = createInitialSpatialSkeletonIntentLifecycle();
+    const second = createInitialSpatialSkeletonIntentLifecycle();
 
     expect(first).toEqual({
       preview: "reserved",
@@ -39,12 +39,9 @@ describe("spatial skeleton optimistic lifecycle", () => {
 
   it("represents only definitive authority settlements", () => {
     const settlements = [
-      committedSpatialSkeletonOptimisticEditSettlement({ revision: 2 }),
-      unchangedSpatialSkeletonOptimisticEditSettlement(
-        "rejected",
-        new Error("conflict"),
-      ),
-    ] satisfies readonly SpatialSkeletonOptimisticEditSettlement[];
+      committedSpatialSkeletonEditSettlement({ revision: 2 }),
+      unchangedSpatialSkeletonEditSettlement("rejected", new Error("conflict")),
+    ] satisfies readonly SpatialSkeletonEditSettlement[];
 
     expect(settlements.map(({ outcome }) => outcome)).toEqual([
       "committed",

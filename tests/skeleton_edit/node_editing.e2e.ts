@@ -56,7 +56,9 @@ for (const [index, field] of [
                 window as unknown as { viewer: Viewer }
               ).viewer.layerManager.getLayerByName("Skeletons")!
                 .layer as SegmentationUserLayer;
-              return Array.from(layer.spatialSkeletonState.getPendingNodeIds());
+              return Array.from(
+                layer.spatialSkeletonEditSession.getPendingNodeIds(),
+              );
             });
           await ui.selectNode(id);
           const center = await ui.panelCenter();
@@ -438,7 +440,7 @@ test.describe("creation", () => {
           ).viewer.layerManager.getLayerByName("Skeletons")!
             .layer as SegmentationUserLayer;
           return Array.from(
-            layer.spatialSkeletonState.getPendingNodePosition(id) ?? [],
+            layer.spatialSkeletonEditSession.getPendingNodePosition(id) ?? [],
           );
         }, id);
       await ui.page.mouse.move(start.x, start.y);

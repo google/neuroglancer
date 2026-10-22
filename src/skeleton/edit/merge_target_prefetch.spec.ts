@@ -18,7 +18,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonMergeTargetPrefetch } from "#src/skeleton/edit/merge_target_prefetch.js";
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 
 function makeWholeSkeletonReads(
   getSkeleton: (
@@ -91,7 +91,7 @@ function flushPromises() {
 
 describe("SpatialSkeletonMergeTargetPrefetch", () => {
   it("protects an already-cached merge target before rendering can evict it", () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     const { skeletonLayer, getSkeleton } = makeSkeletonLayer();
     const prefetch = new SpatialSkeletonMergeTargetPrefetch(state);
     state.replaceCachedSegmentSnapshots([[7n, [makeSkeletonNode(7n, 70n)]]]);
@@ -110,7 +110,7 @@ describe("SpatialSkeletonMergeTargetPrefetch", () => {
   });
 
   it("keeps the loaded merge target cached while other skeletons are evicted", async () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     const { skeletonLayer, reads } = makeSkeletonLayer();
     const prefetch = new SpatialSkeletonMergeTargetPrefetch(state);
 
@@ -127,7 +127,7 @@ describe("SpatialSkeletonMergeTargetPrefetch", () => {
   });
 
   it("keeps the merge target cached after its snapshot is replaced while hovered", async () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     const { skeletonLayer, getSkeleton, reads } = makeSkeletonLayer();
     const prefetch = new SpatialSkeletonMergeTargetPrefetch(state);
 
@@ -146,7 +146,7 @@ describe("SpatialSkeletonMergeTargetPrefetch", () => {
   });
 
   it("never downloads the previous target when the pointer moves to another skeleton", async () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     const { skeletonLayer, reads } = makeSkeletonLayer();
     const prefetch = new SpatialSkeletonMergeTargetPrefetch(state);
 
@@ -159,7 +159,7 @@ describe("SpatialSkeletonMergeTargetPrefetch", () => {
   });
 
   it("keeps a download the display also awaits when the target changes", async () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     const { skeletonLayer, reads } = makeSkeletonLayer();
     const prefetch = new SpatialSkeletonMergeTargetPrefetch(state);
 
@@ -172,7 +172,7 @@ describe("SpatialSkeletonMergeTargetPrefetch", () => {
   });
 
   it("does not retry a failed download while the pointer stays on that skeleton", async () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     const { skeletonLayer, getSkeleton, reads } = makeSkeletonLayer();
     const prefetch = new SpatialSkeletonMergeTargetPrefetch(state);
 

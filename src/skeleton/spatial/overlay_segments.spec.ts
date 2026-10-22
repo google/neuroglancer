@@ -17,7 +17,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.js";
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   buildSpatiallyIndexedSkeletonOverlayGeometry,
   getPendingNodeOverride,
@@ -121,7 +121,7 @@ function makeOverlaySegments(
     skeletonLayer?: SpatiallyIndexedSkeletonLayer;
   } = {},
 ) {
-  const state = new SpatialSkeletonState();
+  const state = new SpatialSkeletonEditSession();
   const visibleSegments = new Uint64Set();
   visibleSegments.add([...(options.visible ?? [])]);
   const overlaySegments = new SkeletonOverlaySegments({
@@ -130,7 +130,7 @@ function makeOverlaySegments(
       temporaryVisibleSegments: new Uint64Set(),
       useTemporaryVisibleSegments: new WatchableValue(false),
     } as unknown as VisibleSegmentsState),
-    editState: state,
+    editSession: state,
   });
   const skeletonLayer =
     options.skeletonLayer ?? ({} as SpatiallyIndexedSkeletonLayer);
@@ -156,23 +156,23 @@ function makeLoadingSkeletonLayer() {
   return { skeletonLayer, requestedSegmentIds };
 }
 
-function removeSegment(state: SpatialSkeletonState, segmentId: bigint) {
-  const presentation = state.spatialSkeletonPresentation.value;
-  const prepared = state.prepareSpatialSkeletonProjectionStatePublication({
+function removeSegment(state: SpatialSkeletonEditSession, segmentId: bigint) {
+  const presentation = state.spatialSkeletonDisplay.value;
+  const prepared = state.prepareSpatialSkeletonPreviewCachePublication({
     snapshots: [[segmentId, undefined]],
     expectedRevisions: new Map([
       [segmentId, state.getCachedSegmentRevision(segmentId)],
     ]),
-    activeLogicalOwners: presentation.activeLogicalOwners,
+    activeStableOwners: presentation.activeStableOwners,
     numericAliases: presentation.numericAliases,
     provisionalNodeIds: presentation.provisionalNodeIds,
-    preparationIntentIdsToRemove: [],
+    pendingEditIntentIdsToRemove: [],
     notify: true,
   })!;
-  state.runSpatialSkeletonPresentationTransaction(() => {
-    state.adoptPreparedSpatialSkeletonProjectionStatePublication(prepared);
+  state.runSpatialSkeletonDisplayTransaction(() => {
+    state.adoptPreparedSpatialSkeletonPreviewCachePublication(prepared);
   });
-  state.finalizePreparedSpatialSkeletonProjectionStatePublication(prepared);
+  state.finalizePreparedSpatialSkeletonPreviewCachePublication(prepared);
 }
 
 function getExcludedSegmentIds(overlaySegments: SkeletonOverlaySegments) {
@@ -318,7 +318,7 @@ describe("SkeletonOverlaySegments", () => {
 
 describe("getPendingNodeOverride", () => {
   it("moves only the dragged node, not the node at the same index in another skeleton", () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     const dragged = buildSpatiallyIndexedSkeletonOverlayGeometry([
       [makeNode(1n, 11n)],
     ]);

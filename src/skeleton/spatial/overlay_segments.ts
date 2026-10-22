@@ -18,8 +18,8 @@ import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.
 import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import type {
-  SpatialSkeletonPresentationSnapshot,
-  SpatialSkeletonState,
+  SpatialSkeletonDisplaySnapshot,
+  SpatialSkeletonEditSession,
 } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
@@ -172,25 +172,25 @@ function retainSpatiallyIndexedSkeletonOverlaySegment(
 /** Assumes only one node is dragged at a time. */
 export function getPendingNodeOverride(
   nodeIndex: ReadonlyMap<bigint, number>,
-  editState: Pick<
-    SpatialSkeletonState,
+  editSession: Pick<
+    SpatialSkeletonEditSession,
     "getPendingNodeIds" | "getPendingNodePosition"
   >,
 ): { vertexIndex: number; position: ArrayLike<number> } | undefined {
-  for (const nodeId of editState.getPendingNodeIds()) {
+  for (const nodeId of editSession.getPendingNodeIds()) {
     const vertexIndex = nodeIndex.get(nodeId);
     if (vertexIndex === undefined) continue;
-    const position = editState.getPendingNodePosition(nodeId);
+    const position = editSession.getPendingNodePosition(nodeId);
     if (position === undefined) continue;
     return { vertexIndex, position };
   }
   return undefined;
 }
 
-export type SkeletonOverlaySegmentsEditState = Pick<
-  SpatialSkeletonState,
+export type SkeletonOverlaySegmentsEditSession = Pick<
+  SpatialSkeletonEditSession,
   | "nodeDataVersion"
-  | "spatialSkeletonPresentation"
+  | "spatialSkeletonDisplay"
   | "pendingNodePositionVersion"
   | "getPendingNodePosition"
   | "getCachedSegmentNodes"
@@ -200,7 +200,7 @@ export type SkeletonOverlaySegmentsEditState = Pick<
 
 export interface SkeletonOverlaySegmentsOptions {
   readonly segmentationGroupState: WatchableValueInterface<VisibleSegmentsState>;
-  readonly editState: SkeletonOverlaySegmentsEditState;
+  readonly editSession: SkeletonOverlaySegmentsEditSession;
 }
 
 interface OverlaySegmentEntry {
@@ -246,7 +246,7 @@ export class SkeletonOverlaySegments extends RefCounted {
         readonly generation: number;
         readonly membershipVersion: number;
         readonly nodeDataVersion: number;
-        readonly presentation: SpatialSkeletonPresentationSnapshot;
+        readonly presentation: SpatialSkeletonDisplaySnapshot;
       }
     | undefined;
 
@@ -344,13 +344,13 @@ export class SkeletonOverlaySegments extends RefCounted {
   ): ReadonlyMap<bigint, SpatiallyIndexedSkeletonOverlayGeometry> {
     if (frameNumber === this.geometriesFrameNumber) return this.geometries;
     this.geometriesFrameNumber = frameNumber;
-    const { editState } = this.options;
+    const { editSession } = this.options;
     const segmentIds = this.getRenderSegmentIds();
     if (segmentIds.length !== 0) {
-      editState.evictInactiveSegmentNodes(segmentIds);
+      editSession.evictInactiveSegmentNodes(segmentIds);
     }
     const removedSegmentIds = new Set(
-      editState.spatialSkeletonPresentation.value.removedSegmentIds,
+      editSession.spatialSkeletonDisplay.value.removedSegmentIds,
     );
     const desiredSegmentIds = new Set(
       segmentIds.filter((segmentId) => !removedSegmentIds.has(segmentId)),
@@ -363,7 +363,7 @@ export class SkeletonOverlaySegments extends RefCounted {
       ++this.membershipVersion;
     }
     for (const segmentId of desiredSegmentIds) {
-      const nodes = editState.getCachedSegmentNodes(segmentId);
+      const nodes = editSession.getCachedSegmentNodes(segmentId);
       if (nodes === undefined) {
         // The last geometry stays drawn while refreshed nodes load.
         this.requestLoad(skeletonLayer, segmentId);
@@ -384,7 +384,7 @@ export class SkeletonOverlaySegments extends RefCounted {
         segmentId,
         buildSpatiallyIndexedSkeletonOverlayGeometry([nodes], {
           getPendingNodePosition: (nodeId) =>
-            editState.getPendingNodePosition(nodeId),
+            editSession.getPendingNodePosition(nodeId),
         }),
       );
     }
@@ -393,14 +393,14 @@ export class SkeletonOverlaySegments extends RefCounted {
 
   /** Returns whether any skeleton is excluded from the browse pass. */
   updateBrowseExcludedSegments(): boolean {
-    const { editState, segmentationGroupState } = this.options;
+    const { editSession, segmentationGroupState } = this.options;
     const visibleSegments = getVisibleSegments(segmentationGroupState.value);
-    const presentation = editState.spatialSkeletonPresentation.value;
+    const presentation = editSession.spatialSkeletonDisplay.value;
     const key = {
       visibleSegments,
       generation: visibleSegments.hashTable.generation,
       membershipVersion: this.membershipVersion,
-      nodeDataVersion: editState.nodeDataVersion.value,
+      nodeDataVersion: editSession.nodeDataVersion.value,
       presentation,
     };
     const previous = this.browseExclusionKey;
@@ -425,7 +425,7 @@ export class SkeletonOverlaySegments extends RefCounted {
       for (const segmentId of this.getVisibleSegmentIds()) {
         if (
           this.entries.has(segmentId) ||
-          editState.getCachedSegmentNodes(segmentId) !== undefined
+          editSession.getCachedSegmentNodes(segmentId) !== undefined
         ) {
           segmentIds.add(segmentId);
         }
@@ -497,9 +497,9 @@ export class SkeletonOverlaySegments extends RefCounted {
     segmentId: bigint,
     nodes: readonly SkeletonNode[],
   ) {
-    const { editState } = this.options;
+    const { editSession } = this.options;
     const pendingNodePositionVersion =
-      editState.pendingNodePositionVersion.value;
+      editSession.pendingNodePositionVersion.value;
     const cached = this.pendingPositionKeys.get(segmentId);
     if (
       cached !== undefined &&
@@ -510,7 +510,7 @@ export class SkeletonOverlaySegments extends RefCounted {
     }
     const pendingPositions: string[] = [];
     for (const node of nodes) {
-      const position = editState.getPendingNodePosition(node.nodeId);
+      const position = editSession.getPendingNodePosition(node.nodeId);
       if (position === undefined) continue;
       pendingPositions.push(
         `${node.nodeId}:${position[0]},${position[1]},${position[2]}`,
@@ -531,7 +531,7 @@ export class SkeletonOverlaySegments extends RefCounted {
   ) {
     if (this.pendingLoads.has(segmentId)) return;
     this.pendingLoads.add(segmentId);
-    void this.options.editState
+    void this.options.editSession
       .getFullSegmentNodes(skeletonLayer, segmentId)
       .catch(() => {})
       .finally(() => {

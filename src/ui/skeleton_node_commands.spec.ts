@@ -18,7 +18,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_source_connection.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   executeSpatialSkeletonNodeTrueEndUpdate,
   executeSpatialSkeletonReroot,
@@ -65,9 +65,9 @@ function makeSkeletonLayer(selectedNodeId: bigint, { inspected = true } = {}) {
     selected: { value: { nodeId: selectedNodeId, segmentId: 42n } },
     navigate: vi.fn(),
   };
-  const spatialSkeletonState = {
-    getOptimisticEditFatalState: () => undefined,
-    assertOptimisticEditingAllowed: () => {},
+  const spatialSkeletonEditSession = {
+    getReloadRequired: () => undefined,
+    assertEditingAllowed: () => {},
     getCachedNode: (nodeId: bigint) =>
       nodes.find((node) => node.nodeId === nodeId),
     getCachedSegmentNodes: () => nodes,
@@ -82,27 +82,27 @@ function makeSkeletonLayer(selectedNodeId: bigint, { inspected = true } = {}) {
         : undefined,
   };
   const skeletonSourceConnection = {
-    spatialSkeletonState,
+    spatialSkeletonEditSession,
     getActionsDisabledReason: () => undefined,
   };
   const layer = {
     skeletonNodeSelection,
     skeletonSourceConnection,
-    spatialSkeletonState,
+    spatialSkeletonEditSession,
   };
   return { layer, nodes, skeletonNodeSelection, skeletonSourceConnection };
 }
 
 function makeReadOnlySkeletonLayer() {
-  const spatialSkeletonState = new SpatialSkeletonState();
+  const spatialSkeletonEditSession = new SpatialSkeletonEditSession();
   return {
-    spatialSkeletonState,
+    spatialSkeletonEditSession,
     skeletonSourceConnection: new SkeletonSourceConnection({
-      spatialSkeletonState,
+      spatialSkeletonEditSession,
       selection: {} as any,
       overlaySegments: new SkeletonOverlaySegments({
         segmentationGroupState: new WatchableValue({} as any),
-        editState: spatialSkeletonState,
+        editSession: spatialSkeletonEditSession,
       }),
       segmentationGroupState: new WatchableValue({} as any),
       skeletonNodeAccess: makeNodeAccess([makeNode(1n, undefined)]),
@@ -242,7 +242,7 @@ describe("skeleton node commands", () => {
       .spyOn(StatusMessage, "showTemporaryMessage")
       .mockImplementation(() => ({ dispose() {} }) as any);
     const { layer } = makeSkeletonLayer(3n);
-    layer.spatialSkeletonState.assertOptimisticEditingAllowed = () => {
+    layer.spatialSkeletonEditSession.assertEditingAllowed = () => {
       throw new Error("Editing is paused.");
     };
     const { viewer } = makeViewer([layer]);
@@ -279,7 +279,7 @@ describe("skeleton node commands", () => {
       .mockImplementation(() => ({ dispose() {} }) as any);
     showMessage.mockClear();
     const { layer: editableLayer } = makeSkeletonLayer(3n);
-    editableLayer.spatialSkeletonState.assertOptimisticEditingAllowed = () => {
+    editableLayer.spatialSkeletonEditSession.assertEditingAllowed = () => {
       throw new Error("Editing is paused.");
     };
     const { viewer } = makeViewer([makeReadOnlySkeletonLayer(), editableLayer]);

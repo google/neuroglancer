@@ -19,8 +19,8 @@ import { describe, expect, it } from "vitest";
 import type { SpatialSkeletonEditCommand } from "#src/skeleton/edit_commands.js";
 import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import {
-  createSpatialSkeletonOptimisticHistoryPort,
-  SpatialSkeletonCommandHistory,
+  createSpatialSkeletonHistoryPort,
+  SpatialSkeletonUndoHistory,
 } from "#src/skeleton/edit_queue/undo_history.js";
 
 function command(label: string): SpatialSkeletonEditCommand {
@@ -34,7 +34,7 @@ function command(label: string): SpatialSkeletonEditCommand {
 
 describe("undo and redo history", () => {
   it("projects staged execute, undo, and redo as a LIFO suffix", () => {
-    const history = new SpatialSkeletonCommandHistory();
+    const history = new SpatialSkeletonUndoHistory();
     const first = history.stageExecute("First");
     const second = history.stageExecute("Second");
 
@@ -61,7 +61,7 @@ describe("undo and redo history", () => {
   });
 
   it("advances only the confirmed prefix when a later no-op settles first", () => {
-    const history = new SpatialSkeletonCommandHistory();
+    const history = new SpatialSkeletonUndoHistory();
     const first = history.stageExecute("First");
     const second = history.stageExecute("Second");
 
@@ -73,7 +73,7 @@ describe("undo and redo history", () => {
   });
 
   it("abandons only the newest pre-admission transition", () => {
-    const history = new SpatialSkeletonCommandHistory();
+    const history = new SpatialSkeletonUndoHistory();
     const original = history.stageExecute("Original");
     history.confirm(original);
     const undo = history.stageUndo()!;
@@ -93,7 +93,7 @@ describe("undo and redo history", () => {
   });
 
   it("explicitly resets confirmed and staged state", () => {
-    const history = new SpatialSkeletonCommandHistory();
+    const history = new SpatialSkeletonUndoHistory();
     const confirmed = history.stageExecute("Confirmed");
     history.confirm(confirmed);
     const failed = history.stageExecute("Failed");
@@ -109,8 +109,8 @@ describe("undo and redo history", () => {
     expect(history.reset()).toBe(false);
   });
 
-  it("applies one capacity bound to confirmed and projected stacks", () => {
-    const history = new SpatialSkeletonCommandHistory({ capacity: 3 });
+  it("applies one capacity bound to confirmed and previewed stacks", () => {
+    const history = new SpatialSkeletonUndoHistory({ capacity: 3 });
     const tickets = Array.from({ length: 5 }, (_, index) =>
       history.stageExecute(`Command ${index + 1}`),
     );
@@ -128,7 +128,7 @@ describe("undo and redo history", () => {
   });
 
   it("restores Redo and capacity entries displaced by a rejected Execute", () => {
-    const history = new SpatialSkeletonCommandHistory({ capacity: 2 });
+    const history = new SpatialSkeletonUndoHistory({ capacity: 2 });
     const first = history.stageExecute("First");
     history.confirm(first);
     const second = history.stageExecute("Second");
@@ -163,7 +163,7 @@ describe("undo and redo history", () => {
   it.each(["undo", "redo"] as const)(
     "restores the source stack after rejected %s",
     (kind) => {
-      const history = new SpatialSkeletonCommandHistory();
+      const history = new SpatialSkeletonUndoHistory();
       const original = history.stageExecute("Original");
       history.confirm(original);
       if (kind === "redo") history.confirm(history.stageUndo()!);
@@ -185,7 +185,7 @@ describe("undo and redo history", () => {
   );
 
   it("retains staged recipes and confirmations only before the rollback boundary", () => {
-    const history = new SpatialSkeletonCommandHistory({ capacity: 2 });
+    const history = new SpatialSkeletonUndoHistory({ capacity: 2 });
     const pending = history.stageExecute("Still saving");
     const reverted = history.stageExecute("Reverted before failure");
     const undo = history.stageUndo()!;
@@ -214,7 +214,7 @@ describe("undo and redo history", () => {
   });
 
   it("rejects a missing rollback boundary instead of silently losing history", () => {
-    const history = new SpatialSkeletonCommandHistory();
+    const history = new SpatialSkeletonUndoHistory();
     const confirmed = history.stageExecute("Saved");
     history.confirm(confirmed);
     expect(() => history.rollbackFrom(confirmed)).toThrow(/rollback boundary/);
@@ -222,8 +222,8 @@ describe("undo and redo history", () => {
   });
 
   it("exposes the direct-cutover history port", () => {
-    const history = new SpatialSkeletonCommandHistory();
-    const port = createSpatialSkeletonOptimisticHistoryPort(history);
+    const history = new SpatialSkeletonUndoHistory();
+    const port = createSpatialSkeletonHistoryPort(history);
     const execute = port.stageExecute(command("Move node"));
     const undo = port.stageUndo()!;
 
@@ -237,7 +237,7 @@ describe("undo and redo history", () => {
   });
 
   it("resets history when its source changes", () => {
-    const history = new SpatialSkeletonCommandHistory();
+    const history = new SpatialSkeletonUndoHistory();
     history.stageExecute("Move");
     expect(history.setSource({ id: 1 })).toBe(true);
     expect(history.canUndo.value).toBe(false);

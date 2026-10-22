@@ -15,16 +15,14 @@
  */
 
 import { describe, expect, it } from "vitest";
+import type { SpatialSkeletonEditQueueRow } from "#src/skeleton/edit_queue/edit_queue_rows.js";
 import {
-  projectSpatialSkeletonOptimisticQueueSnapshot,
-  projectSpatialSkeletonOptimisticRecentActivity,
-  type SpatialSkeletonOptimisticEngineReadModelEntry,
+  buildSpatialSkeletonEditQueueRows,
+  buildSpatialSkeletonEditRecentActivity,
 } from "#src/skeleton/edit_queue/edit_queue_rows.js";
 import { HttpError } from "#src/util/http_request.js";
 
-function rejectedEntry(
-  error: unknown,
-): SpatialSkeletonOptimisticEngineReadModelEntry {
+function rejectedEntry(error: unknown): SpatialSkeletonEditQueueRow {
   return {
     sequence: 1,
     kind: "execute",
@@ -54,11 +52,12 @@ describe("optimistic queue failure explanations", () => {
     error.message += ` ${explanation}`;
     const entries = [rejectedEntry(error)];
     const reason = `Request failed with HTTP 409 (Conflict). ${explanation}`;
+    expect(buildSpatialSkeletonEditQueueRows(entries, 1)[0]).toMatchObject({
+      reason,
+      error,
+    });
     expect(
-      projectSpatialSkeletonOptimisticQueueSnapshot(entries, 1)[0],
-    ).toMatchObject({ reason, error });
-    expect(
-      projectSpatialSkeletonOptimisticRecentActivity(entries, 10)[0],
+      buildSpatialSkeletonEditRecentActivity(entries, 10)[0],
     ).toMatchObject({ status: "not-saved", reason });
     expect(reason).not.toContain(error.url);
   });
@@ -72,7 +71,7 @@ describe("optimistic queue failure explanations", () => {
         "Conflict",
       );
       error.message += ` ${explanation}`;
-      const reason = projectSpatialSkeletonOptimisticRecentActivity(
+      const reason = buildSpatialSkeletonEditRecentActivity(
         [rejectedEntry(error)],
         10,
       )[0]!.reason!;

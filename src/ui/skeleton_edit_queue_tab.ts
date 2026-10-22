@@ -17,11 +17,11 @@
 import "#src/ui/skeleton_tab.css";
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import { formatSpatialSkeletonOptimisticEditFailureReason } from "#src/skeleton/edit_queue/edit_queue_rows.js";
+import { formatSpatialSkeletonEditFailureReason } from "#src/skeleton/edit_queue/edit_queue_rows.js";
 import type {
-  SpatialSkeletonOptimisticIntentLifecycle,
-  SpatialSkeletonOptimisticEditActivityEntry,
-  SpatialSkeletonOptimisticEditQueueEntry,
+  SpatialSkeletonIntentLifecycle,
+  SpatialSkeletonEditActivityEntry,
+  SpatialSkeletonEditQueueEntry,
 } from "#src/skeleton/edit_queue/types.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/types.js";
 import { StatusMessage } from "#src/status.js";
@@ -29,25 +29,22 @@ import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { HttpError } from "#src/util/http_request.js";
 import { Tab } from "#src/widget/tab_view.js";
 
-function getOptimisticEditQueueEntries(layer: SegmentationUserLayer) {
-  return layer.spatialSkeletonState.getOptimisticEditQueueSnapshot();
+function getEditQueueEntries(layer: SegmentationUserLayer) {
+  return layer.spatialSkeletonEditSession.getEditQueueRows();
 }
 
-function getOptimisticEditQueueRecentActivity(layer: SegmentationUserLayer) {
-  return layer.spatialSkeletonState.getOptimisticEditQueueRecentActivity();
+function getEditQueueRecentActivity(layer: SegmentationUserLayer) {
+  return layer.spatialSkeletonEditSession.getEditQueueRecentActivity();
 }
 
 const NOT_SUBMITTED_ACTIVITY_PREFIX = "The edit could not be submitted: ";
 
 function getAuthorityFailureCause(
-  entry: Pick<
-    SpatialSkeletonOptimisticEditQueueEntry,
-    "lifecycle" | "reason" | "error"
-  >,
+  entry: Pick<SpatialSkeletonEditQueueEntry, "lifecycle" | "reason" | "error">,
 ) {
   const reason =
     entry.error instanceof HttpError
-      ? formatSpatialSkeletonOptimisticEditFailureReason(entry.error)
+      ? formatSpatialSkeletonEditFailureReason(entry.error)
       : entry.reason?.trim();
   if (reason === undefined || reason.length === 0) {
     return "The edit was not saved.";
@@ -58,10 +55,8 @@ function getAuthorityFailureCause(
     : reason;
 }
 
-function getAuthorityFailureMessage(
-  entry: SpatialSkeletonOptimisticEditQueueEntry,
-) {
-  const presentation = entry.authorityPresentation;
+function getAuthorityFailureMessage(entry: SpatialSkeletonEditQueueEntry) {
+  const presentation = entry.authorityLabels;
   const { authorityReason } = entry.lifecycle;
   if (
     presentation === undefined ||
@@ -72,7 +67,7 @@ function getAuthorityFailureMessage(
   const cause = getAuthorityFailureCause(entry);
   const failure =
     authorityReason === "not-started"
-      ? `Unable to submit ${presentation.operationNoun}; no ${presentation.authorityLabel} mutation request was started. The invalid preview was removed. ${cause}`
+      ? `Unable to submit ${presentation.operationNoun}; no ${presentation.authorityLabel} edit request was started. The invalid preview was removed. ${cause}`
       : `${presentation.authorityLabel} rejected ${presentation.operationNoun}. The optimistic preview was removed. ${cause}`;
   const canceled = entry.canceledLaterIntentCount ?? 0;
   return canceled === 0
@@ -81,13 +76,13 @@ function getAuthorityFailureMessage(
 }
 
 /**
- * Generic notification projection for authority lifecycle changes.
+ * Generic notification view for authority lifecycle changes.
  *
  * Datasources provide immutable wording on the intent. This controller owns
  * timers and notification handles and derives their lifetime entirely from
  * generic queue snapshots, so no datasource queue/lifecycle state is needed.
  */
-export class SpatialSkeletonOptimisticAuthorityNotificationController {
+export class SpatialSkeletonAuthorityNotificationController {
   private readonly stalledTimers = new Map<
     string,
     ReturnType<typeof setTimeout>
@@ -102,11 +97,11 @@ export class SpatialSkeletonOptimisticAuthorityNotificationController {
 
   update() {
     if (this.disposed) return;
-    const entries = getOptimisticEditQueueEntries(this.layer);
+    const entries = getEditQueueEntries(this.layer);
     const runningKeys = new Set<string>();
     for (const entry of entries) {
       const { operationId } = entry;
-      const warning = entry.authorityPresentation?.stalledWarning;
+      const warning = entry.authorityLabels?.stalledWarning;
       if (
         operationId === undefined ||
         entry.lifecycle.authority !== "running" ||
@@ -124,7 +119,7 @@ export class SpatialSkeletonOptimisticAuthorityNotificationController {
       const timeout = setTimeout(() => {
         this.stalledTimers.delete(key);
         if (this.disposed) return;
-        const current = getOptimisticEditQueueEntries(this.layer).find(
+        const current = getEditQueueEntries(this.layer).find(
           (candidate) =>
             this.getEntryKey(
               candidate.queueInstanceId,
@@ -132,7 +127,7 @@ export class SpatialSkeletonOptimisticAuthorityNotificationController {
             ) === key,
         );
         if (current?.lifecycle.authority !== "running") return;
-        const message = current.authorityPresentation?.stalledWarning?.message;
+        const message = current.authorityLabels?.stalledWarning?.message;
         if (message === undefined) return;
         this.stalledNotifications.set(
           key,
@@ -153,7 +148,7 @@ export class SpatialSkeletonOptimisticAuthorityNotificationController {
       this.stalledNotifications.delete(key);
     }
 
-    // Scan the retained canonical queue projection rather than the bounded
+    // Scan the retained canonical queue view rather than the bounded
     // Recent activity list. A large rejected closure can otherwise push its
     // root outside the capacity-bounded activity window before this observer runs.
     for (const entry of entries) {
@@ -263,9 +258,9 @@ function lowercaseFirst(value: string) {
   return value.length === 0 ? value : value[0]!.toLowerCase() + value.slice(1);
 }
 
-function getOptimisticEditQueueEntryLabel(
+function getEditQueueEntryLabel(
   entry: Pick<
-    SpatialSkeletonOptimisticEditQueueEntry,
+    SpatialSkeletonEditQueueEntry,
     "kind" | "intent" | "commandLabel"
   >,
 ) {
@@ -281,7 +276,7 @@ function getOptimisticEditQueueEntryLabel(
 }
 
 function getPrimaryLifecyclePresentation(
-  lifecycle: SpatialSkeletonOptimisticIntentLifecycle,
+  lifecycle: SpatialSkeletonIntentLifecycle,
 ): PrimaryLifecyclePresentation {
   const { authority, authorityReason, history, preview, reconciliation } =
     lifecycle;
@@ -320,7 +315,7 @@ function getPrimaryLifecyclePresentation(
   return "processing";
 }
 
-function isPendingEntry(entry: SpatialSkeletonOptimisticEditQueueEntry) {
+function isPendingEntry(entry: SpatialSkeletonEditQueueEntry) {
   const primary = getPrimaryLifecyclePresentation(entry.lifecycle);
   return (
     primary === "reload-required" ||
@@ -332,13 +327,13 @@ function isPendingEntry(entry: SpatialSkeletonOptimisticEditQueueEntry) {
   );
 }
 
-export class SpatialSkeletonOptimisticEditQueueTab extends Tab {
+export class SpatialSkeletonEditQueueTab extends Tab {
   private readonly queueSummary = document.createElement("div");
   private readonly queueList = document.createElement("div");
   private readonly activityList = document.createElement("div");
   private readonly queuePanel: HTMLElement;
   private readonly explanation: HTMLElement;
-  private fatalBanner: HTMLElement | undefined;
+  private reloadRequiredBanner: HTMLElement | undefined;
 
   constructor(public layer: SegmentationUserLayer) {
     super();
@@ -384,22 +379,22 @@ export class SpatialSkeletonOptimisticEditQueueTab extends Tab {
     element.appendChild(queuePanel);
 
     this.registerDisposer(
-      layer.spatialSkeletonState.optimisticEditQueueVersion.changed.add(() => {
+      layer.spatialSkeletonEditSession.editQueueVersion.changed.add(() => {
         this.updateQueuePanel();
       }),
     );
     this.updateQueuePanel();
   }
 
-  private updateFatalBanner() {
-    const fatalState =
-      this.layer.spatialSkeletonState.getOptimisticEditFatalState();
-    if (fatalState === undefined) {
-      this.fatalBanner?.remove();
-      this.fatalBanner = undefined;
+  private updateReloadRequiredBanner() {
+    const reloadRequired =
+      this.layer.spatialSkeletonEditSession.getReloadRequired();
+    if (reloadRequired === undefined) {
+      this.reloadRequiredBanner?.remove();
+      this.reloadRequiredBanner = undefined;
       return false;
     }
-    if (this.fatalBanner !== undefined) return true;
+    if (this.reloadRequiredBanner !== undefined) return true;
 
     const banner = document.createElement("div");
     banner.className = "neuroglancer-skeleton-queue-reload-required";
@@ -417,18 +412,18 @@ export class SpatialSkeletonOptimisticEditQueueTab extends Tab {
     banner.appendChild(reason);
     banner.appendChild(reloadButton);
     this.queuePanel.insertBefore(banner, this.explanation);
-    this.fatalBanner = banner;
+    this.reloadRequiredBanner = banner;
     return true;
   }
 
-  private makeQueueRow(entry: SpatialSkeletonOptimisticEditQueueEntry) {
+  private makeQueueRow(entry: SpatialSkeletonEditQueueEntry) {
     const row = document.createElement("div");
     row.className = "neuroglancer-skeleton-queue-row";
     const primary = getPrimaryLifecyclePresentation(entry.lifecycle);
     row.dataset.primaryStatus = primary;
     const action = document.createElement("span");
     action.className = "neuroglancer-skeleton-queue-action";
-    action.textContent = getOptimisticEditQueueEntryLabel(entry);
+    action.textContent = getEditQueueEntryLabel(entry);
     const status = document.createElement("span");
     status.className = "neuroglancer-skeleton-queue-status";
     const presentation = lifecyclePresentation[primary];
@@ -439,7 +434,7 @@ export class SpatialSkeletonOptimisticEditQueueTab extends Tab {
     return row;
   }
 
-  private makeActivityRow(entry: SpatialSkeletonOptimisticEditActivityEntry) {
+  private makeActivityRow(entry: SpatialSkeletonEditActivityEntry) {
     const row = document.createElement("div");
     row.className =
       "neuroglancer-skeleton-queue-row neuroglancer-skeleton-queue-activity-row";
@@ -449,7 +444,7 @@ export class SpatialSkeletonOptimisticEditQueueTab extends Tab {
       "neuroglancer-skeleton-queue-activity-action-container";
     const action = document.createElement("span");
     action.className = "neuroglancer-skeleton-queue-action";
-    action.textContent = getOptimisticEditQueueEntryLabel(entry);
+    action.textContent = getEditQueueEntryLabel(entry);
     actionContainer.appendChild(action);
     const details = [
       entry.reason,
@@ -475,8 +470,8 @@ export class SpatialSkeletonOptimisticEditQueueTab extends Tab {
   }
 
   updateQueuePanel() {
-    const reloadRequired = this.updateFatalBanner();
-    const entries = getOptimisticEditQueueEntries(this.layer);
+    const reloadRequired = this.updateReloadRequiredBanner();
+    const entries = getEditQueueEntries(this.layer);
     const pendingEntries = entries.filter(isPendingEntry);
     const pendingEntryCount = pendingEntries.length;
     this.queueSummary.textContent = reloadRequired
@@ -494,7 +489,7 @@ export class SpatialSkeletonOptimisticEditQueueTab extends Tab {
         ...pendingEntries.map((entry) => this.makeQueueRow(entry)),
       );
     }
-    const activity = getOptimisticEditQueueRecentActivity(this.layer);
+    const activity = getEditQueueRecentActivity(this.layer);
     if (activity.length === 0) {
       const empty = document.createElement("div");
       empty.className = "neuroglancer-skeleton-queue-empty-state";
@@ -508,47 +503,48 @@ export class SpatialSkeletonOptimisticEditQueueTab extends Tab {
   }
 }
 
-export function registerSpatialSkeletonOptimisticEditQueueTab(
+export function registerSpatialSkeletonEditQueueTab(
   layer: SegmentationUserLayer,
   hidden: WatchableValueInterface<boolean>,
 ) {
   layer.tabs.add("skeletonQueue", {
     label: "Queue",
     order: -44,
-    getter: () => new SpatialSkeletonOptimisticEditQueueTab(layer),
+    getter: () => new SpatialSkeletonEditQueueTab(layer),
     hidden,
   });
 
   // The persistent notification is installed with the Queue UI rather than
   // by any datasource. It is emitted exactly once for this layer's first-wins
-  // fatal latch and remains until the layer or page is disposed.
-  let fatalNotification: StatusMessage | undefined;
-  let fatalNotificationReported = false;
+  // Reload-required latch and remains until the layer or page is disposed.
+  let reloadRequiredNotification: StatusMessage | undefined;
+  let reloadRequiredNotificationReported = false;
   let notificationsDisposed = false;
   const authorityNotifications =
-    new SpatialSkeletonOptimisticAuthorityNotificationController(layer);
-  const updateFatalNotification = () => {
-    const fatalState = layer.spatialSkeletonState.getOptimisticEditFatalState();
-    if (fatalNotificationReported || fatalState === undefined) return;
-    fatalNotificationReported = true;
+    new SpatialSkeletonAuthorityNotificationController(layer);
+  const updateReloadRequiredNotification = () => {
+    const reloadRequired = layer.spatialSkeletonEditSession.getReloadRequired();
+    if (reloadRequiredNotificationReported || reloadRequired === undefined)
+      return;
+    reloadRequiredNotificationReported = true;
     if (notificationsDisposed) return;
-    fatalNotification = StatusMessage.showErrorMessage(
+    reloadRequiredNotification = StatusMessage.showErrorMessage(
       SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON,
       { label: "Reload page", callback: () => window.location.reload() },
     );
   };
   layer.registerDisposer(
-    layer.spatialSkeletonState.optimisticEditQueueVersion.changed.add(() => {
+    layer.spatialSkeletonEditSession.editQueueVersion.changed.add(() => {
       authorityNotifications.update();
-      updateFatalNotification();
+      updateReloadRequiredNotification();
     }),
   );
   layer.registerDisposer(() => {
     notificationsDisposed = true;
     authorityNotifications.dispose();
-    const notification = fatalNotification;
-    fatalNotification = undefined;
+    const notification = reloadRequiredNotification;
+    reloadRequiredNotification = undefined;
     notification?.dispose();
   });
-  updateFatalNotification();
+  updateReloadRequiredNotification();
 }

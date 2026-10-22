@@ -16,7 +16,7 @@
 
 import type {
   SpatialSkeletonInputReference,
-  SpatialSkeletonState,
+  SpatialSkeletonEditSession,
 } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 
@@ -40,7 +40,7 @@ export class SpatialSkeletonMergeTargetPrefetch {
     | { readonly segmentId: bigint; readonly load: MergeTargetLoad }
     | undefined = undefined;
 
-  constructor(private readonly state: SpatialSkeletonState) {}
+  constructor(private readonly state: SpatialSkeletonEditSession) {}
 
   setTarget(
     skeletonLayer: SpatiallyIndexedSkeletonLayer,

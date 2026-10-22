@@ -348,7 +348,7 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
       );
     }
     activation.registerDisposer(
-      layer.spatialSkeletonState.nodeDataVersion.changed.add(() => {
+      layer.spatialSkeletonEditSession.nodeDataVersion.changed.add(() => {
         statusOverride = undefined;
         const state = getState();
         if (

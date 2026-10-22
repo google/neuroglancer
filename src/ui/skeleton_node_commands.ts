@@ -49,7 +49,9 @@ type SkeletonNodeViewer = Pick<
 
 type SkeletonNodeCommandLayer = Pick<
   SegmentationUserLayer,
-  "skeletonNodeSelection" | "skeletonSourceConnection" | "spatialSkeletonState"
+  | "skeletonNodeSelection"
+  | "skeletonSourceConnection"
+  | "spatialSkeletonEditSession"
 >;
 
 function isSkeletonNodeCommandLayer(
@@ -76,7 +78,7 @@ async function runHistoryCommand(
   layer: SkeletonNodeCommandLayer,
   history: "undo" | "redo",
 ) {
-  if (layer.spatialSkeletonState.getOptimisticEditFatalState() !== undefined) {
+  if (layer.spatialSkeletonEditSession.getReloadRequired() !== undefined) {
     StatusMessage.showTemporaryMessage(
       SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON,
     );
@@ -108,9 +110,10 @@ function requireSelectedInspectedNode(
     return undefined;
   }
   const { nodeId } = selected;
-  const { spatialSkeletonState } = layer;
+  const { spatialSkeletonEditSession } = layer;
   const segmentId =
-    spatialSkeletonState.getCachedNode(nodeId)?.segmentId ?? selected.segmentId;
+    spatialSkeletonEditSession.getCachedNode(nodeId)?.segmentId ??
+    selected.segmentId;
   if (segmentId === undefined) {
     StatusMessage.showTemporaryMessage(
       `Unable to resolve the skeleton for node ${nodeId}.`,
@@ -118,7 +121,7 @@ function requireSelectedInspectedNode(
     return undefined;
   }
   const snapshot =
-    spatialSkeletonState.getCachedSegmentSnapshotHandle(segmentId);
+    spatialSkeletonEditSession.getCachedSegmentSnapshotHandle(segmentId);
   if (snapshot === undefined) {
     StatusMessage.showTemporaryMessage(
       `Inspect skeleton ${segmentId} before editing it.`,

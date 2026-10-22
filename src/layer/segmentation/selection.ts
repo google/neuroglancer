@@ -25,10 +25,10 @@ import type { SegmentationLayerSelectionState } from "#src/layer/segmentation/in
 import type { RenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { Uint64MapEntry } from "#src/segmentation_display_state/base.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import type { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import type { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type {
-  SpatialSkeletonProjectionSelectionPin,
-  SpatialSkeletonResolvedProjectionUiHints,
+  SpatialSkeletonPreviewSelectionPin,
+  SpatialSkeletonResolvedPreviewUiHints,
 } from "#src/skeleton/edit_queue/preview_ui_hints.js";
 import {
   type SkeletonNavigation,
@@ -192,7 +192,7 @@ export interface SkeletonNodeSelectionOptions {
   readonly spatiallyIndexedSkeletonLayer: WatchableValueInterface<
     SpatiallyIndexedSkeletonLayer | undefined
   >;
-  readonly spatialSkeletonState: SpatialSkeletonState;
+  readonly spatialSkeletonEditSession: SpatialSkeletonEditSession;
 }
 
 export class SkeletonNodeSelection extends RefCounted {
@@ -210,7 +210,7 @@ export class SkeletonNodeSelection extends RefCounted {
 
   constructor(private readonly options: SkeletonNodeSelectionOptions) {
     super();
-    const { layer, spatialSkeletonState } = options;
+    const { layer, spatialSkeletonEditSession } = options;
     this.navigator = new SkeletonNavigator(options.skeletonNodeAccess);
     this.hovered.bindTo(layer.manager.layerSelectedValues, layer);
     const updateSelected = () => {
@@ -221,7 +221,7 @@ export class SkeletonNodeSelection extends RefCounted {
       layer.manager.root.selectionState.changed.add(updateSelected),
     );
     this.registerDisposer(
-      spatialSkeletonState.nodeDataVersion.changed.add(updateSelected),
+      spatialSkeletonEditSession.nodeDataVersion.changed.add(updateSelected),
     );
     updateSelected();
   }
@@ -299,9 +299,9 @@ export class SkeletonNodeSelection extends RefCounted {
     return globalPosition;
   }
 
-  applyProjectionUiHints(
+  applyPreviewUiHints(
     hints: Pick<
-      SpatialSkeletonResolvedProjectionUiHints,
+      SpatialSkeletonResolvedPreviewUiHints,
       | "nodeIdRemappings"
       | "segmentIdRemappings"
       | "selectedNode"
@@ -329,7 +329,7 @@ export class SkeletonNodeSelection extends RefCounted {
     ) {
       return;
     }
-    const cachedNode = this.options.spatialSkeletonState.getCachedNode(
+    const cachedNode = this.options.spatialSkeletonEditSession.getCachedNode(
       selectedNode.nodeId,
     );
     const position = selectedNode.position ?? cachedNode?.position;
@@ -459,7 +459,7 @@ export class SkeletonNodeSelection extends RefCounted {
   private findNode(nodeId: bigint) {
     return (
       this.options.spatiallyIndexedSkeletonLayer.value?.getNode(nodeId) ??
-      this.options.spatialSkeletonState.getCachedNode(nodeId)
+      this.options.spatialSkeletonEditSession.getCachedNode(nodeId)
     );
   }
 
@@ -573,7 +573,7 @@ function undefinedIfZero(value: bigint | undefined) {
 }
 
 function resolveHintPin(
-  pin: SpatialSkeletonProjectionSelectionPin,
+  pin: SpatialSkeletonPreviewSelectionPin,
   currentPin: boolean,
 ): boolean | "force-unpin" {
   return pin === "pin" ? true : pin === "unpin" ? "force-unpin" : currentPin;

@@ -48,14 +48,14 @@ import type {
   CatmaidSpatialSkeletonTrueEndUpdateRequest,
   CatmaidSpatialSkeletonEditOperations,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_endpoints.js";
+import type { CatmaidSpatialSkeletonCommandDescriptor } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_planner.js";
 import {
   CATMAID_PROVISIONAL_NUMERIC_ID_POLICY,
-  CatmaidSpatialSkeletonWorkflowDriver,
-  type CatmaidSpatialSkeletonCommandDescriptor,
+  CatmaidEditPlanner,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_planner.js";
 import {
-  CatmaidSpatialSkeletonOptimisticMutationAdapter,
-  getCatmaidMutationScope,
+  CatmaidEditRequests,
+  getCatmaidEditRequestScope,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_requests.js";
 import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import type {
@@ -66,8 +66,8 @@ import type {
 } from "#src/skeleton/edit_commands.js";
 import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import type {
-  SpatialSkeletonOptimisticDriverRegistration,
-  SpatialSkeletonOptimisticEditingProvider,
+  SpatialSkeletonEditPlannerRegistration,
+  SpatialSkeletonEditPlannerProvider,
 } from "#src/skeleton/edit_queue/api.js";
 import type {
   SpatialSkeletonQueueInputRequirement,
@@ -338,10 +338,12 @@ export class CatmaidSpatialSkeletonEditCommands {
   constructor(
     private readonly context: CatmaidSpatialSkeletonEditCommandContext,
   ) {
-    let mutationScope: object | undefined;
+    let editRequestScope: object | undefined;
     this.editOperations = Object.freeze<CatmaidSpatialSkeletonEditOperations>({
-      get mutationScope() {
-        return (mutationScope ??= getCatmaidMutationScope(context.getClient()));
+      get editRequestScope() {
+        return (editRequestScope ??= getCatmaidEditRequestScope(
+          context.getClient(),
+        ));
       },
       commitAddNode: (request) => this.commitAddNode(request),
       commitInsertNode: (request) => this.commitInsertNode(request),
@@ -357,16 +359,11 @@ export class CatmaidSpatialSkeletonEditCommands {
     });
   }
 
-  readonly optimisticEditing: SpatialSkeletonOptimisticEditingProvider = {
-    createDriver: ({ identities, provisionalIds }) => {
-      const registration: SpatialSkeletonOptimisticDriverRegistration = {
-        driver: new CatmaidSpatialSkeletonWorkflowDriver(
-          identities,
-          provisionalIds,
-        ),
-        mutationAdapter: new CatmaidSpatialSkeletonOptimisticMutationAdapter(
-          this.editOperations,
-        ),
+  readonly editPlannerProvider: SpatialSkeletonEditPlannerProvider = {
+    createPlanner: ({ identities, provisionalIds }) => {
+      const registration: SpatialSkeletonEditPlannerRegistration = {
+        planner: new CatmaidEditPlanner(identities, provisionalIds),
+        editRequestAdapter: new CatmaidEditRequests(this.editOperations),
         provisionalNumericIdPolicy: CATMAID_PROVISIONAL_NUMERIC_ID_POLICY,
       };
       return registration;

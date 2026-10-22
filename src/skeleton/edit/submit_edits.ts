@@ -15,11 +15,13 @@
  */
 
 import type { SkeletonNode } from "#src/skeleton/api.js";
+import type {
+  SpatialSkeletonInputReference,
+  SpatialSkeletonLayerContext,
+} from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
-  ensureSpatialSkeletonOptimisticEditQueue,
+  ensureSpatialSkeletonEditQueue,
   getSpatialSkeletonEditCommandFactoryForAction,
-  type SpatialSkeletonInputReference,
-  type SpatialSkeletonLayerContext,
 } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type {
   SpatialSkeletonAction,
@@ -44,8 +46,8 @@ import type {
   SpatialSkeletonQueueInputRequirement,
   SpatialSkeletonQueueInputRequirements,
 } from "#src/skeleton/edit_queue/queue_input.js";
-import type { SpatialSkeletonOptimisticEditExecution } from "#src/skeleton/edit_queue/types.js";
-import { unchangedSpatialSkeletonOptimisticEditSettlement } from "#src/skeleton/edit_queue/types.js";
+import type { SpatialSkeletonEditExecution } from "#src/skeleton/edit_queue/types.js";
+import { unchangedSpatialSkeletonEditSettlement } from "#src/skeleton/edit_queue/types.js";
 import { StatusMessage } from "#src/status.js";
 
 /** A queue input requirement paired with a reference to its complete snapshot. */
@@ -79,7 +81,7 @@ function captureQueueInputRequirements(
     const node =
       requirement.nodeId === undefined
         ? undefined
-        : layer.spatialSkeletonState.getCachedNode(requirement.nodeId);
+        : layer.spatialSkeletonEditSession.getCachedNode(requirement.nodeId);
     return Object.freeze({
       ...requirement,
       segmentId: node?.segmentId ?? requirement.segmentId,
@@ -102,7 +104,7 @@ function prepareRequiredInputBindings(
     for (const requirement of requirements) {
       bindings.push({
         requirement,
-        reference: layer.spatialSkeletonState.acquireInputReference(
+        reference: layer.spatialSkeletonEditSession.acquireInputReference(
           requirement,
           action,
         ),
@@ -133,13 +135,15 @@ async function loadQueueInputRequirement(
     rejectAbort = reject;
   });
   const onAbort = () => {
-    layer.spatialSkeletonState.releaseFullSegmentNodeFetchOwner(requestOwner);
+    layer.spatialSkeletonEditSession.releaseFullSegmentNodeFetchOwner(
+      requestOwner,
+    );
     rejectAbort(signal.reason);
   };
   signal.addEventListener("abort", onAbort, { once: true });
   try {
     await Promise.race([
-      layer.spatialSkeletonState.getFullSegmentNodes(
+      layer.spatialSkeletonEditSession.getFullSegmentNodes(
         skeletonLayer,
         requirement.segmentId,
         {
@@ -153,7 +157,9 @@ async function loadQueueInputRequirement(
     ]);
   } finally {
     signal.removeEventListener("abort", onAbort);
-    layer.spatialSkeletonState.releaseFullSegmentNodeFetchOwner(requestOwner);
+    layer.spatialSkeletonEditSession.releaseFullSegmentNodeFetchOwner(
+      requestOwner,
+    );
   }
 }
 
@@ -228,7 +234,7 @@ function prepareQueueInputBindings(
     requirements.required,
     action,
   );
-  const state = layer.spatialSkeletonState;
+  const state = layer.spatialSkeletonEditSession;
   const loadableBindings: (QueueInputBinding | undefined)[] = [];
   const getBindings = () => [
     ...requiredBindings,
@@ -254,14 +260,14 @@ function prepareQueueInputBindings(
     try {
       for (const [index, requirement] of requirements.loadable.entries()) {
         if (loadableBindings[index] !== undefined) continue;
-        state.assertOptimisticEditingAllowed();
+        state.assertEditingAllowed();
         assertInputReferencesCurrent(getBindings(), action);
         // An earlier endpoint may have loaded this same complete skeleton.
         let reference = state.tryAcquireInputReference(requirement);
         if (reference === undefined) {
           await loadQueueInputRequirement(layer, requirement, signal);
           signal.throwIfAborted();
-          state.assertOptimisticEditingAllowed();
+          state.assertEditingAllowed();
           assertInputReferencesCurrent(getBindings(), action);
           assertQueueInputRequirementsUnchanged(
             declared,
@@ -319,8 +325,7 @@ export function createSpatialSkeletonQueueInputPreparation(
   action?: SpatialSkeletonAction,
 ): SpatialSkeletonQueueInputPreparation {
   const context = {
-    identities:
-      layer.spatialSkeletonState.getOptimisticEditingIdentityService(),
+    identities: layer.spatialSkeletonEditSession.getEditingIdentityService(),
   };
   return Object.freeze({
     getProtectedSegmentIds() {
@@ -338,7 +343,7 @@ export function createSpatialSkeletonQueueInputPreparation(
       ]);
     },
     validate(intent: "execute" | "redo") {
-      layer.spatialSkeletonState.assertOptimisticEditingAllowed();
+      layer.spatialSkeletonEditSession.assertEditingAllowed();
       const requirements = captureQueueInputRequirements(
         command,
         context,
@@ -349,7 +354,7 @@ export function createSpatialSkeletonQueueInputPreparation(
           ? prepareRequiredInputBindings(layer, requirements.required, action)
           : requirements.required.flatMap((requirement) => {
               const reference =
-                layer.spatialSkeletonState.tryAcquireInputReference(
+                layer.spatialSkeletonEditSession.tryAcquireInputReference(
                   requirement,
                 );
               return reference === undefined
@@ -368,7 +373,7 @@ export function createSpatialSkeletonQueueInputPreparation(
       intent: "execute" | "redo",
     ): Promise<SpatialSkeletonPreparedQueueInput> {
       signal.throwIfAborted();
-      layer.spatialSkeletonState.assertOptimisticEditingAllowed();
+      layer.spatialSkeletonEditSession.assertEditingAllowed();
       const bindings = await prepareQueueInputBindings(
         layer,
         command,
@@ -385,13 +390,13 @@ export function createSpatialSkeletonQueueInputPreparation(
       };
       try {
         signal.throwIfAborted();
-        layer.spatialSkeletonState.assertOptimisticEditingAllowed();
+        layer.spatialSkeletonEditSession.assertEditingAllowed();
         assertInputReferencesCurrent(bindings, action);
         return Object.freeze({
           input: createQueueInput(bindings),
           assertCurrent: () => {
             signal.throwIfAborted();
-            layer.spatialSkeletonState.assertOptimisticEditingAllowed();
+            layer.spatialSkeletonEditSession.assertEditingAllowed();
             assertInputReferencesCurrent(bindings, action);
           },
           release,
@@ -410,9 +415,9 @@ export function prepareAndSubmitSpatialSkeletonEdit<T>(
   command: SpatialSkeletonEditCommand,
   submitToQueue: (
     inputs: SpatialSkeletonQueueInputPreparation,
-  ) => SpatialSkeletonOptimisticEditExecution<T>,
+  ) => SpatialSkeletonEditExecution<T>,
   action?: SpatialSkeletonAction,
-): SpatialSkeletonOptimisticEditExecution<T> {
+): SpatialSkeletonEditExecution<T> {
   try {
     return submitToQueue(
       createSpatialSkeletonQueueInputPreparation(layer, command, action),
@@ -425,7 +430,7 @@ export function prepareAndSubmitSpatialSkeletonEdit<T>(
     return Object.assign(execution, {
       acceptedByQueue,
       settled: Promise.resolve(
-        unchangedSpatialSkeletonOptimisticEditSettlement("not-started", error),
+        unchangedSpatialSkeletonEditSettlement("not-started", error),
       ),
     });
   }
@@ -435,20 +440,20 @@ function executeCommand(
   layer: SpatialSkeletonLayerContext,
   command: SpatialSkeletonEditCommand,
   action?: SpatialSkeletonAction,
-): SpatialSkeletonOptimisticEditExecution<void> {
+): SpatialSkeletonEditExecution<void> {
   return prepareAndSubmitSpatialSkeletonEdit(
     layer,
     command,
     (queueInput) =>
-      layer.spatialSkeletonState.executeOptimisticEdit(command, queueInput),
+      layer.spatialSkeletonEditSession.executeEdit(command, queueInput),
     action,
   );
 }
 
 function withPendingMessage<T>(
-  execution: SpatialSkeletonOptimisticEditExecution<T>,
+  execution: SpatialSkeletonEditExecution<T>,
   message: string,
-): SpatialSkeletonOptimisticEditExecution<T> {
+): SpatialSkeletonEditExecution<T> {
   const status = StatusMessage.showMessage(message);
   // finally() creates a new preview promise, so carry its other milestones over.
   return Object.assign(
@@ -508,9 +513,9 @@ function createSpatialSkeletonCommand(
   if (commandFactory === undefined) {
     throw new Error(unsupportedMessage);
   }
-  // Queue ownership is a generic source capability. Install the state-owned
+  // Queue ownership is a generic source capability. Install the session-owned
   // engine before constructing the datasource-specific intent descriptor.
-  ensureSpatialSkeletonOptimisticEditQueue(layer, source);
+  ensureSpatialSkeletonEditQueue(layer, source);
   return commandFactory.createCommand(payload);
 }
 
@@ -612,7 +617,7 @@ function executeSpatialSkeletonAction(
   action: SpatialSkeletonAction,
   payload: SpatialSkeletonCommandPayload,
 ) {
-  layer.spatialSkeletonState.assertOptimisticEditingAllowed();
+  layer.spatialSkeletonEditSession.assertEditingAllowed();
   const metadata = spatialSkeletonExecutionMetadata.get(action);
   if (metadata === undefined) {
     throw new Error(`Unsupported spatial skeleton edit action: ${action}`);
@@ -759,16 +764,16 @@ export function executeSpatialSkeletonMerge(
 
 export function undoSpatialSkeletonCommand(
   layer: SpatialSkeletonLayerContext,
-): SpatialSkeletonOptimisticEditExecution<boolean> {
-  const state = layer.spatialSkeletonState;
-  state.assertOptimisticEditingAllowed();
-  return state.undoLatestOptimisticEdit();
+): SpatialSkeletonEditExecution<boolean> {
+  const state = layer.spatialSkeletonEditSession;
+  state.assertEditingAllowed();
+  return state.undoLatestEdit();
 }
 
 export function redoSpatialSkeletonCommand(
   layer: SpatialSkeletonLayerContext,
-): SpatialSkeletonOptimisticEditExecution<boolean> {
-  const state = layer.spatialSkeletonState;
-  state.assertOptimisticEditingAllowed();
-  return state.redoLatestOptimisticEdit();
+): SpatialSkeletonEditExecution<boolean> {
+  const state = layer.spatialSkeletonEditSession;
+  state.assertEditingAllowed();
+  return state.redoLatestEdit();
 }

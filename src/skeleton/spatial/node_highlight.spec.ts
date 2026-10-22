@@ -17,7 +17,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.js";
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type { HighlightedSkeletonNode } from "#src/skeleton/spatial/node_highlight.js";
 import { SkeletonNodeHighlight } from "#src/skeleton/spatial/node_highlight.js";
 import type { SkeletonNodeHighlightMarker } from "#src/skeleton/spatial/node_overlay.js";
@@ -35,7 +35,7 @@ function makeHighlight(
     segmentColors?: ReadonlyMap<bigint, vec3>;
   } = {},
 ) {
-  const state = new SpatialSkeletonState();
+  const state = new SpatialSkeletonEditSession();
   const visibleSegments = new Uint64Set();
   visibleSegments.add([...(options.visible ?? [])]);
   const selected = new WatchableValue<HighlightedSkeletonNode | undefined>(
@@ -63,7 +63,7 @@ function makeHighlight(
           ? undefined
           : Float32Array.from(modelPosition),
     },
-    editState: state,
+    editSession: state,
     getBaseSegmentColor: (segmentId) =>
       options.segmentColors?.get(segmentId) ?? vec3.fromValues(0.2, 0.6, 0.9),
   });
@@ -195,7 +195,7 @@ describe("SkeletonNodeHighlight", () => {
     const { highlight, state } = makeHighlight({ visible: [7n] });
     state.replaceCachedSegmentSnapshots([[7n, [makeNode(1n, 7n)]]]);
 
-    state.addSpatialSkeletonPreparation({
+    state.addSpatialSkeletonPendingEdit({
       intentId: 1,
       sequence: 1,
       direction: "execute",

@@ -43,14 +43,14 @@ export interface SkeletonNodeHighlightMarker {
   readonly ring: SkeletonNodeRing;
 }
 
-export interface SkeletonPreparationMarker {
+export interface SkeletonPendingEditMarker {
   readonly kind: "preparationMarker";
   readonly position: Float32Array;
   readonly label: string;
   readonly ring: SkeletonNodeRing;
 }
 
-export interface SkeletonPreparationConnector {
+export interface SkeletonPendingEditConnector {
   readonly kind: "preparationConnector";
   readonly from: Float32Array;
   readonly to: Float32Array;
@@ -59,8 +59,8 @@ export interface SkeletonPreparationConnector {
 
 export type SkeletonPanelOverlayPrimitive =
   | SkeletonNodeHighlightMarker
-  | SkeletonPreparationMarker
-  | SkeletonPreparationConnector;
+  | SkeletonPendingEditMarker
+  | SkeletonPendingEditConnector;
 
 // Distance in front of the camera, from the depth row of `mat4.perspective` or `mat4.ortho`.
 function getEyeDepth(projectionMat: mat4, normalizedDeviceZ: number) {

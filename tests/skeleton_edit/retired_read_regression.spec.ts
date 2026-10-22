@@ -16,14 +16,14 @@
 
 import { expect, it, vi } from "vitest";
 import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
-import { createCompleteSkeletonSnapshot } from "#src/skeleton/edit_queue/complete_skeleton.js";
-import { SpatialSkeletonProjectionWorkspace } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
-import { SpatialSkeletonOptimisticProjectionRuntime } from "#src/skeleton/edit_queue/preview.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { createCompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
+import { CompleteSkeletonSet } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
+import { SpatialSkeletonEditPreview } from "#src/skeleton/edit_queue/preview.js";
 import {
-  SpatialSkeletonLogicalHandleMappings,
-  spatialSkeletonLogicalNode,
-  spatialSkeletonLogicalSegment,
+  SpatialSkeletonStableIdHandles,
+  spatialSkeletonStableNode,
+  spatialSkeletonStableSegment,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
 
 function makeWholeSkeletonReads(
@@ -63,23 +63,21 @@ async function flushMicrotasks() {
 
 it("fences a read started during final-node deletion when deletion becomes authoritative", () => {
   const root = { nodeId: 1n, segmentId: 10n, position: [1, 2, 3] };
-  const snapshot = createCompleteSkeletonSnapshot([root]);
-  const state = new SpatialSkeletonState();
+  const snapshot = createCompleteSkeleton([root]);
+  const state = new SpatialSkeletonEditSession();
   state.replaceCachedSegmentSnapshots([[10n, [root]]]);
-  const segment = spatialSkeletonLogicalSegment("singleton");
-  const node = spatialSkeletonLogicalNode("root");
-  const mappings = new SpatialSkeletonLogicalHandleMappings<bigint, bigint>();
+  const segment = spatialSkeletonStableSegment("singleton");
+  const node = spatialSkeletonStableNode("root");
+  const mappings = new SpatialSkeletonStableIdHandles<bigint, bigint>();
   mappings.apply({ segments: [[segment, 10n]], nodes: [[node, 1n]] });
-  const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state, {
-    retainedHistoryWorkspace: new SpatialSkeletonProjectionWorkspace([
-      { segment, snapshot },
-    ]),
+  const runtime = new SpatialSkeletonEditPreview(state, {
+    retainedHistoryWorkspace: new CompleteSkeletonSet([{ segment, snapshot }]),
     mappings,
   });
   const deletion = runtime.prepareExact(1, {
     delta: { kind: "delete", segment, node },
   });
-  runtime.publishExact(1, deletion.projection);
+  runtime.publishExact(1, deletion.preview);
   expect(state.getCachedNode(1n)).toBeUndefined();
   // Rendering can start another read after the preview evicts the complete
   // snapshot, while CATMAID still has the node. Hold that read's old response.
@@ -114,16 +112,16 @@ it.each([false, true])(
     });
     const firstNodes = [node(101n, 11n), node(102n, 11n, 101n)];
     const secondNodes = [node(201n, 17n), node(202n, 17n, 201n)];
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     state.replaceCachedSegmentSnapshots([
       [11n, firstNodes],
       [17n, secondNodes],
     ]);
-    const first = spatialSkeletonLogicalSegment("first");
-    const second = spatialSkeletonLogicalSegment("second");
-    const from = spatialSkeletonLogicalNode("from");
-    const to = spatialSkeletonLogicalNode("to");
-    const runtime = new SpatialSkeletonOptimisticProjectionRuntime(state);
+    const first = spatialSkeletonStableSegment("first");
+    const second = spatialSkeletonStableSegment("second");
+    const from = spatialSkeletonStableNode("from");
+    const to = spatialSkeletonStableNode("to");
+    const runtime = new SpatialSkeletonEditPreview(state);
     const prepared = runtime.prepareExact(1, {
       delta: {
         kind: "merge",
@@ -159,7 +157,7 @@ it.each([false, true])(
         ),
       },
     });
-    runtime.publishExact(1, prepared.projection);
+    runtime.publishExact(1, prepared.preview);
     expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
     const expectedCacheRevisions = new Map([
       [17n, state.getCachedSegmentRevision(17n)],
@@ -212,7 +210,7 @@ it.each([false, true])(
         [
           {
             segmentId: 17n,
-            snapshot: createCompleteSkeletonSnapshot(secondNodes),
+            snapshot: createCompleteSkeleton(secondNodes),
           },
         ],
         { expectedCacheRevisions },

@@ -24,23 +24,23 @@ import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import { SpatialSkeletonInspectionRequiredError } from "#src/skeleton/edit_queue/edit_errors.js";
 import type { SpatialSkeletonQueueInputRequirement } from "#src/skeleton/edit_queue/queue_input.js";
 import type {
-  SpatialSkeletonOptimisticEditExecution,
-  SpatialSkeletonOptimisticEditSettlement,
-  SpatialSkeletonOptimisticFatalState,
+  SpatialSkeletonEditExecution,
+  SpatialSkeletonEditSettlement,
+  SpatialSkeletonReloadRequiredDetails,
 } from "#src/skeleton/edit_queue/types.js";
-import { SpatialSkeletonOptimisticReloadRequiredError } from "#src/skeleton/edit_queue/types.js";
+import { SpatialSkeletonReloadRequiredError } from "#src/skeleton/edit_queue/types.js";
 
-function optimisticExecution<T>(
+function editExecution<T>(
   execution: Promise<T>,
-  settled: Promise<SpatialSkeletonOptimisticEditSettlement> = Promise.resolve({
+  settled: Promise<SpatialSkeletonEditSettlement> = Promise.resolve({
     outcome: "committed",
   }),
-): SpatialSkeletonOptimisticEditExecution<T> {
+): SpatialSkeletonEditExecution<T> {
   Object.defineProperties(execution, {
     acceptedByQueue: { configurable: true, value: Promise.resolve() },
     settled: { configurable: true, value: settled },
   });
-  return execution as SpatialSkeletonOptimisticEditExecution<T>;
+  return execution as SpatialSkeletonEditExecution<T>;
 }
 
 function makeHarness(initialSegments: readonly bigint[] = []) {
@@ -54,9 +54,9 @@ function makeHarness(initialSegments: readonly bigint[] = []) {
     cachedSegments.add(segmentId);
     return [];
   });
-  let fatalState: SpatialSkeletonOptimisticFatalState | undefined;
+  let reloadRequired: SpatialSkeletonReloadRequiredDetails | undefined;
   const state = {
-    getOptimisticEditingIdentityService: () => ({}),
+    getEditingIdentityService: () => ({}),
     tryAcquireInputReference(
       requirement: SpatialSkeletonQueueInputRequirement,
     ) {
@@ -90,14 +90,14 @@ function makeHarness(initialSegments: readonly bigint[] = []) {
     getFullSegmentNodes,
     getCachedNode: vi.fn(),
     releaseFullSegmentNodeFetchOwner: vi.fn(),
-    assertOptimisticEditingAllowed() {
-      if (fatalState !== undefined) {
-        throw new SpatialSkeletonOptimisticReloadRequiredError(fatalState);
+    assertEditingAllowed() {
+      if (reloadRequired !== undefined) {
+        throw new SpatialSkeletonReloadRequiredError(reloadRequired);
       }
     },
   };
   const layer = {
-    spatialSkeletonState: state,
+    spatialSkeletonEditSession: state,
     getSpatiallyIndexedSkeletonLayer: () => ({}),
   };
   const replaceCachedSegment = (segmentId: bigint) => {
@@ -110,8 +110,8 @@ function makeHarness(initialSegments: readonly bigint[] = []) {
     layer: layer as any,
     releases,
     replaceCachedSegment,
-    setFatalState(value: SpatialSkeletonOptimisticFatalState) {
-      fatalState = value;
+    setReloadRequired(value: SpatialSkeletonReloadRequiredDetails) {
+      reloadRequired = value;
     },
     state,
   };
@@ -132,7 +132,7 @@ function makeCommand(
 describe("spatial skeleton queue input preparation", () => {
   it("submits the input policy immediately, without starting a target read", async () => {
     const { layer, state } = makeHarness([11n]);
-    const submitted = optimisticExecution(Promise.resolve());
+    const submitted = editExecution(Promise.resolve());
     const submit = vi.fn(() => submitted);
     const execution = prepareAndSubmitSpatialSkeletonEdit(
       layer,
@@ -351,8 +351,10 @@ describe("spatial skeleton queue input preparation", () => {
     expect(releases).toEqual([11n]);
   });
 
-  it("checks the fatal gate before validation and after loading", async () => {
-    const { layer, state, cachedSegments, setFatalState } = makeHarness([11n]);
+  it("checks the Reload-required gate before validation and after loading", async () => {
+    const { layer, state, cachedSegments, setReloadRequired } = makeHarness([
+      11n,
+    ]);
     const read = Promise.withResolvers<void>();
     state.getFullSegmentNodes.mockImplementationOnce(async (_layer, id) => {
       await read.promise;
@@ -364,17 +366,17 @@ describe("spatial skeleton queue input preparation", () => {
       makeCommand([{ segmentId: 11n }], [{ segmentId: 21n }]),
     );
     const acquiring = policy.acquire(new AbortController().signal, "execute");
-    setFatalState({
+    setReloadRequired({
       reason: "authority-indeterminate",
       authority: "indeterminate",
       intentId: 1,
     } as any);
     read.resolve();
     await expect(acquiring).rejects.toBeInstanceOf(
-      SpatialSkeletonOptimisticReloadRequiredError,
+      SpatialSkeletonReloadRequiredError,
     );
     expect(() => policy.validate("execute")).toThrow(
-      SpatialSkeletonOptimisticReloadRequiredError,
+      SpatialSkeletonReloadRequiredError,
     );
   });
   it("reacquires an evicted source for Redo of an accepted unprepared intent", async () => {

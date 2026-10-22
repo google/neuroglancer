@@ -35,9 +35,10 @@ async function holdRetiringSegmentRead(real: RealSession, segmentId: bigint) {
     ).viewer.layerManager.getLayerByName("Skeletons")!
       .layer as SegmentationUserLayer;
     return {
-      revision: layer.spatialSkeletonState.getCachedSegmentRevision(segmentId),
+      revision:
+        layer.spatialSkeletonEditSession.getCachedSegmentRevision(segmentId),
       cached:
-        layer.spatialSkeletonState.getCachedSegmentNodes(segmentId) !==
+        layer.spatialSkeletonEditSession.getCachedSegmentNodes(segmentId) !==
         undefined,
     };
   }, segmentId);
@@ -48,7 +49,7 @@ async function holdRetiringSegmentRead(real: RealSession, segmentId: bigint) {
     ).viewer.layerManager.getLayerByName("Skeletons")!
       .layer as SegmentationUserLayer;
     try {
-      await layer.spatialSkeletonState.getFullSegmentNodes(
+      await layer.spatialSkeletonEditSession.getFullSegmentNodes(
         layer.spatiallyIndexedSkeletonLayer.value!,
         segmentId,
         { retainWhileInactive: true },
@@ -69,9 +70,9 @@ async function holdRetiringSegmentRead(real: RealSession, segmentId: bigint) {
         .layer as SegmentationUserLayer;
       return {
         revision:
-          layer.spatialSkeletonState.getCachedSegmentRevision(segmentId),
+          layer.spatialSkeletonEditSession.getCachedSegmentRevision(segmentId),
         cached:
-          layer.spatialSkeletonState.getCachedSegmentNodes(segmentId) !==
+          layer.spatialSkeletonEditSession.getCachedSegmentNodes(segmentId) !==
           undefined,
       };
     }, segmentId);

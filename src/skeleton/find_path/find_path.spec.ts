@@ -16,9 +16,9 @@
 
 import { describe, expect, it } from "vitest";
 
+import type { SkeletonFindPathEndpoint } from "#src/skeleton/find_path/find_path.js";
 import {
   SkeletonDataSourceState,
-  type SkeletonFindPathEndpoint,
   SkeletonFindPathState,
 } from "#src/skeleton/find_path/find_path.js";
 

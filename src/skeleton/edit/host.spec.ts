@@ -17,45 +17,47 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { EditableSkeletonSource } from "#src/skeleton/api.js";
+import type { SpatialSkeletonLayerContext } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
-  ensureSpatialSkeletonOptimisticEditQueue,
-  getSpatialSkeletonOptimisticEditingProvider,
-  SpatialSkeletonState,
-  type SpatialSkeletonLayerContext,
+  ensureSpatialSkeletonEditQueue,
+  getSpatialSkeletonEditPlannerProvider,
+  SpatialSkeletonEditSession,
 } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
-import {
-  SpatialSkeletonOptimisticDatasourceContractError,
-  type SpatialSkeletonOptimisticDriverRegistration,
-  type SpatialSkeletonOptimisticEditingProvider,
+import type {
+  SpatialSkeletonEditPlannerRegistration,
+  SpatialSkeletonEditPlannerProvider,
 } from "#src/skeleton/edit_queue/api.js";
-import { isSpatialSkeletonOptimisticEditingProvider } from "#src/skeleton/edit_queue/api.js";
+import {
+  SpatialSkeletonDatasourceContractError,
+  isSpatialSkeletonEditPlannerProvider,
+} from "#src/skeleton/edit_queue/api.js";
 
-function makeSource(optimisticEditing?: unknown): EditableSkeletonSource {
+function makeSource(editPlannerProvider?: unknown): EditableSkeletonSource {
   return {
     readonly: false,
-    optimisticEditing,
+    editPlannerProvider,
   } as unknown as EditableSkeletonSource;
 }
 
 function makeRegistration(
   cleanup = vi.fn(),
-): SpatialSkeletonOptimisticDriverRegistration {
+): SpatialSkeletonEditPlannerRegistration {
   return {
-    driver: {
+    planner: {
       describeIntent: () => ({ kind: "test", commandLabel: "Test" }),
-      createLogicalIntent: (_command, context) => ({
+      planIntent: (_command, context) => ({
         kind: "test",
         commandLabel: "Test",
-        logicalResources: [],
-        workflow: { intentId: context.intentId },
-        projection: undefined as never,
+        stableResources: [],
+        plan: { intentId: context.intentId },
+        preview: undefined as never,
       }),
       nextAttempt: () => undefined,
       createReconciliation: () => ({}),
     },
-    mutationAdapter: {
-      mutationScope: {},
+    editRequestAdapter: {
+      editRequestScope: {},
       commit: async () => ({}),
       classifyFailure: () => "indeterminate",
     },
@@ -63,44 +65,44 @@ function makeRegistration(
   };
 }
 
-function fixture(provider: SpatialSkeletonOptimisticEditingProvider) {
-  const state = new SpatialSkeletonState();
+function fixture(provider: SpatialSkeletonEditPlannerProvider) {
+  const state = new SpatialSkeletonEditSession();
   const source = makeSource(provider);
   const layer = {
-    spatialSkeletonState: state,
+    spatialSkeletonEditSession: state,
     getSpatiallyIndexedSkeletonLayer: () => undefined,
   } as SpatialSkeletonLayerContext;
   return { state, source, layer };
 }
 
-interface ControlledMutation {
+interface ControlledEditRequest {
   readonly operation: "edit";
 }
 
 interface ControlledCommit {
-  readonly mutation: ControlledMutation;
+  readonly editRequest: ControlledEditRequest;
   resolve(result: { readonly ok: true }): void;
   reject(error: unknown): void;
 }
 
 function controlledProvider(cleanup = vi.fn()) {
   const commits: ControlledCommit[] = [];
-  const provider: SpatialSkeletonOptimisticEditingProvider = {
-    createDriver: ({ identities }) => {
+  const provider: SpatialSkeletonEditPlannerProvider = {
+    createPlanner: ({ identities }) => {
       const segment = identities.getOrCreateSegmentHandle(11n);
       const node = identities.getOrCreateNodeHandle(21n);
       return {
-        driver: {
+        planner: {
           describeIntent: () => ({ kind: "test", commandLabel: "Test" }),
-          createLogicalIntent: () => ({
+          planIntent: () => ({
             kind: "test",
             commandLabel: "Controlled edit",
-            logicalResources: [
+            stableResources: [
               { handle: segment, access: "write" },
               { handle: node, access: "write" },
             ],
-            workflow: Object.freeze({}),
-            projection: {
+            plan: Object.freeze({}),
+            preview: {
               delta: {
                 kind: "add",
                 segment,
@@ -109,20 +111,20 @@ function controlledProvider(cleanup = vi.fn()) {
               },
             },
           }),
-          nextAttempt: (_workflow, context) => {
+          nextAttempt: (_plan, context) => {
             if (context.committedAttempts.length !== 0) return undefined;
-            const mutation = { operation: "edit" } as const;
+            const editRequest = { operation: "edit" } as const;
             return {
-              materializeMutation: () => mutation,
+              materializeEditRequest: () => editRequest,
             };
           },
           createReconciliation: () => ({}),
         },
-        mutationAdapter: {
-          mutationScope: {},
-          commit: (mutation) =>
+        editRequestAdapter: {
+          editRequestScope: {},
+          commit: (editRequest) =>
             new Promise<{ readonly ok: true }>((resolve, reject) => {
-              commits.push({ mutation, resolve, reject });
+              commits.push({ editRequest, resolve, reject });
             }),
           classifyFailure: (error) =>
             (
@@ -152,55 +154,53 @@ async function flushMicrotasks() {
 }
 
 describe("spatial skeleton optimistic edit host", () => {
-  it("constructs and reuses one state-owned engine per source", () => {
-    const createDriver = vi.fn<
-      SpatialSkeletonOptimisticEditingProvider["createDriver"]
+  it("constructs and reuses one session-owned edit queue per source", () => {
+    const createPlanner = vi.fn<
+      SpatialSkeletonEditPlannerProvider["createPlanner"]
     >(() => makeRegistration());
-    const { state, layer, source } = fixture({ createDriver });
+    const { state, layer, source } = fixture({ createPlanner });
 
-    const first = ensureSpatialSkeletonOptimisticEditQueue(layer, source);
-    const second = ensureSpatialSkeletonOptimisticEditQueue(layer, source);
+    const first = ensureSpatialSkeletonEditQueue(layer, source);
+    const second = ensureSpatialSkeletonEditQueue(layer, source);
 
     expect(second).toBe(first);
-    expect(createDriver).toHaveBeenCalledOnce();
-    expect(createDriver.mock.calls[0]![0]).toMatchObject({ source });
-    expect(createDriver.mock.calls[0]![0]).not.toHaveProperty("layer");
-    expect(createDriver.mock.calls[0]![0].identities).toBeDefined();
-    expect(createDriver.mock.calls[0]![0].provisionalIds).toBeDefined();
+    expect(createPlanner).toHaveBeenCalledOnce();
+    expect(createPlanner.mock.calls[0]![0]).toMatchObject({ source });
+    expect(createPlanner.mock.calls[0]![0]).not.toHaveProperty("layer");
+    expect(createPlanner.mock.calls[0]![0].identities).toBeDefined();
+    expect(createPlanner.mock.calls[0]![0].provisionalIds).toBeDefined();
     state.dispose();
   });
 
   it("keeps the current queue when replacement setup fails", () => {
     const cleanup = vi.fn();
-    const currentProvider = { createDriver: () => makeRegistration(cleanup) };
+    const currentProvider = { createPlanner: () => makeRegistration(cleanup) };
     const { state, layer, source } = fixture(currentProvider);
-    const current = ensureSpatialSkeletonOptimisticEditQueue(layer, source);
+    const current = ensureSpatialSkeletonEditQueue(layer, source);
     const replacementError = new Error("provider setup failed");
     const replacement = makeSource({
-      createDriver: () => {
+      createPlanner: () => {
         throw replacementError;
       },
     });
 
-    expect(() =>
-      ensureSpatialSkeletonOptimisticEditQueue(layer, replacement),
-    ).toThrow(replacementError);
-    expect(ensureSpatialSkeletonOptimisticEditQueue(layer, source)).toBe(
-      current,
+    expect(() => ensureSpatialSkeletonEditQueue(layer, replacement)).toThrow(
+      replacementError,
     );
+    expect(ensureSpatialSkeletonEditQueue(layer, source)).toBe(current);
     expect(cleanup).not.toHaveBeenCalled();
     state.dispose();
   });
 
-  it("runs datasource cleanup when state-owned runtime is released", async () => {
+  it("runs datasource cleanup when the session-owned queue is released", async () => {
     const cleanup = vi.fn();
     const { state, layer, source } = fixture({
-      createDriver: () => makeRegistration(cleanup),
+      createPlanner: () => makeRegistration(cleanup),
     });
-    ensureSpatialSkeletonOptimisticEditQueue(layer, source);
+    ensureSpatialSkeletonEditQueue(layer, source);
 
-    expect(state.releaseOptimisticEditingEngine()).toBe(true);
-    expect(state.releaseOptimisticEditingEngine()).toBe(false);
+    expect(state.releaseEditQueue()).toBe(true);
+    expect(state.releaseEditQueue()).toBe(false);
     await flushMicrotasks();
     expect(cleanup).toHaveBeenCalledOnce();
     state.dispose();
@@ -209,21 +209,23 @@ describe("spatial skeleton optimistic edit host", () => {
   it("defers datasource cleanup until a late committed transport is classified", async () => {
     const { provider, commits, cleanup } = controlledProvider();
     const { state, layer, source } = fixture(provider);
-    const queue = ensureSpatialSkeletonOptimisticEditQueue(layer, source);
-    const execution = state.executeOptimisticEdit(controlledCommand(), {
+    const queue = ensureSpatialSkeletonEditQueue(layer, source);
+    const execution = state.executeEdit(controlledCommand(), {
       segments: [],
     });
     await execution;
     await flushMicrotasks();
     expect(commits).toHaveLength(1);
 
-    expect(state.releaseOptimisticEditingEngine()).toBe(true);
+    expect(state.releaseEditQueue()).toBe(true);
     expect(cleanup).not.toHaveBeenCalled();
     commits[0]!.resolve({ ok: true });
     await queue.dispose();
     expect(cleanup).toHaveBeenCalledOnce();
-    expect(commits.map(({ mutation }) => mutation.operation)).toEqual(["edit"]);
-    expect(state.getOptimisticEditFatalState()).toMatchObject({
+    expect(commits.map(({ editRequest }) => editRequest.operation)).toEqual([
+      "edit",
+    ]);
+    expect(state.getReloadRequired()).toMatchObject({
       reason: "committed-local-publication-failed",
     });
     let editSettled = false;
@@ -236,8 +238,8 @@ describe("spatial skeleton optimistic edit host", () => {
   it("installs a replacement engine while the old datasource cleanup is deferred", async () => {
     const { provider, commits, cleanup } = controlledProvider();
     const { state, layer, source } = fixture(provider);
-    const oldQueue = ensureSpatialSkeletonOptimisticEditQueue(layer, source);
-    const execution = state.executeOptimisticEdit(controlledCommand(), {
+    const oldQueue = ensureSpatialSkeletonEditQueue(layer, source);
+    const execution = state.executeEdit(controlledCommand(), {
       segments: [],
     });
     await execution;
@@ -246,42 +248,42 @@ describe("spatial skeleton optimistic edit host", () => {
 
     const replacementCleanup = vi.fn();
     const replacementSource = makeSource({
-      createDriver: () => makeRegistration(replacementCleanup),
+      createPlanner: () => makeRegistration(replacementCleanup),
     });
-    const replacementQueue = ensureSpatialSkeletonOptimisticEditQueue(
+    const replacementQueue = ensureSpatialSkeletonEditQueue(
       layer,
       replacementSource,
     );
     expect(replacementQueue).not.toBe(oldQueue);
     expect(cleanup).not.toHaveBeenCalled();
-    expect(
-      ensureSpatialSkeletonOptimisticEditQueue(layer, replacementSource),
-    ).toBe(replacementQueue);
+    expect(ensureSpatialSkeletonEditQueue(layer, replacementSource)).toBe(
+      replacementQueue,
+    );
 
     commits[0]!.resolve({ ok: true });
     await oldQueue.dispose();
 
     expect(cleanup).toHaveBeenCalledOnce();
-    expect(
-      ensureSpatialSkeletonOptimisticEditQueue(layer, replacementSource),
-    ).toBe(replacementQueue);
+    expect(ensureSpatialSkeletonEditQueue(layer, replacementSource)).toBe(
+      replacementQueue,
+    );
     state.dispose();
     await flushMicrotasks();
     expect(replacementCleanup).toHaveBeenCalledOnce();
   });
 
-  it("cleans up after indeterminate classification while fatal settlement stays pending", async () => {
+  it("cleans up after indeterminate classification while Reload-required settlement stays pending", async () => {
     const { provider, commits, cleanup } = controlledProvider();
     const { state, layer, source } = fixture(provider);
-    const queue = ensureSpatialSkeletonOptimisticEditQueue(layer, source);
-    const execution = state.executeOptimisticEdit(controlledCommand(), {
+    const queue = ensureSpatialSkeletonEditQueue(layer, source);
+    const execution = state.executeEdit(controlledCommand(), {
       segments: [],
     });
     await execution;
     await flushMicrotasks();
     expect(commits).toHaveLength(1);
 
-    state.releaseOptimisticEditingEngine();
+    state.releaseEditQueue();
     let editSettled = false;
     void execution.settled.then(() => (editSettled = true));
     commits[0]!.reject(new Error("connection lost"));
@@ -289,7 +291,7 @@ describe("spatial skeleton optimistic edit host", () => {
 
     expect(cleanup).toHaveBeenCalledOnce();
     expect(editSettled).toBe(false);
-    expect(state.getOptimisticEditFatalState()).toMatchObject({
+    expect(state.getReloadRequired()).toMatchObject({
       reason: "authority-indeterminate",
     });
     state.dispose();
@@ -298,15 +300,15 @@ describe("spatial skeleton optimistic edit host", () => {
   it("cleans up after definitive classification of a disposed transport", async () => {
     const { provider, commits, cleanup } = controlledProvider();
     const { state, layer, source } = fixture(provider);
-    const queue = ensureSpatialSkeletonOptimisticEditQueue(layer, source);
-    const execution = state.executeOptimisticEdit(controlledCommand(), {
+    const queue = ensureSpatialSkeletonEditQueue(layer, source);
+    const execution = state.executeEdit(controlledCommand(), {
       segments: [],
     });
     await execution;
     await flushMicrotasks();
     expect(commits).toHaveLength(1);
 
-    state.releaseOptimisticEditingEngine();
+    state.releaseEditQueue();
     commits[0]!.reject(
       Object.assign(new Error("not saved"), {
         disposition: "rejected" as const,
@@ -319,93 +321,93 @@ describe("spatial skeleton optimistic edit host", () => {
       outcome: "unchanged",
       reason: "rejected",
     });
-    expect(state.getOptimisticEditFatalState()).toBeUndefined();
+    expect(state.getReloadRequired()).toBeUndefined();
     state.dispose();
   });
 
-  it("rejects a writable source without the mandatory driver contract", () => {
-    const state = new SpatialSkeletonState();
+  it("rejects a writable source without the mandatory planner contract", () => {
+    const state = new SpatialSkeletonEditSession();
     const layer = {
-      spatialSkeletonState: state,
+      spatialSkeletonEditSession: state,
       getSpatiallyIndexedSkeletonLayer: () => undefined,
     } as SpatialSkeletonLayerContext;
-    expect(() =>
-      ensureSpatialSkeletonOptimisticEditQueue(layer, makeSource()),
-    ).toThrow(SpatialSkeletonOptimisticDatasourceContractError);
+    expect(() => ensureSpatialSkeletonEditQueue(layer, makeSource())).toThrow(
+      SpatialSkeletonDatasourceContractError,
+    );
     state.dispose();
   });
 
-  it("rejects provider-owned queue state in a driver registration", () => {
+  it("rejects provider-owned queue state in a planner registration", () => {
     const registration = makeRegistration();
     const { state, layer, source } = fixture({
-      createDriver: () => ({ ...registration, queue: {} }) as any,
+      createPlanner: () => ({ ...registration, queue: {} }) as any,
     });
-    expect(() =>
-      ensureSpatialSkeletonOptimisticEditQueue(layer, source),
-    ).toThrow(/engine-owned field "queue"/);
+    expect(() => ensureSpatialSkeletonEditQueue(layer, source)).toThrow(
+      /engine-owned field "queue"/,
+    );
     state.dispose();
   });
 
-  it("rejects an invalid datasource mutation scope before installing edits", () => {
-    for (const mutationScope of [undefined, null, 17]) {
+  it("rejects an invalid datasource edit request scope before installing edits", () => {
+    for (const editRequestScope of [undefined, null, 17]) {
       const registration = makeRegistration();
       const { state, layer, source } = fixture({
-        createDriver: () => ({
+        createPlanner: () => ({
           ...registration,
-          mutationAdapter: {
-            ...registration.mutationAdapter,
-            mutationScope: mutationScope as unknown as object,
+          editRequestAdapter: {
+            ...registration.editRequestAdapter,
+            editRequestScope: editRequestScope as unknown as object,
           },
         }),
       });
-      expect(() =>
-        ensureSpatialSkeletonOptimisticEditQueue(layer, source),
-      ).toThrow(/stable object mutationScope/);
+      expect(() => ensureSpatialSkeletonEditQueue(layer, source)).toThrow(
+        /stable object editRequestScope/,
+      );
       state.dispose();
     }
   });
 
-  it("reports a throwing mutation-scope getter as a datasource contract error", () => {
+  it("reports a throwing edit request-scope getter as a datasource contract error", () => {
     const registration = makeRegistration();
     const { state, layer, source } = fixture({
-      createDriver: () => ({
+      createPlanner: () => ({
         ...registration,
-        mutationAdapter: {
-          get mutationScope(): object {
+        editRequestAdapter: {
+          get editRequestScope(): object {
             throw new Error("scope setup failed");
           },
-          commit: registration.mutationAdapter.commit,
-          classifyFailure: registration.mutationAdapter.classifyFailure,
+          commit: registration.editRequestAdapter.commit,
+          classifyFailure: registration.editRequestAdapter.classifyFailure,
         },
       }),
     });
-    expect(() =>
-      ensureSpatialSkeletonOptimisticEditQueue(layer, source),
-    ).toThrow(SpatialSkeletonOptimisticDatasourceContractError);
+    expect(() => ensureSpatialSkeletonEditQueue(layer, source)).toThrow(
+      SpatialSkeletonDatasourceContractError,
+    );
     state.dispose();
   });
 
   it("ignores malformed source capability values", () => {
     expect(
-      getSpatialSkeletonOptimisticEditingProvider(
+      getSpatialSkeletonEditPlannerProvider(
         makeSource({ supportsAction: () => true }),
       ),
     ).toBeUndefined();
   });
 });
 
-describe("isSpatialSkeletonOptimisticEditingProvider", () => {
-  it("accepts only values exposing the driver provider operation", () => {
+describe("isSpatialSkeletonEditPlannerProvider", () => {
+  it("accepts only values exposing the planner provider operation", () => {
     const provider = {
-      createDriver: () => ({}),
+      createPlanner: () => ({}),
     };
 
-    expect(isSpatialSkeletonOptimisticEditingProvider(provider)).toBe(true);
+    expect(isSpatialSkeletonEditPlannerProvider(provider)).toBe(true);
     expect(
-      isSpatialSkeletonOptimisticEditingProvider({
+      isSpatialSkeletonEditPlannerProvider({
         getOrCreateQueue: () => ({}),
       }),
     ).toBe(false);
-    expect(isSpatialSkeletonOptimisticEditingProvider(null)).toBe(false);
+    expect(isSpatialSkeletonEditPlannerProvider(null)).toBe(false);
   });
 });

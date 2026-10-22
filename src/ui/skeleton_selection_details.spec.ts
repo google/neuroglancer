@@ -30,7 +30,7 @@ import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_sourc
 import type { SegmentationGroupState } from "#src/segmentation_display_state/frontend.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import { KnownSkeletonNodeAttribute } from "#src/skeleton/api.js";
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   executeSpatialSkeletonNodeRadiusUpdate,
   executeSpatialSkeletonReroot,
@@ -81,7 +81,7 @@ function makeEditableSource(options: { omitReroot?: boolean } = {}) {
     getClient: () => ({}) as any,
   });
   return {
-    optimisticEditing: commands.optimisticEditing,
+    editPlannerProvider: commands.editPlannerProvider,
     deleteNodesCommand: commands.deleteNodesCommand,
     editNodeTrueEndCommand: commands.editNodeTrueEndCommand,
     editNodeRadiusCommand: commands.editNodeRadiusCommand,
@@ -95,7 +95,7 @@ function makeDetailsLayer(
     layerDimensionNames?: string[];
   } = {},
 ) {
-  const spatialSkeletonState = new SpatialSkeletonState();
+  const spatialSkeletonEditSession = new SpatialSkeletonEditSession();
   const layerSelectedValues = {
     changed: new NullarySignal(),
     mouseState: { active: false },
@@ -148,14 +148,14 @@ function makeDetailsLayer(
     layer: userLayer,
     skeletonNodeAccess,
     spatiallyIndexedSkeletonLayer,
-    spatialSkeletonState,
+    spatialSkeletonEditSession,
   });
   const skeletonSourceConnection = new SkeletonSourceConnection({
-    spatialSkeletonState,
+    spatialSkeletonEditSession,
     selection: skeletonNodeSelection,
     overlaySegments: new SkeletonOverlaySegments({
       segmentationGroupState: new WatchableValue({} as any),
-      editState: spatialSkeletonState,
+      editSession: spatialSkeletonEditSession,
     }),
     segmentationGroupState: new WatchableValue({
       visibleSegments: new Uint64Set(),
@@ -166,7 +166,7 @@ function makeDetailsLayer(
     spatiallyIndexedSkeletonLayer,
   });
   return {
-    spatialSkeletonState,
+    spatialSkeletonEditSession,
     skeletonSourceConnection,
     skeletonNodeSelection,
     skeletonNodeAccess,
@@ -220,7 +220,7 @@ afterEach(() => {
 describe("skeleton node type control", () => {
   it("the root node shows Root checked and cannot be chosen again", () => {
     const layer = makeDetailsLayer({ editableSource: makeEditableSource() });
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [5n, [makeNode(1n), makeNode(2n, { parentNodeId: 1n })]],
     ]);
     const parent = showSelectedNode(layer, 1n);
@@ -233,7 +233,7 @@ describe("skeleton node type control", () => {
 
   it("choosing Root on a regular node reroots the skeleton at that node", () => {
     const layer = makeDetailsLayer({ editableSource: makeEditableSource() });
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [
         5n,
         [
@@ -253,7 +253,7 @@ describe("skeleton node type control", () => {
 
   it("a true end cannot become root until its true end state is cleared", () => {
     const layer = makeDetailsLayer({ editableSource: makeEditableSource() });
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [5n, [makeNode(1n), makeNode(2n, { parentNodeId: 1n, trueEnd: true })]],
     ]);
     const parent = showSelectedNode(layer, 2n);
@@ -267,7 +267,7 @@ describe("skeleton node type control", () => {
 
   it("a leaf offers Virtual end and True end alongside Root", () => {
     const layer = makeDetailsLayer({ editableSource: makeEditableSource() });
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [5n, [makeNode(1n), makeNode(2n, { parentNodeId: 1n })]],
     ]);
     const parent = showSelectedNode(layer, 2n);
@@ -281,7 +281,7 @@ describe("skeleton node type control", () => {
 
   it("a branch point shows its type as a label, not as a choice", () => {
     const layer = makeDetailsLayer({ editableSource: makeEditableSource() });
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [
         5n,
         [
@@ -304,7 +304,7 @@ describe("skeleton node type control", () => {
     const layer = makeDetailsLayer({
       editableSource: makeEditableSource({ omitReroot: true }),
     });
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [
         5n,
         [
@@ -327,7 +327,7 @@ describe("skeleton selection details", () => {
       editableSource: makeEditableSource(),
       layerDimensionNames: ["a", "b", "c"],
     });
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [5n, [makeNode(1n, { position: [10.4, 20.6, 30] })]],
     ]);
     const parent = showSelectedNode(layer, 1n);
@@ -340,18 +340,18 @@ describe("skeleton selection details", () => {
 
   it("shows Preview as the node id until the server confirms the node", () => {
     const layer = makeDetailsLayer({ editableSource: makeEditableSource() });
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [5n, [makeNode(1n)]],
     ]);
-    const { spatialSkeletonPresentation } = layer.spatialSkeletonState;
-    spatialSkeletonPresentation.value = {
-      ...spatialSkeletonPresentation.value,
+    const { spatialSkeletonDisplay } = layer.spatialSkeletonEditSession;
+    spatialSkeletonDisplay.value = {
+      ...spatialSkeletonDisplay.value,
       provisionalNodeIds: [1n],
     };
     const parent = showSelectedNode(layer, 1n);
     expect(getPropertyValue(parent, "Node ID")!.textContent).toBe("Preview");
-    spatialSkeletonPresentation.value = {
-      ...spatialSkeletonPresentation.value,
+    spatialSkeletonDisplay.value = {
+      ...spatialSkeletonDisplay.value,
       provisionalNodeIds: [],
     };
     expect(getPropertyValue(parent, "Node ID")!.textContent).toBe("1");
@@ -359,22 +359,22 @@ describe("skeleton selection details", () => {
 
   it("shows Preview as the skeleton id until the server confirms the skeleton", () => {
     const layer = makeDetailsLayer({ editableSource: makeEditableSource() });
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [5n, [makeNode(1n)]],
     ]);
-    const { spatialSkeletonPresentation } = layer.spatialSkeletonState;
+    const { spatialSkeletonDisplay } = layer.spatialSkeletonEditSession;
     const alias = {
       logicalHandle: { kind: "segment", stableId: "intent:1:created-segment" },
       segmentId: 5n,
     } as const;
-    spatialSkeletonPresentation.value = {
-      ...spatialSkeletonPresentation.value,
+    spatialSkeletonDisplay.value = {
+      ...spatialSkeletonDisplay.value,
       numericAliases: [{ ...alias, authoritative: false }] as any,
     };
     const parent = showSelectedNode(layer, 1n);
     expect(getPropertyValue(parent, "Segment ID")!.textContent).toBe("Preview");
-    spatialSkeletonPresentation.value = {
-      ...spatialSkeletonPresentation.value,
+    spatialSkeletonDisplay.value = {
+      ...spatialSkeletonDisplay.value,
       numericAliases: [{ ...alias, authoritative: true }] as any,
     };
     expect(getPropertyValue(parent, "Segment ID")!.textContent).toBe("5");
@@ -382,7 +382,7 @@ describe("skeleton selection details", () => {
 
   it("keeps a radius being typed when the server confirms an earlier edit", () => {
     const layer = makeDetailsLayer({ editableSource: makeEditableSource() });
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [5n, [makeNode(1n, { radius: 2 })]],
     ]);
     const parent = showSelectedNode(layer, 1n);
@@ -392,7 +392,7 @@ describe("skeleton selection details", () => {
     radius.focus();
     radius.value = "7";
     radius.dispatchEvent(new Event("input"));
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [5n, [makeNode(1n, { radius: 3 })]],
     ]);
     expect(radius.isConnected).toBe(true);
@@ -402,7 +402,7 @@ describe("skeleton selection details", () => {
   it("three quick Radius steps save one edit with the last value", () => {
     vi.useFakeTimers();
     const layer = makeDetailsLayer({ editableSource: makeEditableSource() });
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [5n, [makeNode(1n, { radius: 2 })]],
     ]);
     const parent = showSelectedNode(layer, 1n);
@@ -426,7 +426,7 @@ describe("skeleton selection details", () => {
 
   it("leaving Radius saves at once, and 2.0 over a radius of 2 saves nothing", () => {
     const layer = makeDetailsLayer({ editableSource: makeEditableSource() });
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [5n, [makeNode(1n, { radius: 2 })]],
     ]);
     const parent = showSelectedNode(layer, 1n);
@@ -451,7 +451,7 @@ describe("skeleton selection details", () => {
 
   it("the segment chip follows a change of the skeleton's colour", () => {
     const layer = makeDetailsLayer({ editableSource: makeEditableSource() });
-    layer.spatialSkeletonState.replaceCachedSegmentSnapshots([
+    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [5n, [makeNode(1n)]],
     ]);
     const parent = document.createElement("div");

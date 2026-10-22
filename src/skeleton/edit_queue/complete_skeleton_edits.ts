@@ -15,22 +15,24 @@
  */
 
 import type { SkeletonVector, SkeletonNode } from "#src/skeleton/api.js";
-import {
-  createCompleteSkeletonSnapshot,
-  mergeCompleteSkeletonSnapshots,
-  patchCompleteSkeletonSnapshot,
-  splitCompleteSkeletonSnapshot,
-  type CompleteSkeletonNodeChanges,
-  type CompleteSkeletonNodePatch,
-  type CompleteSkeletonSnapshotHandle,
-  remapCompleteSkeletonSnapshot,
+import type {
+  CompleteSkeletonNodeChanges,
+  CompleteSkeletonNodePatch,
+  CompleteSkeleton,
 } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import {
-  getSpatialSkeletonLogicalResourceKey,
-  type SpatialSkeletonLogicalHandleMappings,
-  type SpatialSkeletonLogicalNodeHandle,
-  type SpatialSkeletonLogicalSegmentHandle,
+  createCompleteSkeleton,
+  mergeCompleteSkeletons,
+  patchCompleteSkeleton,
+  splitCompleteSkeleton,
+  remapCompleteSkeleton,
+} from "#src/skeleton/edit_queue/complete_skeleton.js";
+import type {
+  SpatialSkeletonStableIdHandles,
+  SpatialSkeletonStableNodeHandle,
+  SpatialSkeletonStableSegmentHandle,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
+import { getSpatialSkeletonStableResourceKey } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import {
   getSkeletonNodeConfidence,
   getSkeletonNodeRadius,
@@ -38,26 +40,26 @@ import {
   setSkeletonNodeAttributes,
 } from "#src/skeleton/node_attributes.js";
 
-export function materializePhysicalSpatialSkeletonWorkspace(
-  workspace: SpatialSkeletonProjectionWorkspace,
-  mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>,
+export function materializeCompleteSkeletonSet(
+  workspace: CompleteSkeletonSet,
+  mappings: SpatialSkeletonStableIdHandles<bigint, bigint>,
 ) {
   const result = new Map<
     bigint,
     {
-      readonly segment: SpatialSkeletonLogicalSegmentHandle;
-      readonly snapshot: CompleteSkeletonSnapshotHandle;
+      readonly segment: SpatialSkeletonStableSegmentHandle;
+      readonly snapshot: CompleteSkeleton;
     }
   >();
   for (const entry of workspace.segments) {
     const segmentId = mappings.resolveSegment(entry.segment);
     if (segmentId === undefined || segmentId === 0n) {
-      throw new SpatialSkeletonProjectionValidationError(
+      throw new SpatialSkeletonEditValidationError(
         `Logical segment ${entry.segment.stableId} requires a nonzero id for publication.`,
       );
     }
     if (result.has(segmentId)) {
-      throw new SpatialSkeletonProjectionValidationError(
+      throw new SpatialSkeletonEditValidationError(
         `Physical segment ${segmentId} has multiple active logical owners.`,
       );
     }
@@ -67,8 +69,8 @@ export function materializePhysicalSpatialSkeletonWorkspace(
 }
 
 export function ownsPhysicalSpatialSkeletonSegment(
-  workspace: SpatialSkeletonProjectionWorkspace,
-  mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>,
+  workspace: CompleteSkeletonSet,
+  mappings: SpatialSkeletonStableIdHandles<bigint, bigint>,
   segmentId: bigint,
 ) {
   return workspace.segments.some(
@@ -76,16 +78,16 @@ export function ownsPhysicalSpatialSkeletonSegment(
   );
 }
 
-export function remapSpatialSkeletonProjectionWorkspace(
-  workspace: SpatialSkeletonProjectionWorkspace,
+export function remapCompleteSkeletonSet(
+  workspace: CompleteSkeletonSet,
   nodeIds: ReadonlyMap<bigint, bigint>,
   segmentIds: ReadonlyMap<bigint, bigint>,
 ) {
   if (nodeIds.size === 0 && segmentIds.size === 0) return workspace;
-  return new SpatialSkeletonProjectionWorkspace(
+  return new CompleteSkeletonSet(
     workspace.segments.map(({ segment, snapshot }) => ({
       segment,
-      snapshot: remapCompleteSkeletonSnapshot(snapshot, {
+      snapshot: remapCompleteSkeleton(snapshot, {
         nodeIds,
         segmentIds,
       }),
@@ -93,194 +95,193 @@ export function remapSpatialSkeletonProjectionWorkspace(
   );
 }
 
-export interface SpatialSkeletonProjectionNodeAttributes {
+export interface SpatialSkeletonEditNodeAttributes {
   readonly radius?: number;
   readonly confidence?: number;
   readonly description?: string;
   readonly isTrueEnd?: boolean;
 }
 
-export interface SpatialSkeletonProjectionAddDelta {
+export interface SpatialSkeletonEditAddDelta {
   readonly kind: "add";
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
-  readonly node: SpatialSkeletonLogicalNodeHandle;
-  readonly parent?: SpatialSkeletonLogicalNodeHandle;
+  readonly segment: SpatialSkeletonStableSegmentHandle;
+  readonly node: SpatialSkeletonStableNodeHandle;
+  readonly parent?: SpatialSkeletonStableNodeHandle;
   readonly position: SkeletonVector;
-  readonly attributes?: SpatialSkeletonProjectionNodeAttributes;
+  readonly attributes?: SpatialSkeletonEditNodeAttributes;
 }
 
-export interface SpatialSkeletonProjectionMoveDelta {
+export interface SpatialSkeletonEditMoveDelta {
   readonly kind: "move";
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
-  readonly node: SpatialSkeletonLogicalNodeHandle;
+  readonly segment: SpatialSkeletonStableSegmentHandle;
+  readonly node: SpatialSkeletonStableNodeHandle;
   readonly position: SkeletonVector;
 }
 
-export interface SpatialSkeletonProjectionDeleteDelta {
+export interface SpatialSkeletonEditDeleteDelta {
   readonly kind: "delete";
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
-  readonly node: SpatialSkeletonLogicalNodeHandle;
+  readonly segment: SpatialSkeletonStableSegmentHandle;
+  readonly node: SpatialSkeletonStableNodeHandle;
 }
 
-export interface SpatialSkeletonProjectionRerootDelta {
+export interface SpatialSkeletonEditRerootDelta {
   readonly kind: "reroot";
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
-  readonly node: SpatialSkeletonLogicalNodeHandle;
+  readonly segment: SpatialSkeletonStableSegmentHandle;
+  readonly node: SpatialSkeletonStableNodeHandle;
 }
 
-export type SpatialSkeletonProjectionAttributeChanges = Readonly<
-  Partial<SpatialSkeletonProjectionNodeAttributes>
+export type SpatialSkeletonEditAttributeChanges = Readonly<
+  Partial<SpatialSkeletonEditNodeAttributes>
 >;
 
-export interface SpatialSkeletonProjectionNodeAttributesDelta {
+export interface SpatialSkeletonEditNodeAttributesDelta {
   readonly kind: "node-attributes";
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
-  readonly node: SpatialSkeletonLogicalNodeHandle;
-  readonly changes: SpatialSkeletonProjectionAttributeChanges;
+  readonly segment: SpatialSkeletonStableSegmentHandle;
+  readonly node: SpatialSkeletonStableNodeHandle;
+  readonly changes: SpatialSkeletonEditAttributeChanges;
 }
 
-export interface SpatialSkeletonProjectionSplitDelta {
+export interface SpatialSkeletonEditSplitDelta {
   readonly kind: "split";
   /** The side that keeps all ancestors of `node`. */
-  readonly sourceSegment: SpatialSkeletonLogicalSegmentHandle;
+  readonly sourceSegment: SpatialSkeletonStableSegmentHandle;
   /** The new side containing `node` and all of its descendants. */
-  readonly downstreamSegment: SpatialSkeletonLogicalSegmentHandle;
-  readonly node: SpatialSkeletonLogicalNodeHandle;
+  readonly downstreamSegment: SpatialSkeletonStableSegmentHandle;
+  readonly node: SpatialSkeletonStableNodeHandle;
 }
 
-export interface SpatialSkeletonProjectionMergeDelta {
+export interface SpatialSkeletonEditMergeDelta {
   readonly kind: "merge";
-  readonly firstSegment: SpatialSkeletonLogicalSegmentHandle;
-  readonly secondSegment: SpatialSkeletonLogicalSegmentHandle;
-  readonly resultSegment: SpatialSkeletonLogicalSegmentHandle;
+  readonly firstSegment: SpatialSkeletonStableSegmentHandle;
+  readonly secondSegment: SpatialSkeletonStableSegmentHandle;
+  readonly resultSegment: SpatialSkeletonStableSegmentHandle;
   /** The attachment point in the first skeleton. */
-  readonly firstNode: SpatialSkeletonLogicalNodeHandle;
+  readonly firstNode: SpatialSkeletonStableNodeHandle;
   /** The second skeleton is rerooted here and attached to `firstNode`. */
-  readonly secondNode: SpatialSkeletonLogicalNodeHandle;
+  readonly secondNode: SpatialSkeletonStableNodeHandle;
 }
 
-interface SpatialSkeletonProjectionRestoredNode {
-  readonly node: SpatialSkeletonLogicalNodeHandle;
-  readonly parent: SpatialSkeletonLogicalNodeHandle | null;
+interface SpatialSkeletonEditRestoredNode {
+  readonly node: SpatialSkeletonStableNodeHandle;
+  readonly parent: SpatialSkeletonStableNodeHandle | null;
   readonly position: SkeletonVector;
-  readonly attributes: SpatialSkeletonProjectionNodeAttributes;
+  readonly attributes: SpatialSkeletonEditNodeAttributes;
 }
 
-interface SpatialSkeletonProjectionRestoreDeleteDelta {
+interface SpatialSkeletonEditRestoreDeleteDelta {
   readonly kind: "restore-delete";
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
-  readonly snapshot: SpatialSkeletonProjectionRestoredNode;
-  readonly children: readonly SpatialSkeletonLogicalNodeHandle[];
+  readonly segment: SpatialSkeletonStableSegmentHandle;
+  readonly snapshot: SpatialSkeletonEditRestoredNode;
+  readonly children: readonly SpatialSkeletonStableNodeHandle[];
 }
 
-interface SpatialSkeletonProjectionTopologyPatch {
-  readonly node: SpatialSkeletonLogicalNodeHandle;
-  readonly parent: SpatialSkeletonLogicalNodeHandle | null;
+interface SpatialSkeletonEditTopologyPatch {
+  readonly node: SpatialSkeletonStableNodeHandle;
+  readonly parent: SpatialSkeletonStableNodeHandle | null;
   readonly confidence: number | undefined;
 }
 
-interface SpatialSkeletonProjectionRestoreTopologyDelta {
+interface SpatialSkeletonEditRestoreTopologyDelta {
   readonly kind: "restore-topology";
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
-  readonly patches: readonly SpatialSkeletonProjectionTopologyPatch[];
+  readonly segment: SpatialSkeletonStableSegmentHandle;
+  readonly patches: readonly SpatialSkeletonEditTopologyPatch[];
 }
 
-interface SpatialSkeletonProjectionJoinSplitDelta {
+interface SpatialSkeletonEditJoinSplitDelta {
   readonly kind: "join-split";
-  readonly sourceSegment: SpatialSkeletonLogicalSegmentHandle;
-  readonly downstreamSegment: SpatialSkeletonLogicalSegmentHandle;
-  readonly resultSegment: SpatialSkeletonLogicalSegmentHandle;
-  readonly node: SpatialSkeletonLogicalNodeHandle;
-  readonly formerParent: SpatialSkeletonLogicalNodeHandle;
+  readonly sourceSegment: SpatialSkeletonStableSegmentHandle;
+  readonly downstreamSegment: SpatialSkeletonStableSegmentHandle;
+  readonly resultSegment: SpatialSkeletonStableSegmentHandle;
+  readonly node: SpatialSkeletonStableNodeHandle;
+  readonly formerParent: SpatialSkeletonStableNodeHandle;
 }
 
-interface SpatialSkeletonProjectionUnmergeDelta {
+interface SpatialSkeletonEditUnmergeDelta {
   readonly kind: "unmerge";
-  readonly mergedSegment: SpatialSkeletonLogicalSegmentHandle;
-  readonly firstSegment: SpatialSkeletonLogicalSegmentHandle;
-  readonly secondSegment: SpatialSkeletonLogicalSegmentHandle;
-  readonly firstNode: SpatialSkeletonLogicalNodeHandle;
-  readonly secondNode: SpatialSkeletonLogicalNodeHandle;
+  readonly mergedSegment: SpatialSkeletonStableSegmentHandle;
+  readonly firstSegment: SpatialSkeletonStableSegmentHandle;
+  readonly secondSegment: SpatialSkeletonStableSegmentHandle;
+  readonly firstNode: SpatialSkeletonStableNodeHandle;
+  readonly secondNode: SpatialSkeletonStableNodeHandle;
   /** Exact pre-merge orientation/confidences; O(reroot path), not O(skeleton). */
-  readonly formerSecondTopology: readonly SpatialSkeletonProjectionTopologyPatch[];
+  readonly formerSecondTopology: readonly SpatialSkeletonEditTopologyPatch[];
 }
 
 /** Semantic forward deltas accepted from command factories. */
-export type SpatialSkeletonProjectionForwardDelta =
-  | SpatialSkeletonProjectionAddDelta
-  | SpatialSkeletonProjectionMoveDelta
-  | SpatialSkeletonProjectionDeleteDelta
-  | SpatialSkeletonProjectionRerootDelta
-  | SpatialSkeletonProjectionNodeAttributesDelta
-  | SpatialSkeletonProjectionSplitDelta
-  | SpatialSkeletonProjectionMergeDelta;
+export type SpatialSkeletonEditForwardDelta =
+  | SpatialSkeletonEditAddDelta
+  | SpatialSkeletonEditMoveDelta
+  | SpatialSkeletonEditDeleteDelta
+  | SpatialSkeletonEditRerootDelta
+  | SpatialSkeletonEditNodeAttributesDelta
+  | SpatialSkeletonEditSplitDelta
+  | SpatialSkeletonEditMergeDelta;
 
 /**
  * An inverse is itself reducer input.  The four private variants retain only
  * the path, cut edge, or deleted node required to restore topology; they never
  * retain a complete skeleton copy.
  */
-export type SpatialSkeletonProjectionInverseDelta =
-  | SpatialSkeletonProjectionForwardDelta
-  | SpatialSkeletonProjectionRestoreDeleteDelta
-  | SpatialSkeletonProjectionRestoreTopologyDelta
-  | SpatialSkeletonProjectionJoinSplitDelta
-  | SpatialSkeletonProjectionUnmergeDelta;
+export type SpatialSkeletonEditInverseDelta =
+  | SpatialSkeletonEditForwardDelta
+  | SpatialSkeletonEditRestoreDeleteDelta
+  | SpatialSkeletonEditRestoreTopologyDelta
+  | SpatialSkeletonEditJoinSplitDelta
+  | SpatialSkeletonEditUnmergeDelta;
 
-export type SpatialSkeletonProjectionDelta =
-  SpatialSkeletonProjectionInverseDelta;
+export type SpatialSkeletonEditDelta = SpatialSkeletonEditInverseDelta;
 
-export interface SpatialSkeletonProjectionSegmentSnapshot {
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
-  readonly snapshot: CompleteSkeletonSnapshotHandle;
+export interface SpatialSkeletonEditSegmentSnapshot {
+  readonly segment: SpatialSkeletonStableSegmentHandle;
+  readonly snapshot: CompleteSkeleton;
 }
 
-export interface SpatialSkeletonProjectionSegmentChange {
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
-  readonly snapshot: CompleteSkeletonSnapshotHandle | undefined;
+export interface SpatialSkeletonEditSegmentChange {
+  readonly segment: SpatialSkeletonStableSegmentHandle;
+  readonly snapshot: CompleteSkeleton | undefined;
 }
 
-export interface SpatialSkeletonProjectionApplyResult {
-  readonly projection: SpatialSkeletonProjectionWorkspace;
-  readonly inverseDelta: SpatialSkeletonProjectionInverseDelta;
+export interface SpatialSkeletonEditApplyResult {
+  readonly edit: CompleteSkeletonSet;
+  readonly inverseDelta: SpatialSkeletonEditInverseDelta;
 }
 
-/** Cache snapshot access used to capture the projection baseline. */
-export interface SpatialSkeletonProjectionSnapshotHandleSource {
+/** Cache snapshot access used to capture the preview baseline. */
+export interface SpatialSkeletonEditSnapshotHandleSource {
   getCachedSegmentSnapshotHandle(segmentId: bigint):
     | {
-        readonly handle: CompleteSkeletonSnapshotHandle;
+        readonly handle: CompleteSkeleton;
         readonly cacheRevision: number;
       }
     | undefined;
   getCachedSegmentRevision(segmentId: bigint): number;
 }
 
-export type SpatialSkeletonProjectionLogicalMappings = Pick<
-  SpatialSkeletonLogicalHandleMappings<bigint, bigint>,
+export type SpatialSkeletonEditStableMappings = Pick<
+  SpatialSkeletonStableIdHandles<bigint, bigint>,
   "resolveNode" | "resolveSegment" | "findNodes"
 >;
 
-type ProjectionMappings = SpatialSkeletonProjectionLogicalMappings;
+type EditMappings = SpatialSkeletonEditStableMappings;
 
-function segmentKey(segment: SpatialSkeletonLogicalSegmentHandle) {
-  return getSpatialSkeletonLogicalResourceKey(segment);
+function segmentKey(segment: SpatialSkeletonStableSegmentHandle) {
+  return getSpatialSkeletonStableResourceKey(segment);
 }
 
 function handlesEqual(
-  a: SpatialSkeletonLogicalNodeHandle | SpatialSkeletonLogicalSegmentHandle,
-  b: SpatialSkeletonLogicalNodeHandle | SpatialSkeletonLogicalSegmentHandle,
+  a: SpatialSkeletonStableNodeHandle | SpatialSkeletonStableSegmentHandle,
+  b: SpatialSkeletonStableNodeHandle | SpatialSkeletonStableSegmentHandle,
 ) {
   return a.kind === b.kind && a.stableId === b.stableId;
 }
 
 function requireNodeId(
-  mappings: ProjectionMappings,
-  handle: SpatialSkeletonLogicalNodeHandle,
+  mappings: EditMappings,
+  handle: SpatialSkeletonStableNodeHandle,
 ) {
   const nodeId = mappings.resolveNode(handle);
   if (nodeId === undefined) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       `Logical node ${handle.stableId} has no physical mapping.`,
     );
   }
@@ -288,12 +289,12 @@ function requireNodeId(
 }
 
 function requireSegmentId(
-  mappings: ProjectionMappings,
-  handle: SpatialSkeletonLogicalSegmentHandle,
+  mappings: EditMappings,
+  handle: SpatialSkeletonStableSegmentHandle,
 ) {
   const segmentId = mappings.resolveSegment(handle);
   if (segmentId === undefined) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       `Logical segment ${handle.stableId} has no physical mapping.`,
     );
   }
@@ -301,13 +302,13 @@ function requireSegmentId(
 }
 
 function requireNodeHandle(
-  mappings: ProjectionMappings,
+  mappings: EditMappings,
   nodeId: bigint,
   context: string,
 ) {
   const handles = mappings.findNodes(nodeId);
   if (handles.length !== 1) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       `${context} node ${nodeId} must have exactly one logical handle; found ${handles.length}.`,
     );
   }
@@ -320,7 +321,7 @@ function cloneVector(value: SkeletonVector) {
     result.length === 0 ||
     result.some((component) => !Number.isFinite(component))
   ) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "A skeleton node position must contain finite coordinates.",
     );
   }
@@ -328,8 +329,8 @@ function cloneVector(value: SkeletonVector) {
 }
 
 function cloneAttributes(
-  attributes: SpatialSkeletonProjectionNodeAttributes | undefined,
-): SpatialSkeletonProjectionNodeAttributes {
+  attributes: SpatialSkeletonEditNodeAttributes | undefined,
+): SpatialSkeletonEditNodeAttributes {
   if (attributes === undefined) return Object.freeze({});
   const result: {
     radius?: number;
@@ -350,9 +351,7 @@ function cloneAttributes(
   return Object.freeze(result);
 }
 
-function nodeAttributes(
-  node: SkeletonNode,
-): SpatialSkeletonProjectionNodeAttributes {
+function nodeAttributes(node: SkeletonNode): SpatialSkeletonEditNodeAttributes {
   return cloneAttributes({
     radius: getSkeletonNodeRadius(node),
     confidence: getSkeletonNodeConfidence(node),
@@ -372,7 +371,7 @@ function withConfidence(
 
 export function getSkeletonNodeChanges(
   node: SkeletonNode | undefined,
-  changes: SpatialSkeletonProjectionAttributeChanges,
+  changes: SpatialSkeletonEditAttributeChanges,
 ): CompleteSkeletonNodeChanges {
   const { description, ...attributeChanges } = changes;
   return {
@@ -388,15 +387,13 @@ export function getSkeletonNodeChanges(
   };
 }
 
-function validateAttributeValues(
-  changes: SpatialSkeletonProjectionAttributeChanges,
-) {
+function validateAttributeValues(changes: SpatialSkeletonEditAttributeChanges) {
   if (
     Object.hasOwn(changes, "radius") &&
     changes.radius !== undefined &&
     !Number.isFinite(changes.radius)
   ) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "Skeleton node radius must be finite.",
     );
   }
@@ -407,7 +404,7 @@ function validateAttributeValues(
       changes.confidence < 0 ||
       changes.confidence > 100)
   ) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "Skeleton node confidence must be between 0 and 100.",
     );
   }
@@ -416,7 +413,7 @@ function validateAttributeValues(
     changes.description !== undefined &&
     typeof changes.description !== "string"
   ) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "Skeleton node description must be a string or undefined.",
     );
   }
@@ -425,36 +422,36 @@ function validateAttributeValues(
     changes.isTrueEnd !== undefined &&
     typeof changes.isTrueEnd !== "boolean"
   ) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "Skeleton node true-end state must be boolean or undefined.",
     );
   }
 }
 
-export class SpatialSkeletonProjectionValidationError extends Error {
+export class SpatialSkeletonEditValidationError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "SpatialSkeletonProjectionValidationError";
+    this.name = "SpatialSkeletonEditValidationError";
   }
 }
 
 /** Immutable logical-segment to complete-snapshot map. */
-export class SpatialSkeletonProjectionWorkspace {
+export class CompleteSkeletonSet {
   private readonly snapshotBySegmentKey: ReadonlyMap<
     string,
-    SpatialSkeletonProjectionSegmentSnapshot
+    SpatialSkeletonEditSegmentSnapshot
   >;
 
-  constructor(segments: readonly SpatialSkeletonProjectionSegmentSnapshot[]) {
+  constructor(segments: readonly SpatialSkeletonEditSegmentSnapshot[]) {
     const snapshotBySegmentKey = new Map<
       string,
-      SpatialSkeletonProjectionSegmentSnapshot
+      SpatialSkeletonEditSegmentSnapshot
     >();
     for (const { segment, snapshot } of segments) {
       const key = segmentKey(segment);
       if (snapshotBySegmentKey.has(key)) {
-        throw new SpatialSkeletonProjectionValidationError(
-          `Projection contains duplicate logical segment ${segment.stableId}.`,
+        throw new SpatialSkeletonEditValidationError(
+          `Preview contains duplicate logical segment ${segment.stableId}.`,
         );
       }
       snapshotBySegmentKey.set(key, Object.freeze({ segment, snapshot }));
@@ -462,31 +459,31 @@ export class SpatialSkeletonProjectionWorkspace {
     this.snapshotBySegmentKey = snapshotBySegmentKey;
   }
 
-  get segments(): readonly SpatialSkeletonProjectionSegmentSnapshot[] {
+  get segments(): readonly SpatialSkeletonEditSegmentSnapshot[] {
     return Object.freeze([...this.snapshotBySegmentKey.values()]);
   }
 
-  getSegment(segment: SpatialSkeletonLogicalSegmentHandle) {
+  getSegment(segment: SpatialSkeletonStableSegmentHandle) {
     return this.snapshotBySegmentKey.get(segmentKey(segment));
   }
 
   /**
    * Resolves a winner/loser alias after a physical remap without changing the
-   * journal delta.  More than one matching projection is an invalid baseline.
+   * journal delta.  More than one matching preview is an invalid baseline.
    */
   resolveSegment(
-    segment: SpatialSkeletonLogicalSegmentHandle,
-    mappings: ProjectionMappings,
+    segment: SpatialSkeletonStableSegmentHandle,
+    mappings: EditMappings,
   ) {
     const direct = this.getSegment(segment);
     if (direct !== undefined) return direct;
     const segmentId = requireSegmentId(mappings, segment);
-    let result: SpatialSkeletonProjectionSegmentSnapshot | undefined;
+    let result: SpatialSkeletonEditSegmentSnapshot | undefined;
     for (const entry of this.snapshotBySegmentKey.values()) {
       if (mappings.resolveSegment(entry.segment) !== segmentId) continue;
       if (result !== undefined) {
-        throw new SpatialSkeletonProjectionValidationError(
-          `Physical segment ${segmentId} has multiple projection owners.`,
+        throw new SpatialSkeletonEditValidationError(
+          `Physical segment ${segmentId} has multiple preview owners.`,
         );
       }
       result = entry;
@@ -495,8 +492,8 @@ export class SpatialSkeletonProjectionWorkspace {
   }
 
   withChanges(
-    changes: readonly SpatialSkeletonProjectionSegmentChange[],
-  ): SpatialSkeletonProjectionWorkspace {
+    changes: readonly SpatialSkeletonEditSegmentChange[],
+  ): CompleteSkeletonSet {
     const next = new Map(this.snapshotBySegmentKey);
     for (const change of changes) {
       const key = segmentKey(change.segment);
@@ -509,43 +506,40 @@ export class SpatialSkeletonProjectionWorkspace {
         );
       }
     }
-    return new SpatialSkeletonProjectionWorkspace([...next.values()]);
+    return new CompleteSkeletonSet([...next.values()]);
   }
 }
 
 function requireSegmentSnapshot(
-  projection: SpatialSkeletonProjectionWorkspace,
-  segment: SpatialSkeletonLogicalSegmentHandle,
-  mappings: ProjectionMappings,
+  edit: CompleteSkeletonSet,
+  segment: SpatialSkeletonStableSegmentHandle,
+  mappings: EditMappings,
 ) {
-  const entry = projection.resolveSegment(segment, mappings);
+  const entry = edit.resolveSegment(segment, mappings);
   if (entry === undefined) {
-    throw new SpatialSkeletonProjectionValidationError(
-      `Logical segment ${segment.stableId} is not present in the projection.`,
+    throw new SpatialSkeletonEditValidationError(
+      `Logical segment ${segment.stableId} is not present in the preview.`,
     );
   }
   return entry;
 }
 
 function requireNode(
-  snapshot: CompleteSkeletonSnapshotHandle,
-  handle: SpatialSkeletonLogicalNodeHandle,
-  mappings: ProjectionMappings,
+  snapshot: CompleteSkeleton,
+  handle: SpatialSkeletonStableNodeHandle,
+  mappings: EditMappings,
 ) {
   const nodeId = requireNodeId(mappings, handle);
   const node = snapshot.getNode(nodeId);
   if (node === undefined) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       `Logical node ${handle.stableId} (${nodeId}) is not present in the expected segment.`,
     );
   }
   return node;
 }
 
-function getChildren(
-  snapshot: CompleteSkeletonSnapshotHandle,
-  parentNodeId: bigint,
-) {
+function getChildren(snapshot: CompleteSkeleton, parentNodeId: bigint) {
   const result: SkeletonNode[] = [];
   snapshot.forEachNode((node) => {
     if (node.parentNodeId === parentNodeId) result.push(node);
@@ -553,17 +547,14 @@ function getChildren(
   return result;
 }
 
-function getPathToRoot(
-  snapshot: CompleteSkeletonSnapshotHandle,
-  startNodeId: bigint,
-) {
+function getPathToRoot(snapshot: CompleteSkeleton, startNodeId: bigint) {
   const result: SkeletonNode[] = [];
   const seen = new Set<bigint>();
   let node = snapshot.getNode(startNodeId);
   while (node !== undefined) {
     if (seen.has(node.nodeId)) {
-      throw new SpatialSkeletonProjectionValidationError(
-        "A skeleton projection contains a cycle.",
+      throw new SpatialSkeletonEditValidationError(
+        "A skeleton preview contains a cycle.",
       );
     }
     seen.add(node.nodeId);
@@ -571,20 +562,17 @@ function getPathToRoot(
     if (node.parentNodeId === undefined) break;
     node = snapshot.getNode(node.parentNodeId);
     if (node === undefined) {
-      throw new SpatialSkeletonProjectionValidationError(
-        "A skeleton projection contains a node whose parent is missing.",
+      throw new SpatialSkeletonEditValidationError(
+        "A skeleton preview contains a node whose parent is missing.",
       );
     }
   }
   return result;
 }
 
-function getSubtreeNodeIds(
-  snapshot: CompleteSkeletonSnapshotHandle,
-  rootNodeId: bigint,
-) {
+function getSubtreeNodeIds(snapshot: CompleteSkeleton, rootNodeId: bigint) {
   if (snapshot.getNode(rootNodeId) === undefined) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       `Cannot collect a subtree rooted at missing node ${rootNodeId}.`,
     );
   }
@@ -603,8 +591,8 @@ function getSubtreeNodeIds(
   while (pending.length !== 0) {
     const nodeId = pending.pop()!;
     if (result.has(nodeId)) {
-      throw new SpatialSkeletonProjectionValidationError(
-        "A skeleton projection contains a topology cycle.",
+      throw new SpatialSkeletonEditValidationError(
+        "A skeleton preview contains a topology cycle.",
       );
     }
     result.add(nodeId);
@@ -613,18 +601,15 @@ function getSubtreeNodeIds(
   return result;
 }
 
-function rerootSnapshot(
-  snapshot: CompleteSkeletonSnapshotHandle,
-  targetNodeId: bigint,
-) {
+function rerootSnapshot(snapshot: CompleteSkeleton, targetNodeId: bigint) {
   const target = snapshot.getNode(targetNodeId);
   if (target === undefined) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       `Cannot reroot at missing node ${targetNodeId}.`,
     );
   }
   if (isSkeletonNodeTrueEnd(target)) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "Cannot set a true end node as root. Clear the true end state first.",
     );
   }
@@ -651,74 +636,72 @@ function rerootSnapshot(
     });
     downstreamConfidence = previousConfidence;
   }
-  return { snapshot: patchCompleteSkeletonSnapshot(snapshot, patches), path };
+  return { snapshot: patchCompleteSkeleton(snapshot, patches), path };
 }
 
 function uniqueHandles<
   T extends
-    | SpatialSkeletonLogicalNodeHandle
-    | SpatialSkeletonLogicalSegmentHandle,
+    | SpatialSkeletonStableNodeHandle
+    | SpatialSkeletonStableSegmentHandle,
 >(handles: Iterable<T>) {
   const byKey = new Map<string, T>();
   for (const handle of handles) {
-    byKey.set(getSpatialSkeletonLogicalResourceKey(handle), handle);
+    byKey.set(getSpatialSkeletonStableResourceKey(handle), handle);
   }
   return Object.freeze([...byKey.values()]);
 }
 
 function applyChanges(
-  projection: SpatialSkeletonProjectionWorkspace,
-  inverseDelta: SpatialSkeletonProjectionInverseDelta,
-  segmentChanges: readonly SpatialSkeletonProjectionSegmentChange[],
-): SpatialSkeletonProjectionApplyResult {
+  edit: CompleteSkeletonSet,
+  inverseDelta: SpatialSkeletonEditInverseDelta,
+  segmentChanges: readonly SpatialSkeletonEditSegmentChange[],
+): SpatialSkeletonEditApplyResult {
   return Object.freeze({
-    projection: projection.withChanges(segmentChanges),
+    edit: edit.withChanges(segmentChanges),
     inverseDelta,
   });
 }
 
 function applyAdd(
-  projection: SpatialSkeletonProjectionWorkspace,
-  delta: SpatialSkeletonProjectionAddDelta,
-  mappings: ProjectionMappings,
+  edit: CompleteSkeletonSet,
+  delta: SpatialSkeletonEditAddDelta,
+  mappings: EditMappings,
 ) {
   const nodeId = requireNodeId(mappings, delta.node);
   const segmentId = requireSegmentId(mappings, delta.segment);
-  const existingEntry = projection.resolveSegment(delta.segment, mappings);
+  const existingEntry = edit.resolveSegment(delta.segment, mappings);
   let parentNodeId: bigint | undefined;
   if (delta.parent === undefined) {
     if (existingEntry !== undefined) {
-      throw new SpatialSkeletonProjectionValidationError(
+      throw new SpatialSkeletonEditValidationError(
         "Cannot add a second root to an existing skeleton.",
       );
     }
   } else {
     if (existingEntry === undefined) {
-      throw new SpatialSkeletonProjectionValidationError(
+      throw new SpatialSkeletonEditValidationError(
         "Cannot add a child to a missing skeleton.",
       );
     }
     const parent = requireNode(existingEntry.snapshot, delta.parent, mappings);
     if (isSkeletonNodeTrueEnd(parent)) {
-      throw new SpatialSkeletonProjectionValidationError(
+      throw new SpatialSkeletonEditValidationError(
         "Cannot add a child under a true end node. Clear the true end state first.",
       );
     }
     parentNodeId = parent.nodeId;
   }
   if (
-    projection.segments.some(
-      ({ snapshot }) => snapshot.getNode(nodeId) !== undefined,
-    )
+    edit.segments.some(({ snapshot }) => snapshot.getNode(nodeId) !== undefined)
   ) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       `Cannot add duplicate node ${nodeId}.`,
     );
   }
   const attributes = cloneAttributes(delta.attributes);
   validateAttributeValues(attributes);
   if (attributes.isTrueEnd === true && parentNodeId === undefined) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "Cannot create a true end root node.",
     );
   }
@@ -731,11 +714,11 @@ function applyAdd(
   };
   const snapshot =
     existingEntry === undefined
-      ? createCompleteSkeletonSnapshot([node])
-      : patchCompleteSkeletonSnapshot(existingEntry.snapshot, [
+      ? createCompleteSkeleton([node])
+      : patchCompleteSkeleton(existingEntry.snapshot, [
           { kind: "insert", node },
         ]);
-  const segmentChanges: SpatialSkeletonProjectionSegmentChange[] = [
+  const segmentChanges: SpatialSkeletonEditSegmentChange[] = [
     ...(existingEntry !== undefined &&
     !handlesEqual(existingEntry.segment, delta.segment)
       ? [{ segment: existingEntry.segment, snapshot: undefined }]
@@ -743,21 +726,21 @@ function applyAdd(
     { segment: delta.segment, snapshot },
   ];
   return applyChanges(
-    projection,
+    edit,
     { kind: "delete", segment: delta.segment, node: delta.node },
     segmentChanges,
   );
 }
 
 function applyMove(
-  projection: SpatialSkeletonProjectionWorkspace,
-  delta: SpatialSkeletonProjectionMoveDelta,
-  mappings: ProjectionMappings,
+  edit: CompleteSkeletonSet,
+  delta: SpatialSkeletonEditMoveDelta,
+  mappings: EditMappings,
 ) {
   const position = cloneVector(delta.position);
-  const entry = requireSegmentSnapshot(projection, delta.segment, mappings);
+  const entry = requireSegmentSnapshot(edit, delta.segment, mappings);
   const node = requireNode(entry.snapshot, delta.node, mappings);
-  const snapshot = patchCompleteSkeletonSnapshot(entry.snapshot, [
+  const snapshot = patchCompleteSkeleton(entry.snapshot, [
     {
       kind: "update",
       nodeId: node.nodeId,
@@ -766,9 +749,9 @@ function applyMove(
   ]);
   const segmentChanges = [
     { segment: entry.segment, snapshot },
-  ] satisfies readonly SpatialSkeletonProjectionSegmentChange[];
+  ] satisfies readonly SpatialSkeletonEditSegmentChange[];
   return applyChanges(
-    projection,
+    edit,
     {
       kind: "move",
       segment: entry.segment,
@@ -780,15 +763,15 @@ function applyMove(
 }
 
 function applyDelete(
-  projection: SpatialSkeletonProjectionWorkspace,
-  delta: SpatialSkeletonProjectionDeleteDelta,
-  mappings: ProjectionMappings,
+  edit: CompleteSkeletonSet,
+  delta: SpatialSkeletonEditDeleteDelta,
+  mappings: EditMappings,
 ) {
-  const entry = requireSegmentSnapshot(projection, delta.segment, mappings);
+  const entry = requireSegmentSnapshot(edit, delta.segment, mappings);
   const node = requireNode(entry.snapshot, delta.node, mappings);
   const children = getChildren(entry.snapshot, node.nodeId);
   if (node.parentNodeId === undefined && children.length !== 0) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "Deleting a root node with children is blocked. Reroot the skeleton before deleting it.",
     );
   }
@@ -812,12 +795,12 @@ function applyDelete(
   const removesSegment = entry.snapshot.nodeCount === 1;
   const snapshot = removesSegment
     ? undefined
-    : patchCompleteSkeletonSnapshot(entry.snapshot, patches);
+    : patchCompleteSkeleton(entry.snapshot, patches);
   const segmentChanges = [
     { segment: entry.segment, snapshot },
-  ] satisfies readonly SpatialSkeletonProjectionSegmentChange[];
+  ] satisfies readonly SpatialSkeletonEditSegmentChange[];
   return applyChanges(
-    projection,
+    edit,
     {
       kind: "restore-delete",
       segment: entry.segment,
@@ -834,26 +817,26 @@ function applyDelete(
 }
 
 function applyNodeAttributes(
-  projection: SpatialSkeletonProjectionWorkspace,
-  delta: SpatialSkeletonProjectionNodeAttributesDelta,
-  mappings: ProjectionMappings,
+  edit: CompleteSkeletonSet,
+  delta: SpatialSkeletonEditNodeAttributesDelta,
+  mappings: EditMappings,
 ) {
-  const entry = requireSegmentSnapshot(projection, delta.segment, mappings);
+  const entry = requireSegmentSnapshot(edit, delta.segment, mappings);
   const node = requireNode(entry.snapshot, delta.node, mappings);
   validateAttributeValues(delta.changes);
   if (Object.keys(delta.changes).length === 0) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "A node-attributes delta must change at least one attribute.",
     );
   }
   if (delta.changes.isTrueEnd === true) {
     if (node.parentNodeId === undefined) {
-      throw new SpatialSkeletonProjectionValidationError(
+      throw new SpatialSkeletonEditValidationError(
         "Cannot set the root node as a true end.",
       );
     }
     if (getChildren(entry.snapshot, node.nodeId).length !== 0) {
-      throw new SpatialSkeletonProjectionValidationError(
+      throw new SpatialSkeletonEditValidationError(
         "Only leaf nodes can be marked as true ends.",
       );
     }
@@ -867,18 +850,18 @@ function applyNodeAttributes(
   } = {};
   for (const key of Object.keys(
     delta.changes,
-  ) as (keyof SpatialSkeletonProjectionNodeAttributes)[]) {
+  ) as (keyof SpatialSkeletonEditNodeAttributes)[]) {
     Object.assign(before, { [key]: current[key] });
   }
   const changes = getSkeletonNodeChanges(node, delta.changes);
-  const snapshot = patchCompleteSkeletonSnapshot(entry.snapshot, [
+  const snapshot = patchCompleteSkeleton(entry.snapshot, [
     { kind: "update", nodeId: node.nodeId, changes },
   ]);
   const segmentChanges = [
     { segment: entry.segment, snapshot },
-  ] satisfies readonly SpatialSkeletonProjectionSegmentChange[];
+  ] satisfies readonly SpatialSkeletonEditSegmentChange[];
   return applyChanges(
-    projection,
+    edit,
     {
       kind: "node-attributes",
       segment: entry.segment,
@@ -891,8 +874,8 @@ function applyNodeAttributes(
 
 function topologyPatchesFromNodes(
   nodes: readonly SkeletonNode[],
-  mappings: ProjectionMappings,
-): readonly SpatialSkeletonProjectionTopologyPatch[] {
+  mappings: EditMappings,
+): readonly SpatialSkeletonEditTopologyPatch[] {
   return Object.freeze(
     nodes.map((node) => ({
       node: requireNodeHandle(mappings, node.nodeId, "Topology path"),
@@ -906,18 +889,18 @@ function topologyPatchesFromNodes(
 }
 
 function applyReroot(
-  projection: SpatialSkeletonProjectionWorkspace,
-  delta: SpatialSkeletonProjectionRerootDelta,
-  mappings: ProjectionMappings,
+  edit: CompleteSkeletonSet,
+  delta: SpatialSkeletonEditRerootDelta,
+  mappings: EditMappings,
 ) {
-  const entry = requireSegmentSnapshot(projection, delta.segment, mappings);
+  const entry = requireSegmentSnapshot(edit, delta.segment, mappings);
   const node = requireNode(entry.snapshot, delta.node, mappings);
   const { snapshot, path } = rerootSnapshot(entry.snapshot, node.nodeId);
   const segmentChanges = [
     { segment: entry.segment, snapshot },
-  ] satisfies readonly SpatialSkeletonProjectionSegmentChange[];
+  ] satisfies readonly SpatialSkeletonEditSegmentChange[];
   return applyChanges(
-    projection,
+    edit,
     {
       kind: "restore-topology",
       segment: entry.segment,
@@ -928,48 +911,42 @@ function applyReroot(
 }
 
 function remapSingleSnapshotSegment(
-  snapshot: CompleteSkeletonSnapshotHandle,
+  snapshot: CompleteSkeleton,
   segmentId: bigint,
   overrides: readonly {
     nodeId: bigint;
     changes: CompleteSkeletonNodeChanges;
   }[] = [],
 ) {
-  return mergeCompleteSkeletonSnapshots([{ snapshot, segmentId }], {
+  return mergeCompleteSkeletons([{ snapshot, segmentId }], {
     overrides,
   });
 }
 
 function applySplit(
-  projection: SpatialSkeletonProjectionWorkspace,
-  delta: SpatialSkeletonProjectionSplitDelta,
-  mappings: ProjectionMappings,
+  edit: CompleteSkeletonSet,
+  delta: SpatialSkeletonEditSplitDelta,
+  mappings: EditMappings,
 ) {
   if (handlesEqual(delta.sourceSegment, delta.downstreamSegment)) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "A split requires distinct source and downstream logical segments.",
     );
   }
-  const entry = requireSegmentSnapshot(
-    projection,
-    delta.sourceSegment,
-    mappings,
-  );
-  if (
-    projection.resolveSegment(delta.downstreamSegment, mappings) !== undefined
-  ) {
-    throw new SpatialSkeletonProjectionValidationError(
+  const entry = requireSegmentSnapshot(edit, delta.sourceSegment, mappings);
+  if (edit.resolveSegment(delta.downstreamSegment, mappings) !== undefined) {
+    throw new SpatialSkeletonEditValidationError(
       `Split result segment ${delta.downstreamSegment.stableId} already exists.`,
     );
   }
   const node = requireNode(entry.snapshot, delta.node, mappings);
   if (node.parentNodeId === undefined) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "Cannot split at the root node.",
     );
   }
   if (isSkeletonNodeTrueEnd(node)) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "Cannot split at a true end node because it would become a true end root.",
     );
   }
@@ -979,10 +956,7 @@ function applySplit(
     "Split parent",
   );
   const downstreamNodeIds = getSubtreeNodeIds(entry.snapshot, node.nodeId);
-  const views = splitCompleteSkeletonSnapshot(
-    entry.snapshot,
-    downstreamNodeIds,
-  );
+  const views = splitCompleteSkeleton(entry.snapshot, downstreamNodeIds);
   const sourceSegmentId = requireSegmentId(mappings, delta.sourceSegment);
   const downstreamSegmentId = requireSegmentId(
     mappings,
@@ -997,7 +971,7 @@ function applySplit(
     downstreamSegmentId,
     [{ nodeId: node.nodeId, changes: { parentNodeId: undefined } }],
   );
-  const segmentChanges: SpatialSkeletonProjectionSegmentChange[] = [
+  const segmentChanges: SpatialSkeletonEditSegmentChange[] = [
     ...(handlesEqual(entry.segment, delta.sourceSegment)
       ? []
       : [{ segment: entry.segment, snapshot: undefined }]),
@@ -1005,7 +979,7 @@ function applySplit(
     { segment: delta.downstreamSegment, snapshot: downstreamSnapshot },
   ];
   return applyChanges(
-    projection,
+    edit,
     {
       kind: "join-split",
       sourceSegment: delta.sourceSegment,
@@ -1019,26 +993,22 @@ function applySplit(
 }
 
 function applyMerge(
-  projection: SpatialSkeletonProjectionWorkspace,
-  delta: SpatialSkeletonProjectionMergeDelta,
-  mappings: ProjectionMappings,
+  edit: CompleteSkeletonSet,
+  delta: SpatialSkeletonEditMergeDelta,
+  mappings: EditMappings,
 ) {
-  const firstEntry = requireSegmentSnapshot(
-    projection,
-    delta.firstSegment,
-    mappings,
-  );
+  const firstEntry = requireSegmentSnapshot(edit, delta.firstSegment, mappings);
   const secondEntry = requireSegmentSnapshot(
-    projection,
+    edit,
     delta.secondSegment,
     mappings,
   );
   if (firstEntry === secondEntry) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "Cannot merge a skeleton with itself.",
     );
   }
-  const existingResultEntry = projection.resolveSegment(
+  const existingResultEntry = edit.resolveSegment(
     delta.resultSegment,
     mappings,
   );
@@ -1047,7 +1017,7 @@ function applyMerge(
     existingResultEntry !== firstEntry &&
     existingResultEntry !== secondEntry
   ) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       `Merge result segment ${delta.resultSegment.stableId} is already owned by another skeleton.`,
     );
   }
@@ -1058,13 +1028,13 @@ function applyMerge(
     mappings,
   );
   if (isSkeletonNodeTrueEnd(firstNode)) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "Cannot merge under a true end node. Clear the true end state first.",
     );
   }
   const rerooted = rerootSnapshot(secondEntry.snapshot, secondNode.nodeId);
   const resultSegmentId = requireSegmentId(mappings, delta.resultSegment);
-  const snapshot = mergeCompleteSkeletonSnapshots(
+  const snapshot = mergeCompleteSkeletons(
     [
       { snapshot: firstEntry.snapshot, segmentId: resultSegmentId },
       { snapshot: rerooted.snapshot, segmentId: resultSegmentId },
@@ -1082,14 +1052,14 @@ function applyMerge(
     firstEntry.segment,
     secondEntry.segment,
   ]);
-  const segmentChanges: SpatialSkeletonProjectionSegmentChange[] = [
+  const segmentChanges: SpatialSkeletonEditSegmentChange[] = [
     ...removedEntries
       .filter((segment) => !handlesEqual(segment, delta.resultSegment))
       .map((segment) => ({ segment, snapshot: undefined })),
     { segment: delta.resultSegment, snapshot },
   ];
   return applyChanges(
-    projection,
+    edit,
     {
       kind: "unmerge",
       mergedSegment: delta.resultSegment,
@@ -1104,18 +1074,16 @@ function applyMerge(
 }
 
 function applyRestoreDelete(
-  projection: SpatialSkeletonProjectionWorkspace,
-  delta: SpatialSkeletonProjectionRestoreDeleteDelta,
-  mappings: ProjectionMappings,
+  edit: CompleteSkeletonSet,
+  delta: SpatialSkeletonEditRestoreDeleteDelta,
+  mappings: EditMappings,
 ) {
-  const existingEntry = projection.resolveSegment(delta.segment, mappings);
+  const existingEntry = edit.resolveSegment(delta.segment, mappings);
   const nodeId = requireNodeId(mappings, delta.snapshot.node);
   if (
-    projection.segments.some(
-      ({ snapshot }) => snapshot.getNode(nodeId) !== undefined,
-    )
+    edit.segments.some(({ snapshot }) => snapshot.getNode(nodeId) !== undefined)
   ) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       `Cannot restore duplicate node ${nodeId}.`,
     );
   }
@@ -1126,7 +1094,7 @@ function applyRestoreDelete(
       : requireNodeId(mappings, delta.snapshot.parent);
   if (existingEntry === undefined) {
     if (parentNodeId !== undefined || delta.children.length !== 0) {
-      throw new SpatialSkeletonProjectionValidationError(
+      throw new SpatialSkeletonEditValidationError(
         "Only a deleted root leaf can restore a missing skeleton.",
       );
     }
@@ -1135,7 +1103,7 @@ function applyRestoreDelete(
       parentNodeId !== undefined &&
       existingEntry.snapshot.getNode(parentNodeId) === undefined
     ) {
-      throw new SpatialSkeletonProjectionValidationError(
+      throw new SpatialSkeletonEditValidationError(
         `Cannot restore node ${nodeId} under missing parent ${parentNodeId}.`,
       );
     }
@@ -1152,8 +1120,8 @@ function applyRestoreDelete(
   };
   const snapshot =
     existingEntry === undefined
-      ? createCompleteSkeletonSnapshot([restoredNode])
-      : patchCompleteSkeletonSnapshot(existingEntry.snapshot, [
+      ? createCompleteSkeleton([restoredNode])
+      : patchCompleteSkeleton(existingEntry.snapshot, [
           { kind: "insert", node: restoredNode },
           ...delta.children.map(
             (child): CompleteSkeletonNodePatch => ({
@@ -1166,26 +1134,26 @@ function applyRestoreDelete(
   const segment = existingEntry?.segment ?? delta.segment;
   const segmentChanges = [
     { segment, snapshot },
-  ] satisfies readonly SpatialSkeletonProjectionSegmentChange[];
+  ] satisfies readonly SpatialSkeletonEditSegmentChange[];
   return applyChanges(
-    projection,
+    edit,
     { kind: "delete", segment, node: delta.snapshot.node },
     segmentChanges,
   );
 }
 
 function applyRestoreTopology(
-  projection: SpatialSkeletonProjectionWorkspace,
-  delta: SpatialSkeletonProjectionRestoreTopologyDelta,
-  mappings: ProjectionMappings,
+  edit: CompleteSkeletonSet,
+  delta: SpatialSkeletonEditRestoreTopologyDelta,
+  mappings: EditMappings,
 ) {
-  const entry = requireSegmentSnapshot(projection, delta.segment, mappings);
+  const entry = requireSegmentSnapshot(edit, delta.segment, mappings);
   if (delta.patches.length === 0) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "A topology restore requires at least one path patch.",
     );
   }
-  const inversePatches: SpatialSkeletonProjectionTopologyPatch[] = [];
+  const inversePatches: SpatialSkeletonEditTopologyPatch[] = [];
   const nodePatches: CompleteSkeletonNodePatch[] = [];
   for (const patch of delta.patches) {
     const node = requireNode(entry.snapshot, patch.node, mappings);
@@ -1203,7 +1171,7 @@ function applyRestoreTopology(
       parentNodeId !== undefined &&
       entry.snapshot.getNode(parentNodeId) === undefined
     ) {
-      throw new SpatialSkeletonProjectionValidationError(
+      throw new SpatialSkeletonEditValidationError(
         `Cannot restore topology through missing parent ${parentNodeId}.`,
       );
     }
@@ -1213,12 +1181,12 @@ function applyRestoreTopology(
       changes: { parentNodeId, ...withConfidence(node, patch.confidence) },
     });
   }
-  const snapshot = patchCompleteSkeletonSnapshot(entry.snapshot, nodePatches);
+  const snapshot = patchCompleteSkeleton(entry.snapshot, nodePatches);
   const segmentChanges = [
     { segment: entry.segment, snapshot },
-  ] satisfies readonly SpatialSkeletonProjectionSegmentChange[];
+  ] satisfies readonly SpatialSkeletonEditSegmentChange[];
   return applyChanges(
-    projection,
+    edit,
     {
       kind: "restore-topology",
       segment: entry.segment,
@@ -1229,26 +1197,26 @@ function applyRestoreTopology(
 }
 
 function applyJoinSplit(
-  projection: SpatialSkeletonProjectionWorkspace,
-  delta: SpatialSkeletonProjectionJoinSplitDelta,
-  mappings: ProjectionMappings,
+  edit: CompleteSkeletonSet,
+  delta: SpatialSkeletonEditJoinSplitDelta,
+  mappings: EditMappings,
 ) {
   const sourceEntry = requireSegmentSnapshot(
-    projection,
+    edit,
     delta.sourceSegment,
     mappings,
   );
   const downstreamEntry = requireSegmentSnapshot(
-    projection,
+    edit,
     delta.downstreamSegment,
     mappings,
   );
   if (sourceEntry === downstreamEntry) {
-    throw new SpatialSkeletonProjectionValidationError(
-      "Cannot join a split whose sides resolve to the same projection.",
+    throw new SpatialSkeletonEditValidationError(
+      "Cannot join a split whose sides resolve to the same preview.",
     );
   }
-  const existingResultEntry = projection.resolveSegment(
+  const existingResultEntry = edit.resolveSegment(
     delta.resultSegment,
     mappings,
   );
@@ -1257,13 +1225,13 @@ function applyJoinSplit(
     existingResultEntry !== sourceEntry &&
     existingResultEntry !== downstreamEntry
   ) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       `Joined result segment ${delta.resultSegment.stableId} is already owned by another skeleton.`,
     );
   }
   const cutNode = requireNode(downstreamEntry.snapshot, delta.node, mappings);
   if (cutNode.parentNodeId !== undefined) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "The downstream split node must still be a root before joining.",
     );
   }
@@ -1273,12 +1241,12 @@ function applyJoinSplit(
     mappings,
   );
   if (isSkeletonNodeTrueEnd(formerParent)) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "Cannot restore a split below a true end parent.",
     );
   }
   const resultSegmentId = requireSegmentId(mappings, delta.resultSegment);
-  const snapshot = mergeCompleteSkeletonSnapshots(
+  const snapshot = mergeCompleteSkeletons(
     [
       { snapshot: sourceEntry.snapshot, segmentId: resultSegmentId },
       { snapshot: downstreamEntry.snapshot, segmentId: resultSegmentId },
@@ -1296,14 +1264,14 @@ function applyJoinSplit(
     sourceEntry.segment,
     downstreamEntry.segment,
   ]);
-  const segmentChanges: SpatialSkeletonProjectionSegmentChange[] = [
+  const segmentChanges: SpatialSkeletonEditSegmentChange[] = [
     ...removedEntries
       .filter((segment) => !handlesEqual(segment, delta.resultSegment))
       .map((segment) => ({ segment, snapshot: undefined })),
     { segment: delta.resultSegment, snapshot },
   ];
   return applyChanges(
-    projection,
+    edit,
     {
       kind: "split",
       sourceSegment: delta.resultSegment,
@@ -1315,24 +1283,20 @@ function applyJoinSplit(
 }
 
 function applyUnmerge(
-  projection: SpatialSkeletonProjectionWorkspace,
-  delta: SpatialSkeletonProjectionUnmergeDelta,
-  mappings: ProjectionMappings,
+  edit: CompleteSkeletonSet,
+  delta: SpatialSkeletonEditUnmergeDelta,
+  mappings: EditMappings,
 ) {
   if (handlesEqual(delta.firstSegment, delta.secondSegment)) {
-    throw new SpatialSkeletonProjectionValidationError(
+    throw new SpatialSkeletonEditValidationError(
       "An unmerge requires distinct result segments.",
     );
   }
-  const entry = requireSegmentSnapshot(
-    projection,
-    delta.mergedSegment,
-    mappings,
-  );
+  const entry = requireSegmentSnapshot(edit, delta.mergedSegment, mappings);
   for (const outputSegment of [delta.firstSegment, delta.secondSegment]) {
-    const existingOutput = projection.resolveSegment(outputSegment, mappings);
+    const existingOutput = edit.resolveSegment(outputSegment, mappings);
     if (existingOutput !== undefined && existingOutput !== entry) {
-      throw new SpatialSkeletonProjectionValidationError(
+      throw new SpatialSkeletonEditValidationError(
         `Unmerge output segment ${outputSegment.stableId} is already owned by another skeleton.`,
       );
     }
@@ -1340,12 +1304,12 @@ function applyUnmerge(
   const firstNode = requireNode(entry.snapshot, delta.firstNode, mappings);
   const secondNode = requireNode(entry.snapshot, delta.secondNode, mappings);
   if (secondNode.parentNodeId !== firstNode.nodeId) {
-    throw new SpatialSkeletonProjectionValidationError(
-      "The merge attachment edge no longer exists in the projected topology.",
+    throw new SpatialSkeletonEditValidationError(
+      "The merge attachment edge no longer exists in the previewed topology.",
     );
   }
   const secondNodeIds = getSubtreeNodeIds(entry.snapshot, secondNode.nodeId);
-  const views = splitCompleteSkeletonSnapshot(entry.snapshot, secondNodeIds);
+  const views = splitCompleteSkeleton(entry.snapshot, secondNodeIds);
   const firstSegmentId = requireSegmentId(mappings, delta.firstSegment);
   const secondSegmentId = requireSegmentId(mappings, delta.secondSegment);
   const firstSnapshot = remapSingleSnapshotSegment(
@@ -1357,7 +1321,7 @@ function applyUnmerge(
     secondSegmentId,
     [{ nodeId: secondNode.nodeId, changes: { parentNodeId: undefined } }],
   );
-  const secondSnapshot = patchCompleteSkeletonSnapshot(
+  const secondSnapshot = patchCompleteSkeleton(
     detachedSecond,
     delta.formerSecondTopology.map((patch): CompleteSkeletonNodePatch => {
       const node = requireNode(detachedSecond, patch.node, mappings);
@@ -1374,7 +1338,7 @@ function applyUnmerge(
       };
     }),
   );
-  const segmentChanges: SpatialSkeletonProjectionSegmentChange[] = [
+  const segmentChanges: SpatialSkeletonEditSegmentChange[] = [
     ...(handlesEqual(entry.segment, delta.firstSegment) ||
     handlesEqual(entry.segment, delta.secondSegment)
       ? []
@@ -1383,7 +1347,7 @@ function applyUnmerge(
     { segment: delta.secondSegment, snapshot: secondSnapshot },
   ];
   return applyChanges(
-    projection,
+    edit,
     {
       kind: "merge",
       firstSegment: delta.firstSegment,
@@ -1396,33 +1360,33 @@ function applyUnmerge(
   );
 }
 
-export function applySpatialSkeletonProjectionDelta(
-  projection: SpatialSkeletonProjectionWorkspace,
-  delta: SpatialSkeletonProjectionDelta,
-  mappings: ProjectionMappings,
-): SpatialSkeletonProjectionApplyResult {
+export function applySpatialSkeletonEditDelta(
+  edit: CompleteSkeletonSet,
+  delta: SpatialSkeletonEditDelta,
+  mappings: EditMappings,
+): SpatialSkeletonEditApplyResult {
   switch (delta.kind) {
     case "add":
-      return applyAdd(projection, delta, mappings);
+      return applyAdd(edit, delta, mappings);
     case "move":
-      return applyMove(projection, delta, mappings);
+      return applyMove(edit, delta, mappings);
     case "delete":
-      return applyDelete(projection, delta, mappings);
+      return applyDelete(edit, delta, mappings);
     case "reroot":
-      return applyReroot(projection, delta, mappings);
+      return applyReroot(edit, delta, mappings);
     case "node-attributes":
-      return applyNodeAttributes(projection, delta, mappings);
+      return applyNodeAttributes(edit, delta, mappings);
     case "split":
-      return applySplit(projection, delta, mappings);
+      return applySplit(edit, delta, mappings);
     case "merge":
-      return applyMerge(projection, delta, mappings);
+      return applyMerge(edit, delta, mappings);
     case "restore-delete":
-      return applyRestoreDelete(projection, delta, mappings);
+      return applyRestoreDelete(edit, delta, mappings);
     case "restore-topology":
-      return applyRestoreTopology(projection, delta, mappings);
+      return applyRestoreTopology(edit, delta, mappings);
     case "join-split":
-      return applyJoinSplit(projection, delta, mappings);
+      return applyJoinSplit(edit, delta, mappings);
     case "unmerge":
-      return applyUnmerge(projection, delta, mappings);
+      return applyUnmerge(edit, delta, mappings);
   }
 }

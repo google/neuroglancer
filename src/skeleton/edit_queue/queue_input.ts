@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import type { CompleteSkeletonSnapshotHandle } from "#src/skeleton/edit_queue/complete_skeleton.js";
+import type { CompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
 
 /**
  * A complete-snapshot endpoint required before a new edit enters the queue.
  * The snapshot must contain nodeId when one is specified.
  *
  * Identifiers are resolved by the caller before this requirement is passed to
- * the spatial-skeleton state.  In particular, the state validates only the
+ * the spatial-skeleton edit session.  In particular, the edit session validates only the
  * current physical segment and node ids and has no dependency on a
  * datasource's identifier mapping strategy.
  */
@@ -44,7 +44,7 @@ export interface SpatialSkeletonQueueInputRequirements {
 /** One complete, revision-fenced input acquired for an Execute intent. */
 export interface SpatialSkeletonQueueSegmentInput {
   readonly segmentId: bigint;
-  readonly snapshot: CompleteSkeletonSnapshotHandle;
+  readonly snapshot: CompleteSkeleton;
   readonly cacheRevision: number;
 }
 

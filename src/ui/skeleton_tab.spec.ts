@@ -17,7 +17,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import type { SpatialSkeletonPendingEdit } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import { buildSkeletonNavigationGraph } from "#src/skeleton/navigation_graph.js";
 import { SkeletonNodeFilterType } from "#src/skeleton/node_types.js";
 import {
@@ -50,9 +50,9 @@ function makeNode(
   };
 }
 
-function makePreparation(
-  options: Partial<SpatialSkeletonPreparationIntent> = {},
-): SpatialSkeletonPreparationIntent {
+function makePendingEdit(
+  options: Partial<SpatialSkeletonPendingEdit> = {},
+): SpatialSkeletonPendingEdit {
   return {
     intentId: 1,
     sequence: 1,
@@ -400,18 +400,18 @@ describe("spatial skeleton edit tab preparation status", () => {
   it("shows the earliest overlapping preparation and counts only later overlapping edits", () => {
     const state = getSpatialSkeletonDetailsPreparationState({
       preparations: [
-        makePreparation({
+        makePendingEdit({
           intentId: 3,
           sequence: 3,
           kind: "split",
           segmentIds: [20380n],
         }),
-        makePreparation({
+        makePendingEdit({
           intentId: 1,
           sequence: 1,
           segmentIds: [20380n, 20381n],
         }),
-        makePreparation({
+        makePendingEdit({
           intentId: 2,
           sequence: 2,
           kind: "reroot",
@@ -432,7 +432,7 @@ describe("spatial skeleton edit tab preparation status", () => {
   it("uses Undo wording and hides derived details until the split preview is exact", () => {
     const state = getSpatialSkeletonDetailsPreparationState({
       preparations: [
-        makePreparation({
+        makePendingEdit({
           direction: "undo",
           kind: "split",
           segmentIds: [20380n],
@@ -452,7 +452,7 @@ describe("spatial skeleton edit tab preparation status", () => {
   it("uses Redo wording while the exact preview is preparing", () => {
     const state = getSpatialSkeletonDetailsPreparationState({
       preparations: [
-        makePreparation({
+        makePendingEdit({
           direction: "redo",
           kind: "merge",
         }),
@@ -470,15 +470,15 @@ describe("spatial skeleton edit tab preparation status", () => {
   it("keeps status attached to logical selection when a physical merge alias changes", () => {
     const state = getSpatialSkeletonDetailsPreparationState({
       preparations: [
-        makePreparation({
+        makePendingEdit({
           segmentIds: [20380n],
-          logicalSegmentHandles: [
+          stableSegmentHandles: [
             { kind: "segment", stableId: "segment:selected" },
           ],
         }),
       ],
       selectedSegmentId: 20381n,
-      selectedLogicalSegmentStableId: "segment:selected",
+      selectedSegmentStableId: "segment:selected",
       hasExactTopology: true,
     });
 

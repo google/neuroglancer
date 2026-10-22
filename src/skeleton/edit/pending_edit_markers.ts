@@ -14,27 +14,27 @@
  * limitations under the License.
  */
 
-import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import type { SpatialSkeletonPendingEdit } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type {
   SkeletonNodeRing,
-  SkeletonPreparationConnector,
-  SkeletonPreparationMarker,
+  SkeletonPendingEditConnector,
+  SkeletonPendingEditMarker,
 } from "#src/skeleton/spatial/node_overlay.js";
 
-export type SkeletonPreparationCue =
+export type PendingEditMarker =
   | {
       readonly type: "marker";
       readonly intentId: number;
-      readonly cueKind: SpatialSkeletonPreparationIntent["kind"];
-      readonly lifecycle: SpatialSkeletonPreparationIntent["lifecycle"];
+      readonly cueKind: SpatialSkeletonPendingEdit["kind"];
+      readonly lifecycle: SpatialSkeletonPendingEdit["lifecycle"];
       readonly nodeId: bigint;
       readonly position: Float32Array;
     }
   | {
       readonly type: "connector";
       readonly intentId: number;
-      readonly cueKind: SpatialSkeletonPreparationIntent["kind"];
-      readonly lifecycle: SpatialSkeletonPreparationIntent["lifecycle"];
+      readonly cueKind: SpatialSkeletonPendingEdit["kind"];
+      readonly lifecycle: SpatialSkeletonPendingEdit["lifecycle"];
       readonly fromNodeId: bigint;
       readonly toNodeId: bigint;
       readonly from: Float32Array;
@@ -46,12 +46,12 @@ export type SkeletonPreparationCue =
  * supplied relationships and positions.  Missing endpoints are omitted rather
  * than guessed, which keeps a cold preview truthful.
  */
-export function buildSkeletonPreparationCues(
-  preparations: readonly SpatialSkeletonPreparationIntent[],
+export function buildPendingEditMarkers(
+  pendingEdits: readonly SpatialSkeletonPendingEdit[],
   getLivePosition: (nodeId: bigint) => ArrayLike<number> | undefined,
-): SkeletonPreparationCue[] {
-  const cues: SkeletonPreparationCue[] = [];
-  for (const cue of preparations) {
+): PendingEditMarker[] {
+  const cues: PendingEditMarker[] = [];
+  for (const cue of pendingEdits) {
     const capturedPositions = new Map(
       cue.lastKnownPositions?.map(({ nodeId, position }) => [
         nodeId,
@@ -153,7 +153,7 @@ export function buildSkeletonPreparationCues(
   return cues;
 }
 
-const CUE_LABELS: Record<SkeletonPreparationCue["cueKind"], string> = {
+const CUE_LABELS: Record<PendingEditMarker["cueKind"], string> = {
   delete: "×",
   restore: "+",
   reroot: "R",
@@ -161,21 +161,21 @@ const CUE_LABELS: Record<SkeletonPreparationCue["cueKind"], string> = {
   merge: "M",
 };
 
-export function getSkeletonPreparationCuePrimitives(
-  cues: readonly SkeletonPreparationCue[],
+export function getPendingEditMarkerPrimitives(
+  cues: readonly PendingEditMarker[],
   ring: SkeletonNodeRing,
   toGlobalPosition: (
     modelPosition: ArrayLike<number>,
   ) => Float32Array | undefined,
-): (SkeletonPreparationMarker | SkeletonPreparationConnector)[] {
+): (SkeletonPendingEditMarker | SkeletonPendingEditConnector)[] {
   // The cue ring sits outside the selection ring of the same node.
   const cueRing = {
     diameter: ring.diameter + 6,
     borderWidth: Math.max(2, ring.borderWidth * 0.75),
   };
   const primitives: (
-    | SkeletonPreparationMarker
-    | SkeletonPreparationConnector
+    | SkeletonPendingEditMarker
+    | SkeletonPendingEditConnector
   )[] = [];
   for (const cue of cues) {
     if (cue.type === "marker") {

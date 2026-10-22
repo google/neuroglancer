@@ -28,10 +28,10 @@ import { SkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
 import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_source_connection.js";
 import type { SegmentationGroupState } from "#src/segmentation_display_state/frontend.js";
 import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import { executeSpatialSkeletonDeleteNode } from "#src/skeleton/edit/submit_edits.js";
 import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
-import type { SpatialSkeletonResolvedProjectionUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
+import type { SpatialSkeletonResolvedPreviewUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
 import { SkeletonFindPathState } from "#src/skeleton/find_path/find_path.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
 import type { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
@@ -51,7 +51,7 @@ function makeEditableSource(
     getClient: () => ({}) as any,
   });
   return {
-    optimisticEditing: commands.optimisticEditing,
+    editPlannerProvider: commands.editPlannerProvider,
     addNodesCommand: commands.addNodesCommand,
     deleteNodesCommand: commands.deleteNodesCommand,
     ...(options.omitReroot ? {} : { rerootCommand: commands.rerootCommand }),
@@ -77,7 +77,7 @@ function makeDeletingSkeletonLayer(
     getClient: () => client as any,
   });
   const source = {
-    optimisticEditing: commands.optimisticEditing,
+    editPlannerProvider: commands.editPlannerProvider,
     deleteNodesCommand: commands.deleteNodesCommand,
     edgeDirection: SkeletonEdgeDirection.CHILD_TO_PARENT,
     getSkeletonManifest: async () => ({ fragmentKeys: [] }),
@@ -94,11 +94,11 @@ function makeDeletingSkeletonLayer(
 function makeConnection(
   options: {
     skeletonLayer?: SpatiallyIndexedSkeletonLayer;
-    spatialSkeletonState?: SpatialSkeletonState;
+    spatialSkeletonEditSession?: SpatialSkeletonEditSession;
   } = {},
 ) {
-  const spatialSkeletonState =
-    options.spatialSkeletonState ?? new SpatialSkeletonState();
+  const spatialSkeletonEditSession =
+    options.spatialSkeletonEditSession ?? new SpatialSkeletonEditSession();
   const layerSelectedValues = {
     changed: new NullarySignal(),
     mouseState: { active: false },
@@ -139,7 +139,7 @@ function makeConnection(
     layer,
     skeletonNodeAccess,
     spatiallyIndexedSkeletonLayer,
-    spatialSkeletonState,
+    spatialSkeletonEditSession,
   });
   const group = {
     visibleSegments: new Uint64Set(),
@@ -152,7 +152,7 @@ function makeConnection(
     clear: vi.fn(),
   } as unknown as SkeletonOverlaySegments;
   const connection = new SkeletonSourceConnection({
-    spatialSkeletonState,
+    spatialSkeletonEditSession,
     selection,
     overlaySegments,
     segmentationGroupState: new WatchableValue(
@@ -164,7 +164,7 @@ function makeConnection(
   return {
     connection,
     overlaySegments,
-    spatialSkeletonState,
+    spatialSkeletonEditSession,
     selection,
     selectionState,
     layer,
@@ -173,8 +173,8 @@ function makeConnection(
 }
 
 function makeHints(
-  hints: Partial<SpatialSkeletonResolvedProjectionUiHints>,
-): SpatialSkeletonResolvedProjectionUiHints {
+  hints: Partial<SpatialSkeletonResolvedPreviewUiHints>,
+): SpatialSkeletonResolvedPreviewUiHints {
   return {
     nodeIdRemappings: new Map(),
     segmentIdRemappings: new Map(),
@@ -182,17 +182,17 @@ function makeHints(
     retainSegmentIds: [],
     selectedNode: undefined,
     ...hints,
-  } as SpatialSkeletonResolvedProjectionUiHints;
+  } as SpatialSkeletonResolvedPreviewUiHints;
 }
 
 describe("SkeletonSourceConnection", () => {
   it("edit actions are unavailable while the page needs a reload", () => {
-    const { connection, spatialSkeletonState } = makeConnection({
+    const { connection, spatialSkeletonEditSession } = makeConnection({
       skeletonLayer: makeSkeletonLayer(makeEditableSource()),
     });
     const deleteNodes = SpatialSkeletonActions.deleteNodes;
     expect(connection.getActionsDisabledReason(deleteNodes)).toBeUndefined();
-    spatialSkeletonState.latchOptimisticEditFatalState({
+    spatialSkeletonEditSession.latchReloadRequired({
       reason: "authority-indeterminate",
       authority: "indeterminate",
       intentId: 1,
@@ -236,43 +236,45 @@ describe("SkeletonSourceConnection", () => {
   });
 
   it("only a change to a different skeleton source ends editing and clears pending edits, undo history and edited skeletons", () => {
-    const { connection, spatialSkeletonState, overlaySegments } =
+    const { connection, spatialSkeletonEditSession, overlaySegments } =
       makeConnection();
     const firstSource = {} as MultiscaleSpatiallyIndexedSkeletonSource;
     const secondSource = {} as MultiscaleSpatiallyIndexedSkeletonSource;
-    const { commandHistory } = spatialSkeletonState;
+    const { commandHistory } = spatialSkeletonEditSession;
     const startEditing = () => {
-      spatialSkeletonState.editMode.value = true;
-      spatialSkeletonState.setMergeAnchor(5n);
-      spatialSkeletonState.setPendingNodePosition(7n, [1, 2, 3]);
+      spatialSkeletonEditSession.editMode.value = true;
+      spatialSkeletonEditSession.setMergeAnchor(5n);
+      spatialSkeletonEditSession.setPendingNodePosition(7n, [1, 2, 3]);
       commandHistory.confirm(commandHistory.stageExecute("add node"));
     };
 
     connection.sourceChanged(firstSource);
     startEditing();
     connection.sourceChanged(firstSource);
-    expect(spatialSkeletonState.editMode.value).toBe(true);
-    expect(spatialSkeletonState.mergeAnchorNodeId.value).toBe(5n);
-    expect(spatialSkeletonState.getPendingNodePosition(7n)).toBeDefined();
+    expect(spatialSkeletonEditSession.editMode.value).toBe(true);
+    expect(spatialSkeletonEditSession.mergeAnchorNodeId.value).toBe(5n);
+    expect(spatialSkeletonEditSession.getPendingNodePosition(7n)).toBeDefined();
     expect(commandHistory.undoLabel.value).toBe("add node");
     expect(overlaySegments.clear).not.toHaveBeenCalled();
 
     connection.sourceChanged(secondSource);
-    expect(spatialSkeletonState.editMode.value).toBe(false);
-    expect(spatialSkeletonState.mergeAnchorNodeId.value).toBeUndefined();
-    expect(spatialSkeletonState.getPendingNodePosition(7n)).toBeUndefined();
+    expect(spatialSkeletonEditSession.editMode.value).toBe(false);
+    expect(spatialSkeletonEditSession.mergeAnchorNodeId.value).toBeUndefined();
+    expect(
+      spatialSkeletonEditSession.getPendingNodePosition(7n),
+    ).toBeUndefined();
     expect(commandHistory.canUndo.value).toBe(false);
     expect(overlaySegments.clear).toHaveBeenCalledOnce();
 
     startEditing();
     connection.sourceChanged(undefined);
-    expect(spatialSkeletonState.editMode.value).toBe(false);
-    expect(spatialSkeletonState.mergeAnchorNodeId.value).toBeUndefined();
+    expect(spatialSkeletonEditSession.editMode.value).toBe(false);
+    expect(spatialSkeletonEditSession.mergeAnchorNodeId.value).toBeUndefined();
     expect(commandHistory.canUndo.value).toBe(false);
   });
 
   it("an adopted optimistic edit invalidates the shown Find Path result", () => {
-    const { connection, spatialSkeletonState } = makeConnection();
+    const { connection, spatialSkeletonEditSession } = makeConnection();
     const findPathState = new SkeletonFindPathState();
     const lifetime = new RefCounted();
     connection.attachFindPath(
@@ -286,14 +288,13 @@ describe("SkeletonSourceConnection", () => {
     const result = [{ nodeId: 1n, segmentId: 5n, position: [0, 0, 0] }];
 
     findPathState.setResult(result as any);
-    spatialSkeletonState.nodeDataVersion.value += 1;
+    spatialSkeletonEditSession.nodeDataVersion.value += 1;
     expect(findPathState.result).toBe(result);
 
-    vi.spyOn(
-      spatialSkeletonState,
-      "hasUnconfirmedOptimisticEdits",
-    ).mockReturnValue(true);
-    spatialSkeletonState.nodeDataVersion.value += 1;
+    vi.spyOn(spatialSkeletonEditSession, "hasUnconfirmedEdits").mockReturnValue(
+      true,
+    );
+    spatialSkeletonEditSession.nodeDataVersion.value += 1;
     expect(findPathState.result).toBeUndefined();
 
     lifetime.dispose();
@@ -309,7 +310,7 @@ describe("SkeletonSourceConnection", () => {
     group.temporaryVisibleSegments.add(5n);
     group.selectedSegments.add(5n);
 
-    connection.applySpatialSkeletonProjectionUiHints(
+    connection.applySpatialSkeletonPreviewUiHints(
       makeHints({ segmentIdRemappings: new Map([[5n, 9n]]) }),
     );
 
@@ -332,11 +333,11 @@ describe("SkeletonSourceConnection", () => {
       position: new Float32Array([1, 2, 3]),
     });
 
-    connection.applySpatialSkeletonProjectionUiHints(
+    connection.applySpatialSkeletonPreviewUiHints(
       makeHints({
         segmentVisibility: [{ segmentId: 5n, visible: false, deselect: true }],
         selectedNode: { kind: "clear" },
-      } as Partial<SpatialSkeletonResolvedProjectionUiHints>),
+      } as Partial<SpatialSkeletonResolvedPreviewUiHints>),
     );
 
     expect(group.visibleSegments.has(5n)).toBe(false);
@@ -346,18 +347,18 @@ describe("SkeletonSourceConnection", () => {
   });
 
   it("a rejected delete restores the skeleton's visibility and the pinned node", async () => {
-    const spatialSkeletonState = new SpatialSkeletonState();
+    const spatialSkeletonEditSession = new SpatialSkeletonEditSession();
     const { skeletonLayer, client } = makeDeletingSkeletonLayer((nodeId) =>
-      spatialSkeletonState.getCachedNode(nodeId),
+      spatialSkeletonEditSession.getCachedNode(nodeId),
     );
     const { connection, group, selection, selectionState, layer } =
-      makeConnection({ skeletonLayer, spatialSkeletonState });
+      makeConnection({ skeletonLayer, spatialSkeletonEditSession });
     const node = {
       nodeId: 725n,
       segmentId: 87n,
       position: new Float32Array([4, 5, 6]),
     };
-    spatialSkeletonState.replaceCachedSegmentSnapshots([[87n, [node]]]);
+    spatialSkeletonEditSession.replaceCachedSegmentSnapshots([[87n, [node]]]);
     group.visibleSegments.add(87n);
     selection.select(node.nodeId, true, node);
     let rejectDelete: ((error: Error) => void) | undefined;
@@ -391,7 +392,7 @@ describe("SkeletonSourceConnection", () => {
     });
     expect(readLayerEntry()).toMatchObject({ nodeId: 725n, value: 87n });
     expect(group.visibleSegments.has(87n)).toBe(true);
-    expect(spatialSkeletonState.getCachedNode(725n)).toMatchObject(node);
-    spatialSkeletonState.dispose();
+    expect(spatialSkeletonEditSession.getCachedNode(725n)).toMatchObject(node);
+    spatialSkeletonEditSession.dispose();
   });
 });

@@ -16,27 +16,27 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   redoSpatialSkeletonCommand,
   undoSpatialSkeletonCommand,
 } from "#src/skeleton/edit/submit_edits.js";
 import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import type {
-  SpatialSkeletonOptimisticEditSettlement,
-  SpatialSkeletonOptimisticEditExecution,
-  SpatialSkeletonOptimisticEditQueue,
+  SpatialSkeletonEditSettlement,
+  SpatialSkeletonEditExecution,
+  SpatialSkeletonSessionEditQueue,
 } from "#src/skeleton/edit_queue/types.js";
-import { committedSpatialSkeletonOptimisticEditSettlement } from "#src/skeleton/edit_queue/types.js";
+import { committedSpatialSkeletonEditSettlement } from "#src/skeleton/edit_queue/types.js";
 import { StatusMessage } from "#src/status.js";
 
 function withExecutionMilestones<T>(
   execution: Promise<T>,
   acceptedByQueue: Promise<void> = Promise.resolve(),
-  settled: Promise<SpatialSkeletonOptimisticEditSettlement> = Promise.resolve(
-    committedSpatialSkeletonOptimisticEditSettlement(),
+  settled: Promise<SpatialSkeletonEditSettlement> = Promise.resolve(
+    committedSpatialSkeletonEditSettlement(),
   ),
-): SpatialSkeletonOptimisticEditExecution<T> {
+): SpatialSkeletonEditExecution<T> {
   Object.defineProperty(execution, "acceptedByQueue", {
     configurable: true,
     value: acceptedByQueue,
@@ -45,7 +45,7 @@ function withExecutionMilestones<T>(
     configurable: true,
     value: settled,
   });
-  return execution as SpatialSkeletonOptimisticEditExecution<T>;
+  return execution as SpatialSkeletonEditExecution<T>;
 }
 
 function makeQueue(
@@ -53,8 +53,8 @@ function makeQueue(
     canUndo?: boolean;
     canRedo?: boolean;
     hasUnconfirmedActions?: boolean;
-    undoExecution?: SpatialSkeletonOptimisticEditExecution;
-    redoExecution?: SpatialSkeletonOptimisticEditExecution;
+    undoExecution?: SpatialSkeletonEditExecution;
+    redoExecution?: SpatialSkeletonEditExecution;
   } = {},
 ) {
   return {
@@ -72,11 +72,11 @@ function makeQueue(
     ),
     getSnapshot: () => [],
     getRecentActivity: () => [],
-    getFatalState: () => undefined,
-    handleFatalStateLatched: () => {},
-    getProtectedProjectionSegmentIds: () => [],
+    getReloadRequired: () => undefined,
+    handleReloadRequiredLatched: () => {},
+    getProtectedPreviewSegmentIds: () => [],
     ownsAuthoritativeReadSegment: () => false,
-  } satisfies SpatialSkeletonOptimisticEditQueue;
+  } satisfies SpatialSkeletonSessionEditQueue;
 }
 
 function makeCommand() {
@@ -89,17 +89,15 @@ function makeCommand() {
 }
 
 function attachTestQueue(
-  state: SpatialSkeletonState,
-  queue: SpatialSkeletonOptimisticEditQueue,
+  state: SpatialSkeletonEditSession,
+  queue: SpatialSkeletonSessionEditQueue,
 ) {
-  (state as any).optimisticEditQueue = queue;
-  vi.spyOn(state, "getOptimisticEditingIdentityService").mockReturnValue(
-    {} as any,
-  );
+  (state as any).editQueue = queue;
+  vi.spyOn(state, "getEditingIdentityService").mockReturnValue({} as any);
 }
 
 function confirmExecute(
-  state: SpatialSkeletonState,
+  state: SpatialSkeletonEditSession,
   command: ReturnType<typeof makeCommand>,
 ) {
   const ticket = state.commandHistory.stageExecute(command.label);
@@ -112,22 +110,22 @@ describe("optimistic skeleton undo/redo routing", () => {
   });
 
   it("prefers queue-owned undo and redo transitions", async () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     const queue = makeQueue({
       canUndo: true,
       canRedo: true,
       hasUnconfirmedActions: true,
     });
     attachTestQueue(state, queue);
-    vi.spyOn(state.commandHistory, "getProjectedUndoEntry").mockReturnValue({
+    vi.spyOn(state.commandHistory, "getPreviewedUndoEntry").mockReturnValue({
       entryId: 1,
       label: "Test edit",
     });
-    vi.spyOn(state.commandHistory, "getProjectedRedoEntry").mockReturnValue({
+    vi.spyOn(state.commandHistory, "getPreviewedRedoEntry").mockReturnValue({
       entryId: 2,
       label: "Test edit",
     });
-    const layer = { spatialSkeletonState: state };
+    const layer = { spatialSkeletonEditSession: state };
 
     await expect(undoSpatialSkeletonCommand(layer as any)).resolves.toBe(true);
     await expect(redoSpatialSkeletonCommand(layer as any)).resolves.toBe(true);
@@ -142,10 +140,10 @@ describe("optimistic skeleton undo/redo routing", () => {
     const undoAcceptedByQueue = Promise.resolve();
     const redoAcceptedByQueue = Promise.resolve();
     const undoSettled = Promise.resolve(
-      committedSpatialSkeletonOptimisticEditSettlement(),
+      committedSpatialSkeletonEditSettlement(),
     );
     const redoSettled = Promise.resolve(
-      committedSpatialSkeletonOptimisticEditSettlement(),
+      committedSpatialSkeletonEditSettlement(),
     );
     const undoExecution = withExecutionMilestones(
       new Promise<boolean>((resolve) => {
@@ -161,7 +159,7 @@ describe("optimistic skeleton undo/redo routing", () => {
       redoAcceptedByQueue,
       redoSettled,
     );
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     attachTestQueue(
       state,
       makeQueue({
@@ -171,15 +169,15 @@ describe("optimistic skeleton undo/redo routing", () => {
         redoExecution,
       }),
     );
-    vi.spyOn(state.commandHistory, "getProjectedUndoEntry").mockReturnValue({
+    vi.spyOn(state.commandHistory, "getPreviewedUndoEntry").mockReturnValue({
       entryId: 1,
       label: "Test edit",
     });
-    vi.spyOn(state.commandHistory, "getProjectedRedoEntry").mockReturnValue({
+    vi.spyOn(state.commandHistory, "getPreviewedRedoEntry").mockReturnValue({
       entryId: 2,
       label: "Test edit",
     });
-    const layer = { spatialSkeletonState: state };
+    const layer = { spatialSkeletonEditSession: state };
 
     const routedUndo = undoSpatialSkeletonCommand(layer as any);
     const routedRedo = redoSpatialSkeletonCommand(layer as any);
@@ -191,26 +189,26 @@ describe("optimistic skeleton undo/redo routing", () => {
     await expect(routedUndo).resolves.toBe(true);
     await expect(routedRedo).resolves.toBe(true);
     await expect(routedUndo.settled).resolves.toEqual(
-      committedSpatialSkeletonOptimisticEditSettlement(),
+      committedSpatialSkeletonEditSettlement(),
     );
     await expect(routedRedo.settled).resolves.toEqual(
-      committedSpatialSkeletonOptimisticEditSettlement(),
+      committedSpatialSkeletonEditSettlement(),
     );
   });
 
   it("returns the state's no-op execution when no queue exists", async () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
 
-    const managerUndo = state.undoLatestOptimisticEdit();
-    const managerRedo = state.redoLatestOptimisticEdit();
-    vi.spyOn(state, "undoLatestOptimisticEdit").mockReturnValue(managerUndo);
-    vi.spyOn(state, "redoLatestOptimisticEdit").mockReturnValue(managerRedo);
+    const managerUndo = state.undoLatestEdit();
+    const managerRedo = state.redoLatestEdit();
+    vi.spyOn(state, "undoLatestEdit").mockReturnValue(managerUndo);
+    vi.spyOn(state, "redoLatestEdit").mockReturnValue(managerRedo);
     const commandUndo = undoSpatialSkeletonCommand({
-      spatialSkeletonState: state,
+      spatialSkeletonEditSession: state,
     } as any);
 
     const commandRedo = redoSpatialSkeletonCommand({
-      spatialSkeletonState: state,
+      spatialSkeletonEditSession: state,
     } as any);
 
     expect(commandUndo).toBe(managerUndo);
@@ -245,13 +243,13 @@ describe("optimistic skeleton undo/redo routing", () => {
   });
 
   it("does not dispatch unavailable Undo/Redo to an installed queue", async () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     const queue = makeQueue();
     attachTestQueue(state, queue);
-    const layer = { spatialSkeletonState: state };
+    const layer = { spatialSkeletonEditSession: state };
     const executions = [
-      state.undoLatestOptimisticEdit(),
-      state.redoLatestOptimisticEdit(),
+      state.undoLatestEdit(),
+      state.redoLatestEdit(),
       undoSpatialSkeletonCommand(layer as any),
       redoSpatialSkeletonCommand(layer as any),
     ];
@@ -273,16 +271,18 @@ describe("optimistic skeleton undo/redo routing", () => {
       .spyOn(StatusMessage, "showTemporaryMessage")
       .mockReturnValue({ dispose() {} } as StatusMessage);
 
-    const undoState = new SpatialSkeletonState();
+    const undoState = new SpatialSkeletonEditSession();
     const undoCommand = makeCommand();
     confirmExecute(undoState, undoCommand);
     attachTestQueue(undoState, makeQueue({ hasUnconfirmedActions: true }));
 
     await expect(
-      undoSpatialSkeletonCommand({ spatialSkeletonState: undoState } as any),
+      undoSpatialSkeletonCommand({
+        spatialSkeletonEditSession: undoState,
+      } as any),
     ).resolves.toBe(false);
 
-    const redoState = new SpatialSkeletonState();
+    const redoState = new SpatialSkeletonEditSession();
     const redoCommand = makeCommand();
     confirmExecute(redoState, redoCommand);
     const undoTicket = redoState.commandHistory.stageUndo()!;
@@ -290,22 +290,26 @@ describe("optimistic skeleton undo/redo routing", () => {
     attachTestQueue(redoState, makeQueue({ hasUnconfirmedActions: true }));
 
     await expect(
-      redoSpatialSkeletonCommand({ spatialSkeletonState: redoState } as any),
+      redoSpatialSkeletonCommand({
+        spatialSkeletonEditSession: redoState,
+      } as any),
     ).resolves.toBe(false);
     expect(showTemporaryMessage).not.toHaveBeenCalled();
   });
 
   it("never falls through to direct history execution after the queue settles", async () => {
-    const undoState = new SpatialSkeletonState();
+    const undoState = new SpatialSkeletonEditSession();
     const undoCommand = makeCommand();
     confirmExecute(undoState, undoCommand);
     attachTestQueue(undoState, makeQueue());
 
     await expect(
-      undoSpatialSkeletonCommand({ spatialSkeletonState: undoState } as any),
+      undoSpatialSkeletonCommand({
+        spatialSkeletonEditSession: undoState,
+      } as any),
     ).resolves.toBe(false);
 
-    const redoState = new SpatialSkeletonState();
+    const redoState = new SpatialSkeletonEditSession();
     const redoCommand = makeCommand();
     confirmExecute(redoState, redoCommand);
     const undoTicket = redoState.commandHistory.stageUndo()!;
@@ -313,7 +317,9 @@ describe("optimistic skeleton undo/redo routing", () => {
     attachTestQueue(redoState, makeQueue());
 
     await expect(
-      redoSpatialSkeletonCommand({ spatialSkeletonState: redoState } as any),
+      redoSpatialSkeletonCommand({
+        spatialSkeletonEditSession: redoState,
+      } as any),
     ).resolves.toBe(false);
   });
 });

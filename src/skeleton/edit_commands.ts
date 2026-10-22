@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { SpatialSkeletonOptimisticIdentityService } from "#src/skeleton/edit_queue/api.js";
+import type { SpatialSkeletonIdentityService } from "#src/skeleton/edit_queue/api.js";
 import type { SpatialSkeletonQueueInputRequirements } from "#src/skeleton/edit_queue/queue_input.js";
 
 export const SpatialSkeletonActions = {
@@ -85,12 +85,12 @@ export function getSpatialSkeletonActionSupportLabel(
 }
 
 export interface SpatialSkeletonCommandContext {
-  readonly identities: SpatialSkeletonOptimisticIdentityService;
+  readonly identities: SpatialSkeletonIdentityService;
 }
 
 /**
  * Immutable user intent passed from a datasource command factory to the
- * state-owned queue engine.  It describes what to do; it cannot execute or
+ * session-owned queue engine.  It describes what to do; it cannot execute or
  * mutate history by itself.
  */
 export interface SpatialSkeletonEditCommand<TPayload = unknown> {
@@ -98,7 +98,7 @@ export interface SpatialSkeletonEditCommand<TPayload = unknown> {
   readonly label: string;
   readonly payload: TPayload;
   /**
-   * Declares the complete projected snapshots required before a new Execute
+   * Declares the complete previewed snapshots required before a new Execute
    * intent may be admitted. Undo and Redo use retained history state directly.
    * Return `{ required: [] }` when no existing snapshot is required.
    */

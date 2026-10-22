@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   resolveSpatiallyIndexedSkeletonNodePick,
   resolveSpatiallyIndexedSkeletonSegmentPick,
@@ -52,13 +52,13 @@ describe("resolveSpatiallyIndexedSkeletonNodePick", () => {
       resolveSpatiallyIndexedSkeletonNodePick(
         geometry,
         1,
-        new SpatialSkeletonState(),
+        new SpatialSkeletonEditSession(),
       ),
     ).toEqual({ nodeId, segmentId, position: Float32Array.of(4, 5, 6) });
   });
 
   it("a click on a stale cell reports the node's current skeleton and position", () => {
-    const state = new SpatialSkeletonState();
+    const state = new SpatialSkeletonEditSession();
     state.replaceCachedSegmentSnapshots([
       [9n, [{ nodeId: 1n, segmentId: 9n, position: [7, 8, 9] }]],
     ]);

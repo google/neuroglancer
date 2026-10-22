@@ -33,7 +33,7 @@ import {
 import type { RenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { Uint64MapEntry } from "#src/segmentation_display_state/base.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   SkeletonNavigation,
   type SkeletonNodeAccess,
@@ -214,7 +214,7 @@ function makeSelectionHarness(
     layer,
     skeletonNodeAccess,
     spatiallyIndexedSkeletonLayer,
-    spatialSkeletonState: new SpatialSkeletonState(),
+    spatialSkeletonEditSession: new SpatialSkeletonEditSession(),
   });
   const readLayerEntry = () =>
     selectionState.value?.layers.find((entry) => entry.layer === layer)
@@ -289,9 +289,7 @@ describe("SkeletonNodeSelection", () => {
       makeSelectionHarness();
     selection.select(5n, true, { segmentId: 1n, position: [1, 2, 3] });
 
-    selection.applyProjectionUiHints(
-      makeHints({ nodeIdRemappings: [[5n, 9n]] }),
-    );
+    selection.applyPreviewUiHints(makeHints({ nodeIdRemappings: [[5n, 9n]] }));
 
     expect(readLayerEntry()?.nodeId).toBe(9n);
     expect(selectionState.pin.value).toBe(true);
@@ -306,7 +304,7 @@ describe("SkeletonNodeSelection", () => {
     const { selection, readLayerEntry } = makeSelectionHarness();
     selection.select(5n, true, { segmentId: 1n });
 
-    selection.applyProjectionUiHints(
+    selection.applyPreviewUiHints(
       makeHints({ segmentIdRemappings: [[1n, 2n]] }),
     );
 

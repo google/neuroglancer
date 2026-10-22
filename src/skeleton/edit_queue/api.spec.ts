@@ -16,86 +16,83 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  commitSpatialSkeletonMutation,
-  type SpatialSkeletonMutationContext,
-  type SpatialSkeletonOptimisticMutationAdapter,
+import type {
+  SpatialSkeletonEditRequestContext,
+  SpatialSkeletonEditRequestAdapter,
 } from "#src/skeleton/edit_queue/api.js";
+import { commitSpatialSkeletonEditRequest } from "#src/skeleton/edit_queue/api.js";
 
-interface TestMutation {
+interface TestEditRequest {
   readonly nodeId: bigint;
 }
 
 function makeAdapter(
-  commit: SpatialSkeletonOptimisticMutationAdapter<
-    TestMutation,
-    string
-  >["commit"],
-  classifyFailure: SpatialSkeletonOptimisticMutationAdapter<
-    TestMutation,
+  commit: SpatialSkeletonEditRequestAdapter<TestEditRequest, string>["commit"],
+  classifyFailure: SpatialSkeletonEditRequestAdapter<
+    TestEditRequest,
     string
   >["classifyFailure"] = () => "indeterminate",
-): SpatialSkeletonOptimisticMutationAdapter<TestMutation, string> {
+): SpatialSkeletonEditRequestAdapter<TestEditRequest, string> {
   return {
-    mutationScope: {},
+    editRequestScope: {},
     commit,
     classifyFailure,
   };
 }
 
-const mutation = { nodeId: 17n };
-const context: SpatialSkeletonMutationContext = {
+const editRequest = { nodeId: 17n };
+const context: SpatialSkeletonEditRequestContext = {
   intent: "execute",
   operationId: 4,
 };
 
-describe("spatial skeleton optimistic mutation adapter", () => {
+describe("spatial skeleton optimistic edit request adapter", () => {
   it("normalizes a successful provider commit", async () => {
     const commit = vi.fn(async () => "authority-result");
     const classifyFailure = vi.fn(() => "rejected" as const);
     const adapter = makeAdapter(commit, classifyFailure);
 
     await expect(
-      commitSpatialSkeletonMutation(adapter, mutation, context),
+      commitSpatialSkeletonEditRequest(adapter, editRequest, context),
     ).resolves.toEqual({
       status: "committed",
       result: "authority-result",
     });
-    expect(commit).toHaveBeenCalledWith(mutation, context);
+    expect(commit).toHaveBeenCalledWith(editRequest, context);
     expect(classifyFailure).not.toHaveBeenCalled();
   });
 
   it.each(["not-started", "rejected", "indeterminate"] as const)(
     "preserves the adapter's %s failure classification",
     async (status) => {
-      const error = new Error("mutation failed");
+      const error = new Error("edit request failed");
       const classifyFailure = vi.fn(() => status);
       const adapter = makeAdapter(async () => {
         throw error;
       }, classifyFailure);
 
       await expect(
-        commitSpatialSkeletonMutation(adapter, mutation, context),
+        commitSpatialSkeletonEditRequest(adapter, editRequest, context),
       ).resolves.toEqual({ status, error });
-      expect(classifyFailure).toHaveBeenCalledWith(error, mutation, context);
+      expect(classifyFailure).toHaveBeenCalledWith(error, editRequest, context);
     },
   );
 
   it("conservatively treats a classification failure as indeterminate", async () => {
-    const mutationError = new Error("mutation failed");
+    const editRequestError = new Error("edit request failed");
     const classificationError = new Error("classifier failed");
     const adapter = makeAdapter(
-      () => Promise.reject(mutationError),
+      () => Promise.reject(editRequestError),
       () => {
         throw classificationError;
       },
     );
 
     await expect(
-      commitSpatialSkeletonMutation(adapter, mutation, context),
+      commitSpatialSkeletonEditRequest(adapter, editRequest, context),
     ).resolves.toEqual({
       status: "indeterminate",
-      error: mutationError,
+      error: editRequestError,
       classificationError,
     });
   });

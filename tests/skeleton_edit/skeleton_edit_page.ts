@@ -54,12 +54,13 @@ export async function readGraph(
         | undefined;
       if (!layer) return [];
       const seedNodes = ids.flatMap((id) => {
-        const node = layer.spatialSkeletonState.getCachedNode(id);
+        const node = layer.spatialSkeletonEditSession.getCachedNode(id);
         return node ? [node] : [];
       });
       const nodes = completeComponents
         ? [...new Set(seedNodes.map((node) => node.segmentId))].flatMap(
-            (id) => layer.spatialSkeletonState.getCachedSegmentNodes(id) ?? [],
+            (id) =>
+              layer.spatialSkeletonEditSession.getCachedSegmentNodes(id) ?? [],
           )
         : seedNodes;
       return nodes
@@ -109,11 +110,11 @@ export async function readQueue(page: Page, layerName = "Skeletons") {
     const layer = viewer.layerManager.getLayerByName(layerName)
       ?.layer as SegmentationUserLayer;
     return {
-      entries: layer.spatialSkeletonState.getOptimisticEditQueueSnapshot(),
-      pending: layer.spatialSkeletonState.hasUnconfirmedOptimisticEdits(),
-      recent: layer.spatialSkeletonState.getOptimisticEditQueueRecentActivity(),
-      canUndo: layer.spatialSkeletonState.commandHistory.canUndo.value,
-      canRedo: layer.spatialSkeletonState.commandHistory.canRedo.value,
+      entries: layer.spatialSkeletonEditSession.getEditQueueRows(),
+      pending: layer.spatialSkeletonEditSession.hasUnconfirmedEdits(),
+      recent: layer.spatialSkeletonEditSession.getEditQueueRecentActivity(),
+      canUndo: layer.spatialSkeletonEditSession.commandHistory.canUndo.value,
+      canRedo: layer.spatialSkeletonEditSession.commandHistory.canRedo.value,
     };
   }, layerName);
 }

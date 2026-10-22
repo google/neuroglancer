@@ -18,15 +18,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type {
-  SpatialSkeletonOptimisticIntentLifecycle,
-  SpatialSkeletonOptimisticEditActivityEntry,
-  SpatialSkeletonOptimisticEditQueueEntry,
+  SpatialSkeletonIntentLifecycle,
+  SpatialSkeletonEditActivityEntry,
+  SpatialSkeletonEditQueueEntry,
 } from "#src/skeleton/edit_queue/types.js";
 import { StatusMessage } from "#src/status.js";
 import {
-  registerSpatialSkeletonOptimisticEditQueueTab,
-  SpatialSkeletonOptimisticAuthorityNotificationController,
-  SpatialSkeletonOptimisticEditQueueTab,
+  registerSpatialSkeletonEditQueueTab,
+  SpatialSkeletonAuthorityNotificationController,
+  SpatialSkeletonEditQueueTab,
 } from "#src/ui/skeleton_edit_queue_tab.js";
 
 function makeSignal() {
@@ -51,17 +51,17 @@ function makeSignal() {
 }
 
 function makeQueueTabLayer(
-  getEntries: () => readonly SpatialSkeletonOptimisticEditQueueEntry[],
-  getActivity: () => readonly SpatialSkeletonOptimisticEditActivityEntry[] = () => [],
-  getFatalState: () => object | undefined = () => undefined,
+  getEntries: () => readonly SpatialSkeletonEditQueueEntry[],
+  getActivity: () => readonly SpatialSkeletonEditActivityEntry[] = () => [],
+  getReloadRequired: () => object | undefined = () => undefined,
 ) {
-  const optimisticEditQueueVersion = makeSignal();
+  const editQueueVersion = makeSignal();
   const layer = {
-    spatialSkeletonState: {
-      optimisticEditQueueVersion,
-      getOptimisticEditQueueSnapshot: getEntries,
-      getOptimisticEditQueueRecentActivity: getActivity,
-      getOptimisticEditFatalState: getFatalState,
+    spatialSkeletonEditSession: {
+      editQueueVersion,
+      getEditQueueRows: getEntries,
+      getEditQueueRecentActivity: getActivity,
+      getReloadRequired: getReloadRequired,
     },
     tabs: {
       add: vi.fn(),
@@ -70,13 +70,13 @@ function makeQueueTabLayer(
   } as unknown as SegmentationUserLayer;
   return {
     layer,
-    optimisticEditQueueVersion,
+    editQueueVersion,
   };
 }
 
 function lifecycle(
-  overrides: Partial<SpatialSkeletonOptimisticIntentLifecycle> = {},
-): SpatialSkeletonOptimisticIntentLifecycle {
+  overrides: Partial<SpatialSkeletonIntentLifecycle> = {},
+): SpatialSkeletonIntentLifecycle {
   return {
     preview: "exact",
     authority: "queued",
@@ -86,7 +86,7 @@ function lifecycle(
   };
 }
 
-describe("SpatialSkeletonOptimisticEditQueueTab", () => {
+describe("SpatialSkeletonEditQueueTab", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -97,7 +97,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
     const { layer } = makeQueueTabLayer(() => []);
     const hidden = { value: false, changed: makeSignal().changed };
 
-    registerSpatialSkeletonOptimisticEditQueueTab(layer, hidden as any);
+    registerSpatialSkeletonEditQueueTab(layer, hidden as any);
 
     expect(layer.tabs.add).toHaveBeenCalledWith(
       "skeletonQueue",
@@ -112,7 +112,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
   it("renders an empty queue state", () => {
     const { layer } = makeQueueTabLayer(() => []);
 
-    const tab = new SpatialSkeletonOptimisticEditQueueTab(layer);
+    const tab = new SpatialSkeletonEditQueueTab(layer);
 
     expect(tab.element.textContent).toContain("Skeleton edit queue");
     expect(tab.element.textContent).toContain("Up to date");
@@ -133,7 +133,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
       }),
     );
 
-    const tab = new SpatialSkeletonOptimisticEditQueueTab(layer);
+    const tab = new SpatialSkeletonEditQueueTab(layer);
 
     const alert = tab.element.querySelector<HTMLElement>('[role="alert"]');
     expect(alert).not.toBeNull();
@@ -153,11 +153,11 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
   });
 
   it("owns one persistent Reload required notification", () => {
-    const fatalState: { value: object | undefined } = { value: undefined };
-    const { layer, optimisticEditQueueVersion } = makeQueueTabLayer(
+    const reloadRequired: { value: object | undefined } = { value: undefined };
+    const { layer, editQueueVersion } = makeQueueTabLayer(
       () => [],
       () => [],
-      () => fatalState.value,
+      () => reloadRequired.value,
     );
     const dispose = vi.fn();
     const showErrorMessage = vi
@@ -165,15 +165,15 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
       .mockReturnValue({ dispose } as unknown as StatusMessage);
     const hidden = { value: false, changed: makeSignal().changed };
 
-    registerSpatialSkeletonOptimisticEditQueueTab(layer, hidden as any);
+    registerSpatialSkeletonEditQueueTab(layer, hidden as any);
     expect(showErrorMessage).not.toHaveBeenCalled();
 
-    fatalState.value = {
+    reloadRequired.value = {
       reason: "committed-local-publication-failed",
       authority: "committed",
     };
-    optimisticEditQueueVersion.dispatch();
-    optimisticEditQueueVersion.dispatch();
+    editQueueVersion.dispatch();
+    editQueueVersion.dispatch();
 
     expect(showErrorMessage).toHaveBeenCalledOnce();
     expect(showErrorMessage).toHaveBeenCalledWith(
@@ -184,13 +184,13 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
 
   it("warns after the configured in-flight delay and clears the warning on settlement", () => {
     vi.useFakeTimers();
-    let entries: readonly SpatialSkeletonOptimisticEditQueueEntry[] = [
+    let entries: readonly SpatialSkeletonEditQueueEntry[] = [
       {
         queueInstanceId: 1,
         operationId: 7,
         kind: "addNode",
         lifecycle: lifecycle({ authority: "running" }),
-        authorityPresentation: {
+        authorityLabels: {
           authorityLabel: "CATMAID",
           operationNoun: "node creation",
           stalledWarning: {
@@ -206,8 +206,9 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
     const showErrorMessage = vi
       .spyOn(StatusMessage, "showErrorMessage")
       .mockReturnValue({ dispose } as unknown as StatusMessage);
-    const controller =
-      new SpatialSkeletonOptimisticAuthorityNotificationController(layer);
+    const controller = new SpatialSkeletonAuthorityNotificationController(
+      layer,
+    );
 
     vi.advanceTimersByTime(10_000);
     entries = [{ ...entries[0]!, queueInstanceId: 2 }];
@@ -239,12 +240,12 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
 
   it("shows lease-waiting work as queued without starting the transport warning", () => {
     vi.useFakeTimers();
-    const entries: readonly SpatialSkeletonOptimisticEditQueueEntry[] = [
+    const entries: readonly SpatialSkeletonEditQueueEntry[] = [
       {
         operationId: 8,
         kind: "moveNode",
         lifecycle: lifecycle({ authority: "waiting" }),
-        authorityPresentation: {
+        authorityLabels: {
           authorityLabel: "CATMAID",
           operationNoun: "node movement",
           stalledWarning: {
@@ -258,9 +259,10 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
     const showErrorMessage = vi
       .spyOn(StatusMessage, "showErrorMessage")
       .mockReturnValue({ dispose: vi.fn() } as unknown as StatusMessage);
-    const controller =
-      new SpatialSkeletonOptimisticAuthorityNotificationController(layer);
-    const tab = new SpatialSkeletonOptimisticEditQueueTab(layer);
+    const controller = new SpatialSkeletonAuthorityNotificationController(
+      layer,
+    );
+    const tab = new SpatialSkeletonEditQueueTab(layer);
 
     vi.advanceTimersByTime(60_000);
     expect(showErrorMessage).not.toHaveBeenCalled();
@@ -271,7 +273,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
   });
 
   it("reports unbounded root failures once across reused operation ids", () => {
-    let entries: readonly SpatialSkeletonOptimisticEditQueueEntry[] = [];
+    let entries: readonly SpatialSkeletonEditQueueEntry[] = [];
     const { layer } = makeQueueTabLayer(
       () => entries,
       () => [],
@@ -279,8 +281,9 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
     const showErrorMessage = vi
       .spyOn(StatusMessage, "showErrorMessage")
       .mockReturnValue({ dispose: vi.fn() } as unknown as StatusMessage);
-    const controller =
-      new SpatialSkeletonOptimisticAuthorityNotificationController(layer);
+    const controller = new SpatialSkeletonAuthorityNotificationController(
+      layer,
+    );
     const presentation = {
       authorityLabel: "CATMAID",
       operationNoun: "node movement",
@@ -298,7 +301,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
           reconciliation: "not-required",
           history: "rejected",
         }),
-        authorityPresentation: presentation,
+        authorityLabels: presentation,
         reason: "Request failed with HTTP 409 (Conflict).",
         canceledLaterIntentCount: 11,
       },
@@ -313,7 +316,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
           reconciliation: "not-required" as const,
           history: "rejected" as const,
         }),
-        authorityPresentation: presentation,
+        authorityLabels: presentation,
         reason: "Reverted because an earlier edit was not saved.",
       })),
     ];
@@ -338,7 +341,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
           reconciliation: "not-required",
           history: "rejected",
         }),
-        authorityPresentation: presentation,
+        authorityLabels: presentation,
         reason:
           "The edit could not be submitted: The request could not be built.",
         canceledLaterIntentCount: 0,
@@ -347,33 +350,33 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
     controller.update();
     expect(showErrorMessage).toHaveBeenCalledTimes(2);
     expect(showErrorMessage).toHaveBeenLastCalledWith(
-      "Unable to submit node movement; no CATMAID mutation request was started. The invalid preview was removed. The request could not be built.",
+      "Unable to submit node movement; no CATMAID edit request was started. The invalid preview was removed. The request could not be built.",
     );
     controller.dispose();
   });
 
   it("shows the reload-required message once", async () => {
-    const fatalState: { value: object | undefined } = { value: undefined };
-    const { layer, optimisticEditQueueVersion } = makeQueueTabLayer(
+    const reloadRequired: { value: object | undefined } = { value: undefined };
+    const { layer, editQueueVersion } = makeQueueTabLayer(
       () => [],
       () => [],
-      () => fatalState.value,
+      () => reloadRequired.value,
     );
     const showErrorMessage = vi
       .spyOn(StatusMessage, "showErrorMessage")
       .mockReturnValue({ dispose: vi.fn() } as unknown as StatusMessage);
-    registerSpatialSkeletonOptimisticEditQueueTab(layer, {
+    registerSpatialSkeletonEditQueueTab(layer, {
       value: false,
       changed: makeSignal().changed,
     } as any);
-    fatalState.value = {
+    reloadRequired.value = {
       reason: "committed-local-publication-failed",
       authority: "committed",
     };
-    optimisticEditQueueVersion.dispatch();
+    editQueueVersion.dispatch();
     await Promise.resolve();
     await Promise.resolve();
-    optimisticEditQueueVersion.dispatch();
+    editQueueVersion.dispatch();
     expect(showErrorMessage).toHaveBeenCalledOnce();
     expect(showErrorMessage).toHaveBeenCalledWith(
       expect.stringContaining("Reload the page"),
@@ -382,7 +385,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
   });
 
   it("renders queue rows and updates on queue version changes", () => {
-    let entries: readonly SpatialSkeletonOptimisticEditQueueEntry[] = [
+    let entries: readonly SpatialSkeletonEditQueueEntry[] = [
       {
         kind: "addNode",
         lifecycle: lifecycle(),
@@ -397,10 +400,8 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
         }),
       },
     ];
-    const { layer, optimisticEditQueueVersion } = makeQueueTabLayer(
-      () => entries,
-    );
-    const tab = new SpatialSkeletonOptimisticEditQueueTab(layer);
+    const { layer, editQueueVersion } = makeQueueTabLayer(() => entries);
+    const tab = new SpatialSkeletonEditQueueTab(layer);
 
     expect(tab.element.textContent).toContain("1 edit pending");
     expect(tab.element.textContent).toContain("Add node");
@@ -411,7 +412,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
         lifecycle: lifecycle({ authority: "running" }),
       },
     ];
-    optimisticEditQueueVersion.dispatch();
+    editQueueVersion.dispatch();
 
     expect(tab.element.textContent).toContain("1 edit pending");
     expect(tab.element.textContent).toContain("Move node");
@@ -434,7 +435,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
       ],
     );
 
-    const tab = new SpatialSkeletonOptimisticEditQueueTab(layer);
+    const tab = new SpatialSkeletonEditQueueTab(layer);
 
     expect(tab.element.textContent).toContain("Recent activity");
     expect(tab.element.textContent).toContain("Most recent completed actions.");
@@ -459,7 +460,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
       },
     ]);
 
-    const tab = new SpatialSkeletonOptimisticEditQueueTab(layer);
+    const tab = new SpatialSkeletonEditQueueTab(layer);
 
     expect(tab.element.textContent).toContain("1 edit pending");
     expect(tab.element.textContent).toContain("Merge skeletons");
@@ -468,7 +469,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
   });
 
   it("renders Undo intent without internal operation details", () => {
-    const entries: readonly SpatialSkeletonOptimisticEditQueueEntry[] = [
+    const entries: readonly SpatialSkeletonEditQueueEntry[] = [
       {
         kind: "deleteNode",
         lifecycle: lifecycle(),
@@ -483,7 +484,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
       },
     ];
     const { layer } = makeQueueTabLayer(() => entries);
-    const tab = new SpatialSkeletonOptimisticEditQueueTab(layer);
+    const tab = new SpatialSkeletonEditQueueTab(layer);
 
     const actions = Array.from(
       tab.element.querySelectorAll<HTMLElement>(
@@ -528,7 +529,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
       ],
     );
 
-    const tab = new SpatialSkeletonOptimisticEditQueueTab(layer);
+    const tab = new SpatialSkeletonEditQueueTab(layer);
     expect(tab.element.textContent).toContain("2 edits pending");
     const statuses = Array.from(
       tab.element.querySelectorAll<HTMLElement>(
@@ -549,7 +550,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
   });
 
   it("derives pending labels from lifecycle axes in precedence order", () => {
-    const entries: readonly SpatialSkeletonOptimisticEditQueueEntry[] = [
+    const entries: readonly SpatialSkeletonEditQueueEntry[] = [
       {
         kind: "unknown",
         lifecycle: lifecycle({
@@ -588,7 +589,7 @@ describe("SpatialSkeletonOptimisticEditQueueTab", () => {
       },
     ];
     const { layer } = makeQueueTabLayer(() => entries);
-    const tab = new SpatialSkeletonOptimisticEditQueueTab(layer);
+    const tab = new SpatialSkeletonEditQueueTab(layer);
 
     const rows = Array.from(
       tab.element.querySelectorAll<HTMLElement>(

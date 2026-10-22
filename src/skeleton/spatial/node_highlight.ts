@@ -17,10 +17,10 @@
 import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.js";
 import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
 import {
-  buildSkeletonPreparationCues,
-  getSkeletonPreparationCuePrimitives,
+  buildPendingEditMarkers,
+  getPendingEditMarkerPrimitives,
 } from "#src/skeleton/edit/pending_edit_markers.js";
-import type { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import type { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type {
   SkeletonNodeRing,
   SkeletonPanelOverlayPrimitive,
@@ -76,10 +76,10 @@ export interface SkeletonNodeHighlightDisplayState {
   readonly segmentSelectionState: { readonly baseValue: bigint | undefined };
 }
 
-export type SkeletonNodeHighlightEditState = Pick<
-  SpatialSkeletonState,
+export type SkeletonNodeHighlightEditSession = Pick<
+  SpatialSkeletonEditSession,
   | "suppressSelectedNodeHighlight"
-  | "spatialSkeletonPresentation"
+  | "spatialSkeletonDisplay"
   | "provisionalSegmentIds"
   | "getDisplayedNode"
 >;
@@ -87,7 +87,7 @@ export type SkeletonNodeHighlightEditState = Pick<
 export interface SkeletonNodeHighlightOptions {
   readonly displayState: SkeletonNodeHighlightDisplayState;
   readonly nodeSelection: SkeletonNodeHighlightSelection;
-  readonly editState: SkeletonNodeHighlightEditState;
+  readonly editSession: SkeletonNodeHighlightEditSession;
   readonly getBaseSegmentColor: (segmentId: bigint) => vec3;
 }
 
@@ -96,11 +96,11 @@ export class SkeletonNodeHighlight extends RefCounted {
 
   constructor(private readonly options: SkeletonNodeHighlightOptions) {
     super();
-    const { nodeSelection, editState } = options;
+    const { nodeSelection, editSession } = options;
     for (const signal of [
       nodeSelection.selected.changed,
       nodeSelection.hovered.changed,
-      editState.suppressSelectedNodeHighlight.changed,
+      editSession.suppressSelectedNodeHighlight.changed,
     ]) {
       this.registerDisposer(signal.add(this.changed.dispatch));
     }
@@ -108,14 +108,14 @@ export class SkeletonNodeHighlight extends RefCounted {
 
   /** Omits a node whose position is unavailable or whose skeleton is not drawn. */
   computePrimitives(ring: SkeletonNodeRing): SkeletonPanelOverlayPrimitive[] {
-    const { displayState, nodeSelection, editState } = this.options;
+    const { displayState, nodeSelection, editSession } = this.options;
     const objectAlpha = displayState.objectAlpha.value;
     const hiddenObjectAlpha = displayState.hiddenObjectAlpha.value;
     if (objectAlpha <= 0 && hiddenObjectAlpha <= 0) return [];
     const toGlobalPosition = (modelPosition: ArrayLike<number>) =>
       nodeSelection.toGlobalPosition(modelPosition);
     const primitives: SkeletonPanelOverlayPrimitive[] = [];
-    const selected = editState.suppressSelectedNodeHighlight.value
+    const selected = editSession.suppressSelectedNodeHighlight.value
       ? undefined
       : nodeSelection.selected.value;
     const hovered = nodeSelection.hovered.value;
@@ -135,13 +135,13 @@ export class SkeletonNodeHighlight extends RefCounted {
         ),
       );
     }
-    const { preparations } = editState.spatialSkeletonPresentation.value;
-    if (preparations.length !== 0) {
+    const { pendingEdits } = editSession.spatialSkeletonDisplay.value;
+    if (pendingEdits.length !== 0) {
       primitives.push(
-        ...getSkeletonPreparationCuePrimitives(
-          buildSkeletonPreparationCues(
-            preparations,
-            (nodeId) => editState.getDisplayedNode(nodeId)?.position,
+        ...getPendingEditMarkerPrimitives(
+          buildPendingEditMarkers(
+            pendingEdits,
+            (nodeId) => editSession.getDisplayedNode(nodeId)?.position,
           ),
           ring,
           toGlobalPosition,
@@ -157,7 +157,7 @@ export class SkeletonNodeHighlight extends RefCounted {
     ring: SkeletonNodeRing,
     getRingColor: (segmentColor: vec3) => vec3,
   ) {
-    const { displayState, nodeSelection, editState } = this.options;
+    const { displayState, nodeSelection, editSession } = this.options;
     const { segmentId } = node;
     if (segmentId !== undefined) {
       // Matches the alpha the shader draws the skeleton with.
@@ -170,7 +170,7 @@ export class SkeletonNodeHighlight extends RefCounted {
     }
     // The displayed node includes a pending move.
     const position = nodeSelection.toGlobalPosition(
-      editState.getDisplayedNode(node.nodeId)?.position ?? node.position,
+      editSession.getDisplayedNode(node.nodeId)?.position ?? node.position,
     );
     if (position === undefined) return;
     const segmentColor = this.getSegmentColor(
@@ -193,7 +193,7 @@ export class SkeletonNodeHighlight extends RefCounted {
 
   private getSegmentColor(segmentId: bigint | undefined) {
     if (segmentId === undefined) return undefined;
-    if (this.options.editState.provisionalSegmentIds.has(segmentId)) {
+    if (this.options.editSession.provisionalSegmentIds.has(segmentId)) {
       return PROVISIONAL_SEGMENT_COLOR;
     }
     return vec3.clone(this.options.getBaseSegmentColor(segmentId));

@@ -60,7 +60,7 @@ import {
   registerNestedSync,
   makeCachedDerivedWatchableValue,
 } from "#src/trackable_value.js";
-import { registerSpatialSkeletonOptimisticEditQueueTab } from "#src/ui/skeleton_edit_queue_tab.js";
+import { registerSpatialSkeletonEditQueueTab } from "#src/ui/skeleton_edit_queue_tab.js";
 import { getSkeletonNodeTypeIcon } from "#src/ui/skeleton_node_icons.js";
 import {
   buildSkeletonSegmentRenderState,
@@ -270,7 +270,7 @@ export class SkeletonTab extends Tab {
     const pendingDeleteNodes = new Set<bigint>();
     const pendingTrueEndNodes = new Set<bigint>();
     const listIndexByNodeId = new Map<bigint, number>();
-    const skeletonState = layer.spatialSkeletonState;
+    const skeletonState = layer.spatialSkeletonEditSession;
     const segmentColorScratch = new Float32Array(4);
 
     const getSkeletonTransform = () => {
@@ -435,16 +435,16 @@ export class SkeletonTab extends Tab {
 
     const getDetailsPreparationState = () => {
       const selectedSegmentId = getSelectedSegmentId();
-      const presentation = skeletonState.spatialSkeletonPresentation.value;
+      const presentation = skeletonState.spatialSkeletonDisplay.value;
       return getSpatialSkeletonDetailsPreparationState({
-        preparations: presentation.preparations,
+        preparations: presentation.pendingEdits,
         selectedSegmentId,
-        selectedLogicalSegmentStableId:
+        selectedSegmentStableId:
           selectedSegmentId === undefined
             ? undefined
-            : presentation.activeLogicalOwners.find(
+            : presentation.activeStableOwners.find(
                 (owner) => owner.segmentId === selectedSegmentId,
-              )?.logicalHandle.stableId,
+              )?.stableHandle.stableId,
         hasExactTopology:
           selectedSegmentId !== undefined &&
           skeletonState.getCachedSegmentNodes(selectedSegmentId) !== undefined,
@@ -910,7 +910,7 @@ export class SkeletonTab extends Tab {
       const segmentChip = document.createElement("span");
       segmentChip.className = "neuroglancer-skeleton-node-segment-chip";
       const segmentAlias =
-        skeletonState.spatialSkeletonPresentation.value.numericAliases.find(
+        skeletonState.spatialSkeletonDisplay.value.numericAliases.find(
           (alias) => alias.segmentId === segmentState.segmentId,
         );
       const segmentChipColors =
@@ -1070,7 +1070,7 @@ export class SkeletonTab extends Tab {
       idCell.className = "neuroglancer-skeleton-node-id";
       const nodeIdPresentation = getSkeletonNodeIdPresentation(
         node.nodeId,
-        skeletonState.spatialSkeletonPresentation.value.provisionalNodeIds,
+        skeletonState.spatialSkeletonDisplay.value.provisionalNodeIds,
       );
       idCell.textContent = nodeIdPresentation.label;
       idCell.dataset.provisional = String(nodeIdPresentation.provisional);
@@ -1358,15 +1358,13 @@ export class SkeletonTab extends Tab {
     };
 
     const updateHistoryButtons = () => {
-      const { commandHistory } = layer.spatialSkeletonState;
+      const { commandHistory } = layer.spatialSkeletonEditSession;
       const undoLabel = commandHistory.undoLabel.value;
       const redoLabel = commandHistory.redoLabel.value;
-      const canUndoOptimistic =
-        layer.spatialSkeletonState.canUndoOptimisticEdit();
-      const canRedoOptimistic =
-        layer.spatialSkeletonState.canRedoOptimisticEdit();
+      const canUndoOptimistic = layer.spatialSkeletonEditSession.canUndoEdit();
+      const canRedoOptimistic = layer.spatialSkeletonEditSession.canRedoEdit();
       const reloadRequired =
-        layer.spatialSkeletonState.getOptimisticEditFatalState() !== undefined;
+        layer.spatialSkeletonEditSession.getReloadRequired() !== undefined;
       undoButton.disabled = !canUndoOptimistic;
       redoButton.disabled = !canRedoOptimistic;
       undoButton.title = reloadRequired
@@ -1416,19 +1414,19 @@ export class SkeletonTab extends Tab {
     this.registerDisposer(
       observeWatchable(
         () => updateGateStatus(),
-        layer.spatialSkeletonState.editMode,
+        layer.spatialSkeletonEditSession.editMode,
       ),
     );
     this.registerDisposer(
       observeWatchable(
         () => updateGateStatus(),
-        layer.spatialSkeletonState.mergeMode,
+        layer.spatialSkeletonEditSession.mergeMode,
       ),
     );
     this.registerDisposer(
       observeWatchable(
         () => updateGateStatus(),
-        layer.spatialSkeletonState.splitMode,
+        layer.spatialSkeletonEditSession.splitMode,
       ),
     );
     this.registerDisposer(
@@ -1437,27 +1435,35 @@ export class SkeletonTab extends Tab {
       }),
     );
     this.registerDisposer(
-      layer.spatialSkeletonState.commandHistory.canUndo.changed.add(() => {
-        updateHistoryButtons();
-      }),
+      layer.spatialSkeletonEditSession.commandHistory.canUndo.changed.add(
+        () => {
+          updateHistoryButtons();
+        },
+      ),
     );
     this.registerDisposer(
-      layer.spatialSkeletonState.commandHistory.canRedo.changed.add(() => {
-        updateHistoryButtons();
-      }),
+      layer.spatialSkeletonEditSession.commandHistory.canRedo.changed.add(
+        () => {
+          updateHistoryButtons();
+        },
+      ),
     );
     this.registerDisposer(
-      layer.spatialSkeletonState.commandHistory.undoLabel.changed.add(() => {
-        updateHistoryButtons();
-      }),
+      layer.spatialSkeletonEditSession.commandHistory.undoLabel.changed.add(
+        () => {
+          updateHistoryButtons();
+        },
+      ),
     );
     this.registerDisposer(
-      layer.spatialSkeletonState.commandHistory.redoLabel.changed.add(() => {
-        updateHistoryButtons();
-      }),
+      layer.spatialSkeletonEditSession.commandHistory.redoLabel.changed.add(
+        () => {
+          updateHistoryButtons();
+        },
+      ),
     );
     this.registerDisposer(
-      layer.spatialSkeletonState.optimisticEditQueueVersion.changed.add(() => {
+      layer.spatialSkeletonEditSession.editQueueVersion.changed.add(() => {
         updateGateStatus();
         updateHistoryButtons();
       }),
@@ -1534,7 +1540,7 @@ export class SkeletonTab extends Tab {
       }, layer.skeletonNodeAccess),
     );
     this.registerDisposer(
-      skeletonState.spatialSkeletonPresentation.changed.add(() => {
+      skeletonState.spatialSkeletonDisplay.changed.add(() => {
         updateDisplay();
         updateGateStatus();
       }),
@@ -1568,7 +1574,7 @@ export function registerSkeletonTabs(layer: SegmentationUserLayer) {
       ),
     ),
   });
-  registerSpatialSkeletonOptimisticEditQueueTab(
+  registerSpatialSkeletonEditQueueTab(
     layer,
     layer.registerDisposer(
       makeCachedDerivedWatchableValue(

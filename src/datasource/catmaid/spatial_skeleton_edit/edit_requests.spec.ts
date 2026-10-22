@@ -17,18 +17,16 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { CatmaidSpatialSkeletonEditOperations } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_endpoints.js";
-import { CatmaidSpatialSkeletonOptimisticMutationAdapter } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_requests.js";
-import {
-  commitSpatialSkeletonMutation,
-  type SpatialSkeletonMutationContext,
-} from "#src/skeleton/edit_queue/api.js";
+import { CatmaidEditRequests } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_requests.js";
+import type { SpatialSkeletonEditRequestContext } from "#src/skeleton/edit_queue/api.js";
+import { commitSpatialSkeletonEditRequest } from "#src/skeleton/edit_queue/api.js";
 import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_queue/edit_errors.js";
 
 function makeOperations(
   overrides: Partial<CatmaidSpatialSkeletonEditOperations> = {},
 ): CatmaidSpatialSkeletonEditOperations {
   return {
-    mutationScope: {},
+    editRequestScope: {},
     commitAddNode: vi.fn(async () => ({ nodeId: 101n, segmentId: 10n })),
     commitInsertNode: vi.fn(async () => ({ nodeId: 102n, segmentId: 10n })),
     commitMoveNode: vi.fn(async () => undefined),
@@ -51,29 +49,25 @@ function makeOperations(
   };
 }
 
-const context: SpatialSkeletonMutationContext = {
+const context: SpatialSkeletonEditRequestContext = {
   intent: "execute",
   operationId: 7,
 };
 
-describe("CATMAID optimistic mutation adapter", () => {
-  it("does not expose physical mutation-resource scheduling", () => {
-    const adapter = new CatmaidSpatialSkeletonOptimisticMutationAdapter(
-      makeOperations(),
-    );
+describe("CATMAID optimistic edit request adapter", () => {
+  it("does not expose physical edit request-resource scheduling", () => {
+    const adapter = new CatmaidEditRequests(makeOperations());
     expect("getMutationResources" in adapter).toBe(false);
     expect("mutationResources" in adapter).toBe(false);
   });
 
-  it("maps a semantic queue mutation to CATMAID's unchecked transport", async () => {
+  it("maps a semantic queue edit request to CATMAID's unchecked transport", async () => {
     const result = undefined;
     const commitMoveNode = vi.fn(async () => result);
-    const adapter = new CatmaidSpatialSkeletonOptimisticMutationAdapter(
-      makeOperations({ commitMoveNode }),
-    );
+    const adapter = new CatmaidEditRequests(makeOperations({ commitMoveNode }));
 
     await expect(
-      commitSpatialSkeletonMutation(
+      commitSpatialSkeletonEditRequest(
         adapter,
         {
           kind: "move-node",
@@ -94,11 +88,9 @@ describe("CATMAID optimistic mutation adapter", () => {
   it("uses the generic cancellation signal only before CATMAID dispatch", async () => {
     const controller = new AbortController();
     const commitAddNode = vi.fn(async () => ({ nodeId: 1n, segmentId: 2n }));
-    const adapter = new CatmaidSpatialSkeletonOptimisticMutationAdapter(
-      makeOperations({ commitAddNode }),
-    );
+    const adapter = new CatmaidEditRequests(makeOperations({ commitAddNode }));
 
-    await commitSpatialSkeletonMutation(
+    await commitSpatialSkeletonEditRequest(
       adapter,
       {
         kind: "add-node",
@@ -116,17 +108,17 @@ describe("CATMAID optimistic mutation adapter", () => {
   it("normalizes definitive CATMAID rejection and uncertain failures", async () => {
     const conflict = new SpatialSkeletonEditConflictError("stale");
     const uncertain = new Error("connection disappeared");
-    const rejectConflict = new CatmaidSpatialSkeletonOptimisticMutationAdapter(
+    const rejectConflict = new CatmaidEditRequests(
       makeOperations({
         commitMoveNode: vi.fn(async () => Promise.reject(conflict)),
       }),
     );
-    const rejectUncertain = new CatmaidSpatialSkeletonOptimisticMutationAdapter(
+    const rejectUncertain = new CatmaidEditRequests(
       makeOperations({
         commitMoveNode: vi.fn(async () => Promise.reject(uncertain)),
       }),
     );
-    const mutation = {
+    const editRequest = {
       kind: "move-node" as const,
       request: {
         nodeId: 4n,
@@ -135,22 +127,20 @@ describe("CATMAID optimistic mutation adapter", () => {
     };
 
     await expect(
-      commitSpatialSkeletonMutation(rejectConflict, mutation, context),
+      commitSpatialSkeletonEditRequest(rejectConflict, editRequest, context),
     ).resolves.toEqual({ status: "rejected", error: conflict });
     await expect(
-      commitSpatialSkeletonMutation(rejectUncertain, mutation, context),
+      commitSpatialSkeletonEditRequest(rejectUncertain, editRequest, context),
     ).resolves.toEqual({ status: "indeterminate", error: uncertain });
   });
 
   it("reports cancellation before dispatch as not started", async () => {
     const commitMoveNode = vi.fn(async () => undefined);
-    const adapter = new CatmaidSpatialSkeletonOptimisticMutationAdapter(
-      makeOperations({ commitMoveNode }),
-    );
+    const adapter = new CatmaidEditRequests(makeOperations({ commitMoveNode }));
     const controller = new AbortController();
     controller.abort("disposed");
 
-    const outcome = await commitSpatialSkeletonMutation(
+    const outcome = await commitSpatialSkeletonEditRequest(
       adapter,
       {
         kind: "move-node",
@@ -165,12 +155,12 @@ describe("CATMAID optimistic mutation adapter", () => {
     expect(commitMoveNode).not.toHaveBeenCalled();
   });
 
-  it("uses the datasource's stable mutation scope", () => {
-    const mutationScope = {};
-    const adapter = new CatmaidSpatialSkeletonOptimisticMutationAdapter(
-      makeOperations({ mutationScope }),
+  it("uses the datasource's stable edit request scope", () => {
+    const editRequestScope = {};
+    const adapter = new CatmaidEditRequests(
+      makeOperations({ editRequestScope }),
     );
 
-    expect(adapter.mutationScope).toBe(mutationScope);
+    expect(adapter.editRequestScope).toBe(editRequestScope);
   });
 });

@@ -26,7 +26,7 @@ import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_sourc
 import { LocalSegmentationGraphSource } from "#src/segmentation_graph/local.js";
 import { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";
 import { SkeletonEdgeDirection } from "#src/skeleton/api.js";
-import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import { executeSpatialSkeletonAddNode } from "#src/skeleton/edit/submit_edits.js";
 import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
@@ -72,14 +72,14 @@ vi.mock(
 );
 
 function makeSkeletonSourceConnection(
-  spatialSkeletonState: SpatialSkeletonState,
+  spatialSkeletonEditSession: SpatialSkeletonEditSession,
 ) {
   return new SkeletonSourceConnection({
-    spatialSkeletonState,
+    spatialSkeletonEditSession,
     selection: {} as any,
     overlaySegments: new SkeletonOverlaySegments({
       segmentationGroupState: new WatchableValue({} as any),
-      editState: spatialSkeletonState,
+      editSession: spatialSkeletonEditSession,
     }),
     segmentationGroupState: new WatchableValue({} as any),
     skeletonNodeAccess: new WatchableValue(undefined),
@@ -109,7 +109,7 @@ function makeSelectionHookLayer() {
     layer,
     skeletonNodeAccess: new WatchableValue(undefined),
     spatiallyIndexedSkeletonLayer: new WatchableValue(undefined),
-    spatialSkeletonState: new SpatialSkeletonState(),
+    spatialSkeletonEditSession: new SpatialSkeletonEditSession(),
   });
   return { layer, renderLayer };
 }
@@ -130,8 +130,8 @@ function makeEditableSpatialSkeletonSource(
     createCommand,
   });
   return {
-    optimisticEditing: {
-      createDriver: vi.fn(),
+    editPlannerProvider: {
+      createPlanner: vi.fn(),
     },
     addNodesCommand: makeCommand(SpatialSkeletonActions.addNodes),
     moveNodesCommand: makeCommand(SpatialSkeletonActions.moveNodes),
@@ -159,11 +159,11 @@ function makeEditableSpatialSkeletonSource(
 
 describe("layer/segmentation spatial skeleton source teardown", () => {
   function makeActivatingSegmentationLayer() {
-    const spatialSkeletonState = new SpatialSkeletonState();
+    const spatialSkeletonEditSession = new SpatialSkeletonEditSession();
     const layer = Object.assign(
       Object.create(SegmentationUserLayer.prototype),
       {
-        spatialSkeletonState,
+        spatialSkeletonEditSession,
         displayState: {
           linkedSegmentationGroup: { root: { value: undefined } },
           segmentationGroupState: { value: {} },
@@ -175,12 +175,13 @@ describe("layer/segmentation spatial skeleton source teardown", () => {
         },
       },
     );
-    layer.skeletonSourceConnection =
-      makeSkeletonSourceConnection(spatialSkeletonState);
+    layer.skeletonSourceConnection = makeSkeletonSourceConnection(
+      spatialSkeletonEditSession,
+    );
     Object.defineProperty(layer, "manager", {
       value: { chunkManager: { memoize: { getUncounted: () => undefined } } },
     });
-    return { layer, spatialSkeletonState };
+    return { layer, spatialSkeletonEditSession };
   }
 
   function makeSpatialSkeletonSubsource() {
@@ -199,46 +200,48 @@ describe("layer/segmentation spatial skeleton source teardown", () => {
   }
 
   it("clears edit state when the skeleton source is replaced or removed", () => {
-    const { layer, spatialSkeletonState } = makeActivatingSegmentationLayer();
+    const { layer, spatialSkeletonEditSession } =
+      makeActivatingSegmentationLayer();
     const original = makeSpatialSkeletonSubsource();
     const replacement = makeSpatialSkeletonSubsource();
     layer.activateDataSubsources([original]);
-    spatialSkeletonState.editMode.value = true;
-    spatialSkeletonState.setMergeAnchor(5n);
+    spatialSkeletonEditSession.editMode.value = true;
+    spatialSkeletonEditSession.setMergeAnchor(5n);
 
-    const { commandHistory } = spatialSkeletonState;
+    const { commandHistory } = spatialSkeletonEditSession;
     commandHistory.confirm(commandHistory.stageExecute("add node"));
 
     layer.activateDataSubsources([replacement]);
-    expect(spatialSkeletonState.editMode.value).toBe(false);
-    expect(spatialSkeletonState.mergeAnchorNodeId.value).toBeUndefined();
+    expect(spatialSkeletonEditSession.editMode.value).toBe(false);
+    expect(spatialSkeletonEditSession.mergeAnchorNodeId.value).toBeUndefined();
     expect(commandHistory.canUndo.value).toBe(false);
 
-    spatialSkeletonState.editMode.value = true;
-    spatialSkeletonState.setMergeAnchor(6n);
+    spatialSkeletonEditSession.editMode.value = true;
+    spatialSkeletonEditSession.setMergeAnchor(6n);
     layer.activateDataSubsources([]);
-    expect(spatialSkeletonState.editMode.value).toBe(false);
-    expect(spatialSkeletonState.mergeAnchorNodeId.value).toBeUndefined();
+    expect(spatialSkeletonEditSession.editMode.value).toBe(false);
+    expect(spatialSkeletonEditSession.mergeAnchorNodeId.value).toBeUndefined();
   });
 
   it("keeps edit mode, merge anchor, edit queue and undo history when the same skeleton source is activated again", () => {
-    const { layer, spatialSkeletonState } = makeActivatingSegmentationLayer();
+    const { layer, spatialSkeletonEditSession } =
+      makeActivatingSegmentationLayer();
     const subsource = makeSpatialSkeletonSubsource();
     layer.activateDataSubsources([subsource]);
-    spatialSkeletonState.editMode.value = true;
-    spatialSkeletonState.setMergeAnchor(5n);
-    (spatialSkeletonState as any).optimisticEditQueue = {
+    spatialSkeletonEditSession.editMode.value = true;
+    spatialSkeletonEditSession.setMergeAnchor(5n);
+    (spatialSkeletonEditSession as any).editQueue = {
       hasUnconfirmedActions: () => true,
       dispose: async () => {},
     };
-    const { commandHistory } = spatialSkeletonState;
+    const { commandHistory } = spatialSkeletonEditSession;
     commandHistory.confirm(commandHistory.stageExecute("add node"));
 
     layer.activateDataSubsources([subsource]);
 
-    expect(spatialSkeletonState.editMode.value).toBe(true);
-    expect(spatialSkeletonState.mergeAnchorNodeId.value).toBe(5n);
-    expect(spatialSkeletonState.hasUnconfirmedOptimisticEdits()).toBe(true);
+    expect(spatialSkeletonEditSession.editMode.value).toBe(true);
+    expect(spatialSkeletonEditSession.mergeAnchorNodeId.value).toBe(5n);
+    expect(spatialSkeletonEditSession.hasUnconfirmedEdits()).toBe(true);
     expect(commandHistory.undoLabel.value).toBe("add node");
   });
 });
@@ -320,7 +323,7 @@ function makeEquivalencesLayer(savedEquivalences: string[][]) {
     },
     graphConnection: new WatchableValue(undefined),
     skeletonSourceConnection: makeSkeletonSourceConnection(
-      new SpatialSkeletonState(),
+      new SpatialSkeletonEditSession(),
     ),
   });
   return { layer, groupState };
@@ -497,7 +500,7 @@ describe("layer/segmentation selection details", () => {
       new WatchableValue(emptyInvalidCoordinateSpace),
       layerSelectedValues as any,
     );
-    const spatialSkeletonState = new SpatialSkeletonState();
+    const spatialSkeletonEditSession = new SpatialSkeletonEditSession();
     const commands = new CatmaidSpatialSkeletonEditCommands({
       getClient: () => ({}) as any,
     });
@@ -510,7 +513,7 @@ describe("layer/segmentation selection details", () => {
     });
     const spatiallyIndexedSkeletonLayer = new WatchableValue<any>({
       editableSource: {
-        optimisticEditing: commands.optimisticEditing,
+        editPlannerProvider: commands.editPlannerProvider,
         editNodeRadiusCommand: commands.editNodeRadiusCommand,
       },
       getNode: () => undefined,
@@ -541,30 +544,30 @@ describe("layer/segmentation selection details", () => {
       layer,
       skeletonNodeAccess,
       spatiallyIndexedSkeletonLayer,
-      spatialSkeletonState,
+      spatialSkeletonEditSession,
     });
     Object.assign(layer, {
-      spatialSkeletonState,
+      spatialSkeletonEditSession,
       skeletonNodeAccess,
       skeletonNodeSelection,
       skeletonSourceConnection: new SkeletonSourceConnection({
-        spatialSkeletonState,
+        spatialSkeletonEditSession,
         selection: skeletonNodeSelection,
         overlaySegments: new SkeletonOverlaySegments({
           segmentationGroupState: new WatchableValue({} as any),
-          editState: spatialSkeletonState,
+          editSession: spatialSkeletonEditSession,
         }),
         segmentationGroupState: new WatchableValue({} as any),
         skeletonNodeAccess,
         spatiallyIndexedSkeletonLayer,
       }),
     });
-    return { layer, spatialSkeletonState };
+    return { layer, spatialSkeletonEditSession };
   }
 
   it("keeps a radius being typed while the hovered segment changes", async () => {
-    const { layer, spatialSkeletonState } = makeDetailsHostLayer();
-    spatialSkeletonState.replaceCachedSegmentSnapshots([
+    const { layer, spatialSkeletonEditSession } = makeDetailsHostLayer();
+    spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
       [
         5n,
         [
@@ -617,7 +620,7 @@ describe("layer/segmentation selection details", () => {
       layerSelectedValues as any,
     );
     selectionState.location.visible = true;
-    const spatialSkeletonState = new SpatialSkeletonState();
+    const spatialSkeletonEditSession = new SpatialSkeletonEditSession();
     let confirmCreation:
       | ((created: { nodeId: bigint; segmentId: bigint }) => void)
       | undefined;
@@ -636,7 +639,7 @@ describe("layer/segmentation selection details", () => {
       getClient: () => client as any,
     });
     const source = {
-      optimisticEditing: commands.optimisticEditing,
+      editPlannerProvider: commands.editPlannerProvider,
       addNodesCommand: commands.addNodesCommand,
       editNodeDescriptionCommand: commands.editNodeDescriptionCommand,
       edgeDirection: SkeletonEdgeDirection.CHILD_TO_PARENT,
@@ -653,7 +656,8 @@ describe("layer/segmentation selection details", () => {
     const spatiallyIndexedSkeletonLayer = new WatchableValue<any>({
       fragmentSource: source,
       editableSource: source,
-      getNode: (nodeId: bigint) => spatialSkeletonState.getCachedNode(nodeId),
+      getNode: (nodeId: bigint) =>
+        spatialSkeletonEditSession.getCachedNode(nodeId),
       remapOverlaySegments: vi.fn(),
       retainOverlaySegment: vi.fn(),
     });
@@ -686,18 +690,18 @@ describe("layer/segmentation selection details", () => {
       layer,
       skeletonNodeAccess,
       spatiallyIndexedSkeletonLayer,
-      spatialSkeletonState,
+      spatialSkeletonEditSession,
     });
     Object.assign(layer, {
-      spatialSkeletonState,
+      spatialSkeletonEditSession,
       skeletonNodeAccess,
       skeletonNodeSelection,
       skeletonSourceConnection: new SkeletonSourceConnection({
-        spatialSkeletonState,
+        spatialSkeletonEditSession,
         selection: skeletonNodeSelection,
         overlaySegments: new SkeletonOverlaySegments({
           segmentationGroupState: segmentationGroupState,
-          editState: spatialSkeletonState,
+          editSession: spatialSkeletonEditSession,
         }),
         segmentationGroupState,
         skeletonNodeAccess,
@@ -715,7 +719,7 @@ describe("layer/segmentation selection details", () => {
       layer,
       panel,
       client,
-      spatialSkeletonState,
+      spatialSkeletonEditSession,
       confirmCreation: (created: { nodeId: bigint; segmentId: bigint }) =>
         confirmCreation!(created),
     };
@@ -726,7 +730,7 @@ describe("layer/segmentation selection details", () => {
   }
 
   it("labels a selected new skeleton as Preview, without its provisional ID, until the server confirms it", async () => {
-    const { layer, panel, spatialSkeletonState, confirmCreation } =
+    const { layer, panel, spatialSkeletonEditSession, confirmCreation } =
       makeCreatingHostLayer();
     await executeSpatialSkeletonAddNode(layer.skeletonSourceConnection, {
       skeletonId: 0n,
@@ -734,9 +738,10 @@ describe("layer/segmentation selection details", () => {
       positionInModelSpace: new Float32Array([1, 2, 3]),
     });
     const [provisionalNodeId] =
-      spatialSkeletonState.spatialSkeletonPresentation.value.provisionalNodeIds;
+      spatialSkeletonEditSession.spatialSkeletonDisplay.value
+        .provisionalNodeIds;
     const provisionalSegmentId =
-      spatialSkeletonState.getCachedNode(provisionalNodeId)!.segmentId;
+      spatialSkeletonEditSession.getCachedNode(provisionalNodeId)!.segmentId;
     layer.manager.root.selectionState.captureSingleLayerState(
       layer,
       (state: { value?: bigint }) => {
@@ -758,19 +763,25 @@ describe("layer/segmentation selection details", () => {
     expect(panel.element.textContent).not.toContain("Preview");
     panel.dispose();
     panel.element.remove();
-    spatialSkeletonState.dispose();
+    spatialSkeletonEditSession.dispose();
   });
 
   it("keeps a description being typed when the server gives its new node a permanent ID", async () => {
-    const { layer, panel, client, spatialSkeletonState, confirmCreation } =
-      makeCreatingHostLayer();
+    const {
+      layer,
+      panel,
+      client,
+      spatialSkeletonEditSession,
+      confirmCreation,
+    } = makeCreatingHostLayer();
     await executeSpatialSkeletonAddNode(layer.skeletonSourceConnection, {
       skeletonId: 0n,
       parentNodeId: undefined,
       positionInModelSpace: new Float32Array([1, 2, 3]),
     });
     const [provisionalNodeId] =
-      spatialSkeletonState.spatialSkeletonPresentation.value.provisionalNodeIds;
+      spatialSkeletonEditSession.spatialSkeletonDisplay.value
+        .provisionalNodeIds;
     layer.skeletonNodeSelection.select(provisionalNodeId, true);
     await nextFrame();
     const description = panel.element.querySelector("textarea")!;
@@ -794,6 +805,6 @@ describe("layer/segmentation selection details", () => {
     description.blur();
     panel.dispose();
     panel.element.remove();
-    spatialSkeletonState.dispose();
+    spatialSkeletonEditSession.dispose();
   });
 });

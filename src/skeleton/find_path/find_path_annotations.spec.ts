@@ -22,10 +22,8 @@ import {
   makeIdentityTransform,
   WatchableCoordinateSpaceTransform,
 } from "#src/coordinate_transform.js";
-import {
-  type SkeletonFindPathEndpoint,
-  SkeletonFindPathState,
-} from "#src/skeleton/find_path/find_path.js";
+import type { SkeletonFindPathEndpoint } from "#src/skeleton/find_path/find_path.js";
+import { SkeletonFindPathState } from "#src/skeleton/find_path/find_path.js";
 import {
   SpatialSkeletonFindPathAnnotations,
   SPATIAL_SKELETON_FIND_PATH_RESULT_DESCRIPTION,

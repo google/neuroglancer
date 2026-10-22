@@ -17,13 +17,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildSkeletonPreparationCues,
-  getSkeletonPreparationCuePrimitives,
+  buildPendingEditMarkers,
+  getPendingEditMarkerPrimitives,
 } from "#src/skeleton/edit/pending_edit_markers.js";
 
-describe("buildSkeletonPreparationCues", () => {
+describe("buildPendingEditMarkers", () => {
   it("draws only explicitly known merge endpoints and their requested connector", () => {
-    const cues = buildSkeletonPreparationCues(
+    const cues = buildPendingEditMarkers(
       [
         {
           intentId: 1,
@@ -55,7 +55,7 @@ describe("buildSkeletonPreparationCues", () => {
   });
 
   it("omits relationships whose endpoint positions are unavailable", () => {
-    const cues = buildSkeletonPreparationCues(
+    const cues = buildPendingEditMarkers(
       [
         {
           intentId: 2,
@@ -83,7 +83,7 @@ describe("buildSkeletonPreparationCues", () => {
   });
 
   it("draws a known split edge when the live parent position is available", () => {
-    const cues = buildSkeletonPreparationCues(
+    const cues = buildPendingEditMarkers(
       [
         {
           intentId: 5,
@@ -115,7 +115,7 @@ describe("buildSkeletonPreparationCues", () => {
   });
 
   it("prefers a live node position to a captured fallback", () => {
-    const cues = buildSkeletonPreparationCues(
+    const cues = buildPendingEditMarkers(
       [
         {
           intentId: 3,
@@ -141,7 +141,7 @@ describe("buildSkeletonPreparationCues", () => {
   });
 
   it("renders restore as a truthful single-node marker", () => {
-    const cues = buildSkeletonPreparationCues(
+    const cues = buildPendingEditMarkers(
       [
         {
           intentId: 4,
@@ -169,7 +169,7 @@ describe("buildSkeletonPreparationCues", () => {
   });
 });
 
-describe("getSkeletonPreparationCuePrimitives", () => {
+describe("getPendingEditMarkerPrimitives", () => {
   const ring = { diameter: 10, borderWidth: 3 };
   const position = new Float32Array([1, 2, 3]);
 
@@ -185,7 +185,7 @@ describe("getSkeletonPreparationCuePrimitives", () => {
   }
 
   it("labels each queued edit's node with its kind: × delete, + restore, R reroot, S split, M merge", () => {
-    const primitives = getSkeletonPreparationCuePrimitives(
+    const primitives = getPendingEditMarkerPrimitives(
       (["delete", "restore", "reroot", "split", "merge"] as const).map(makeCue),
       ring,
       (modelPosition) => Float32Array.from(modelPosition),
@@ -199,7 +199,7 @@ describe("getSkeletonPreparationCuePrimitives", () => {
   });
 
   it("draws a queued edit's ring outside the node's selection ring", () => {
-    const [marker] = getSkeletonPreparationCuePrimitives(
+    const [marker] = getPendingEditMarkerPrimitives(
       [makeCue("delete")],
       ring,
       (modelPosition) => Float32Array.from(modelPosition),
@@ -212,7 +212,7 @@ describe("getSkeletonPreparationCuePrimitives", () => {
 
   it("omits a cue whose node has no position in the current view", () => {
     expect(
-      getSkeletonPreparationCuePrimitives(
+      getPendingEditMarkerPrimitives(
         [makeCue("delete")],
         ring,
         () => undefined,

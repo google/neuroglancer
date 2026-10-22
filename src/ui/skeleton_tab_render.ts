@@ -15,7 +15,7 @@
  */
 
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import type { SpatialSkeletonPendingEdit } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   getFlatListNodeIds,
   type SkeletonNavigationGraph,
@@ -202,7 +202,7 @@ export function getSkeletonNodeIdPresentation(
 }
 
 const PREPARATION_ACTION_LABELS: Record<
-  SpatialSkeletonPreparationIntent["kind"],
+  SpatialSkeletonPendingEdit["kind"],
   string
 > = {
   merge: "merge",
@@ -213,16 +213,14 @@ const PREPARATION_ACTION_LABELS: Record<
 };
 
 export interface SpatialSkeletonDetailsPreparationState {
-  readonly preparation: SpatialSkeletonPreparationIntent;
+  readonly preparation: SpatialSkeletonPendingEdit;
   readonly statusText: string;
   readonly detailText: string;
   readonly controlsDisabledReason: string;
   readonly laterEditCount: number;
 }
 
-function getPreparationStatusText(
-  preparation: SpatialSkeletonPreparationIntent,
-) {
+function getPreparationStatusText(preparation: SpatialSkeletonPendingEdit) {
   const action = PREPARATION_ACTION_LABELS[preparation.kind];
   switch (preparation.direction) {
     case "undo":
@@ -235,7 +233,7 @@ function getPreparationStatusText(
 }
 
 function getPreparationControlsDisabledReason(
-  preparation: SpatialSkeletonPreparationIntent,
+  preparation: SpatialSkeletonPendingEdit,
 ) {
   const action = PREPARATION_ACTION_LABELS[preparation.kind];
   return `Available after the exact ${action} preview finishes preparing.`;
@@ -243,24 +241,21 @@ function getPreparationControlsDisabledReason(
 
 // Status text names no segment ID, because IDs may be temporary during remapping.
 export function getSpatialSkeletonDetailsPreparationState(options: {
-  preparations: readonly SpatialSkeletonPreparationIntent[];
+  preparations: readonly SpatialSkeletonPendingEdit[];
   selectedSegmentId: bigint | undefined;
-  selectedLogicalSegmentStableId?: string;
+  selectedSegmentStableId?: string;
   hasExactTopology: boolean;
 }): SpatialSkeletonDetailsPreparationState | undefined {
-  const {
-    selectedSegmentId,
-    selectedLogicalSegmentStableId,
-    hasExactTopology,
-  } = options;
+  const { selectedSegmentId, selectedSegmentStableId, hasExactTopology } =
+    options;
   if (selectedSegmentId === undefined) return undefined;
   const overlapping = options.preparations
     .filter(
       (preparation) =>
         preparation.segmentIds.includes(selectedSegmentId) ||
-        (selectedLogicalSegmentStableId !== undefined &&
-          preparation.logicalSegmentHandles?.some(
-            (handle) => handle.stableId === selectedLogicalSegmentStableId,
+        (selectedSegmentStableId !== undefined &&
+          preparation.stableSegmentHandles?.some(
+            (handle) => handle.stableId === selectedSegmentStableId,
           )),
     )
     .sort((a, b) => a.sequence - b.sequence);

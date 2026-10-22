@@ -16,62 +16,59 @@
 
 import type { SkeletonVector } from "#src/skeleton/api.js";
 import type {
-  SpatialSkeletonLogicalHandleMappings,
-  SpatialSkeletonLogicalNodeHandle,
-  SpatialSkeletonLogicalSegmentHandle,
+  SpatialSkeletonStableIdHandles,
+  SpatialSkeletonStableNodeHandle,
+  SpatialSkeletonStableSegmentHandle,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
 
-export type SpatialSkeletonProjectionSelectionPin =
-  | "preserve"
-  | "pin"
-  | "unpin";
+export type SpatialSkeletonPreviewSelectionPin = "preserve" | "pin" | "unpin";
 
 /**
  * Datasource-neutral, non-authoritative presentation wishes attached to one
  * exact intent. Logical handles deliberately keep provisional and remapped
  * authority out of datasource UI code.
  */
-export interface SpatialSkeletonProjectionUiHints {
+export interface SpatialSkeletonPreviewUiHints {
   readonly segmentMembershipRemaps?: readonly {
-    readonly from: SpatialSkeletonLogicalSegmentHandle;
-    readonly to: SpatialSkeletonLogicalSegmentHandle;
+    readonly from: SpatialSkeletonStableSegmentHandle;
+    readonly to: SpatialSkeletonStableSegmentHandle;
   }[];
   readonly segmentVisibility?: readonly {
-    readonly segment: SpatialSkeletonLogicalSegmentHandle;
+    readonly segment: SpatialSkeletonStableSegmentHandle;
     readonly visible: boolean;
     readonly deselect?: boolean;
-    readonly select?: SpatialSkeletonProjectionSelectionPin;
+    readonly select?: SpatialSkeletonPreviewSelectionPin;
   }[];
   readonly selectedNode?:
     | {
         readonly kind: "select";
-        readonly node: SpatialSkeletonLogicalNodeHandle;
-        readonly segment?: SpatialSkeletonLogicalSegmentHandle;
+        readonly node: SpatialSkeletonStableNodeHandle;
+        readonly segment?: SpatialSkeletonStableSegmentHandle;
         readonly position?: SkeletonVector;
-        readonly pin?: SpatialSkeletonProjectionSelectionPin;
+        readonly pin?: SpatialSkeletonPreviewSelectionPin;
         readonly moveView?: boolean;
       }
     | {
         /** Refreshes its segment/position only if this node is still selected. */
         readonly kind: "refresh-if-selected";
-        readonly node: SpatialSkeletonLogicalNodeHandle;
-        readonly segment?: SpatialSkeletonLogicalSegmentHandle;
+        readonly node: SpatialSkeletonStableNodeHandle;
+        readonly segment?: SpatialSkeletonStableSegmentHandle;
         readonly position?: SkeletonVector;
       }
     | { readonly kind: "clear" };
   /** Keeps edited complete snapshots available independently of visibility. */
-  readonly retainSegments?: readonly SpatialSkeletonLogicalSegmentHandle[];
+  readonly retainSegments?: readonly SpatialSkeletonStableSegmentHandle[];
 }
 
 /** Fully-resolved single call made after the skeleton model was adopted. */
-export interface SpatialSkeletonResolvedProjectionUiHints {
+export interface SpatialSkeletonResolvedPreviewUiHints {
   readonly nodeIdRemappings: ReadonlyMap<bigint, bigint>;
   readonly segmentIdRemappings: ReadonlyMap<bigint, bigint>;
   readonly segmentVisibility: readonly {
     readonly segmentId: bigint;
     readonly visible: boolean;
     readonly deselect: boolean;
-    readonly select?: SpatialSkeletonProjectionSelectionPin;
+    readonly select?: SpatialSkeletonPreviewSelectionPin;
   }[];
   readonly selectedNode?:
     | {
@@ -79,7 +76,7 @@ export interface SpatialSkeletonResolvedProjectionUiHints {
         readonly nodeId: bigint;
         readonly segmentId?: bigint;
         readonly position?: SkeletonVector;
-        readonly pin: SpatialSkeletonProjectionSelectionPin;
+        readonly pin: SpatialSkeletonPreviewSelectionPin;
         readonly moveView: boolean;
       }
     | { readonly kind: "clear" };
@@ -87,13 +84,13 @@ export interface SpatialSkeletonResolvedProjectionUiHints {
 }
 
 /** Layer-owned adapter for best-effort selection and visibility effects. */
-export interface SpatialSkeletonProjectionUiHintPort {
-  apply(hints: SpatialSkeletonResolvedProjectionUiHints): void;
+export interface SpatialSkeletonPreviewUiHintPort {
+  apply(hints: SpatialSkeletonResolvedPreviewUiHints): void;
 }
 
-export function cloneSpatialSkeletonProjectionUiHints(
-  hints: SpatialSkeletonProjectionUiHints | undefined,
-): SpatialSkeletonProjectionUiHints | undefined {
+export function cloneSpatialSkeletonPreviewUiHints(
+  hints: SpatialSkeletonPreviewUiHints | undefined,
+): SpatialSkeletonPreviewUiHints | undefined {
   if (hints === undefined) return undefined;
   const segmentMembershipRemaps = hints.segmentMembershipRemaps?.map(
     ({ from, to }) =>
@@ -150,14 +147,14 @@ export function cloneSpatialSkeletonProjectionUiHints(
   });
 }
 
-export function mergeSpatialSkeletonProjectionUiHints(
-  hints: readonly (SpatialSkeletonProjectionUiHints | undefined)[],
-): SpatialSkeletonProjectionUiHints | undefined {
+export function mergeSpatialSkeletonPreviewUiHints(
+  hints: readonly (SpatialSkeletonPreviewUiHints | undefined)[],
+): SpatialSkeletonPreviewUiHints | undefined {
   const present = hints.filter(
-    (value): value is SpatialSkeletonProjectionUiHints => value !== undefined,
+    (value): value is SpatialSkeletonPreviewUiHints => value !== undefined,
   );
   if (present.length === 0) return undefined;
-  return cloneSpatialSkeletonProjectionUiHints({
+  return cloneSpatialSkeletonPreviewUiHints({
     segmentMembershipRemaps: present.flatMap(
       (value) => value.segmentMembershipRemaps ?? [],
     ),
@@ -171,14 +168,11 @@ export function mergeSpatialSkeletonProjectionUiHints(
   });
 }
 
-interface SpatialSkeletonProjectionUiHintApplicationOptions {
-  readonly port: SpatialSkeletonProjectionUiHintPort | undefined;
-  readonly hints: SpatialSkeletonProjectionUiHints | undefined;
-  readonly mappings: SpatialSkeletonLogicalHandleMappings<bigint, bigint>;
-  readonly fallbackMappings?: SpatialSkeletonLogicalHandleMappings<
-    bigint,
-    bigint
-  >;
+interface SpatialSkeletonPreviewUiHintApplicationOptions {
+  readonly port: SpatialSkeletonPreviewUiHintPort | undefined;
+  readonly hints: SpatialSkeletonPreviewUiHints | undefined;
+  readonly mappings: SpatialSkeletonStableIdHandles<bigint, bigint>;
+  readonly fallbackMappings?: SpatialSkeletonStableIdHandles<bigint, bigint>;
   readonly nodeIdRemappings?: ReadonlyMap<bigint, bigint>;
   readonly segmentIdRemappings?: ReadonlyMap<bigint, bigint>;
   readonly createResolutionError: (
@@ -188,11 +182,11 @@ interface SpatialSkeletonProjectionUiHintApplicationOptions {
   readonly reportError: (error: unknown) => void;
 }
 
-function resolveSpatialSkeletonProjectionUiHints(
-  options: SpatialSkeletonProjectionUiHintApplicationOptions,
-): SpatialSkeletonResolvedProjectionUiHints {
+function resolveSpatialSkeletonPreviewUiHints(
+  options: SpatialSkeletonPreviewUiHintApplicationOptions,
+): SpatialSkeletonResolvedPreviewUiHints {
   const { hints, mappings, fallbackMappings } = options;
-  const resolveNode = (handle: SpatialSkeletonLogicalNodeHandle) => {
+  const resolveNode = (handle: SpatialSkeletonStableNodeHandle) => {
     const nodeId =
       mappings.resolveNode(handle) ?? fallbackMappings?.resolveNode(handle);
     if (nodeId === undefined) {
@@ -200,7 +194,7 @@ function resolveSpatialSkeletonProjectionUiHints(
     }
     return nodeId;
   };
-  const resolveSegment = (handle: SpatialSkeletonLogicalSegmentHandle) => {
+  const resolveSegment = (handle: SpatialSkeletonStableSegmentHandle) => {
     const segmentId =
       mappings.resolveSegment(handle) ??
       fallbackMappings?.resolveSegment(handle);
@@ -267,8 +261,8 @@ function resolveSpatialSkeletonProjectionUiHints(
 }
 
 /** Resolves and applies non-authoritative UI wishes after core adoption. */
-export function applySpatialSkeletonProjectionUiHintsAfterAdoption(
-  options: SpatialSkeletonProjectionUiHintApplicationOptions,
+export function applySpatialSkeletonPreviewUiHintsAfterAdoption(
+  options: SpatialSkeletonPreviewUiHintApplicationOptions,
 ) {
   if (
     options.port === undefined ||
@@ -279,7 +273,7 @@ export function applySpatialSkeletonProjectionUiHintsAfterAdoption(
     return;
   }
   try {
-    options.port.apply(resolveSpatialSkeletonProjectionUiHints(options));
+    options.port.apply(resolveSpatialSkeletonPreviewUiHints(options));
   } catch (error) {
     options.reportError(error);
   }

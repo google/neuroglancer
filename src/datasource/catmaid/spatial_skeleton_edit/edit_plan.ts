@@ -5,11 +5,11 @@
  */
 
 import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
-import type { CompleteSkeletonSnapshotHandle } from "#src/skeleton/edit_queue/complete_skeleton.js";
-import type { SpatialSkeletonProjectionNodeAttributes } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
+import type { CompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
+import type { SpatialSkeletonEditNodeAttributes } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
 import type {
-  SpatialSkeletonLogicalNodeHandle,
-  SpatialSkeletonLogicalSegmentHandle,
+  SpatialSkeletonStableNodeHandle,
+  SpatialSkeletonStableSegmentHandle,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import {
   getSkeletonNodeConfidence,
@@ -18,16 +18,16 @@ import {
 } from "#src/skeleton/node_attributes.js";
 
 export interface CatmaidCapturedSegment {
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
+  readonly segment: SpatialSkeletonStableSegmentHandle;
   readonly physicalId: bigint;
-  readonly snapshot: CompleteSkeletonSnapshotHandle;
+  readonly snapshot: CompleteSkeleton;
   readonly cacheRevision: number;
 }
 
 /** A logical node together with the physical ID captured for its recipe. */
-export interface CatmaidRetainedNode extends SpatialSkeletonLogicalNodeHandle {
+export interface CatmaidRetainedNode extends SpatialSkeletonStableNodeHandle {
   readonly capturedNodeId: bigint;
-  readonly handle: SpatialSkeletonLogicalNodeHandle;
+  readonly handle: SpatialSkeletonStableNodeHandle;
 }
 
 export interface CatmaidSemanticBase {
@@ -37,11 +37,11 @@ export interface CatmaidSemanticBase {
 
 export interface CatmaidCreatedNodeSemantic extends CatmaidSemanticBase {
   readonly kind: "add-node";
-  readonly node: SpatialSkeletonLogicalNodeHandle;
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
+  readonly node: SpatialSkeletonStableNodeHandle;
+  readonly segment: SpatialSkeletonStableSegmentHandle;
   readonly parent: CatmaidRetainedNode | undefined;
   readonly position: SkeletonVector;
-  readonly attributes: SpatialSkeletonProjectionNodeAttributes;
+  readonly attributes: SpatialSkeletonEditNodeAttributes;
   readonly createsSegment: boolean;
   readonly children?: readonly CatmaidRetainedNode[];
 }
@@ -49,7 +49,7 @@ export interface CatmaidCreatedNodeSemantic extends CatmaidSemanticBase {
 export interface CatmaidDeleteNodeSemantic extends CatmaidSemanticBase {
   readonly kind: "delete-node";
   readonly node: CatmaidRetainedNode;
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
+  readonly segment: SpatialSkeletonStableSegmentHandle;
   readonly parent: CatmaidRetainedNode | undefined;
   readonly children: readonly CatmaidRetainedNode[];
   readonly deletedSnapshot: SkeletonNode;
@@ -59,7 +59,7 @@ export interface CatmaidDeleteNodeSemantic extends CatmaidSemanticBase {
 export interface CatmaidMoveNodeSemantic extends CatmaidSemanticBase {
   readonly kind: "move-node";
   readonly node: CatmaidRetainedNode;
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
+  readonly segment: SpatialSkeletonStableSegmentHandle;
   readonly before: SkeletonVector;
   readonly after: SkeletonVector;
 }
@@ -67,7 +67,7 @@ export interface CatmaidMoveNodeSemantic extends CatmaidSemanticBase {
 export interface CatmaidAttributeSemantic extends CatmaidSemanticBase {
   readonly kind: "description" | "true-end" | "radius" | "confidence";
   readonly node: CatmaidRetainedNode;
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
+  readonly segment: SpatialSkeletonStableSegmentHandle;
   readonly nodeSnapshot: SkeletonNode;
   readonly before: string | boolean | number | undefined;
   readonly after: string | boolean | number | undefined;
@@ -78,27 +78,27 @@ export interface CatmaidRerootSemantic extends CatmaidSemanticBase {
   readonly node: CatmaidRetainedNode;
   readonly originalRoot: CatmaidRetainedNode;
   readonly originalRootConfidence: number | undefined;
-  readonly segment: SpatialSkeletonLogicalSegmentHandle;
+  readonly segment: SpatialSkeletonStableSegmentHandle;
 }
 
 export interface CatmaidSplitSemantic extends CatmaidSemanticBase {
   readonly kind: "split";
-  readonly sourceSegment: SpatialSkeletonLogicalSegmentHandle;
-  readonly downstreamSegment: SpatialSkeletonLogicalSegmentHandle;
+  readonly sourceSegment: SpatialSkeletonStableSegmentHandle;
+  readonly downstreamSegment: SpatialSkeletonStableSegmentHandle;
   readonly node: CatmaidRetainedNode;
   readonly formerParent: CatmaidRetainedNode;
 }
 
 export interface CatmaidMergeSemantic extends CatmaidSemanticBase {
   readonly kind: "merge";
-  readonly firstSegment: SpatialSkeletonLogicalSegmentHandle;
-  readonly secondSegment: SpatialSkeletonLogicalSegmentHandle;
+  readonly firstSegment: SpatialSkeletonStableSegmentHandle;
+  readonly secondSegment: SpatialSkeletonStableSegmentHandle;
   /**
    * The merged workspace output is a distinct logical resource. In
    * particular, Undo must be able to use this as the merged input while
    * restoring both original segment handles as outputs.
    */
-  readonly mergedSegment: SpatialSkeletonLogicalSegmentHandle;
+  readonly mergedSegment: SpatialSkeletonStableSegmentHandle;
   readonly firstNode: CatmaidRetainedNode;
   readonly secondNode: CatmaidRetainedNode;
   readonly originalRoot: CatmaidRetainedNode;
@@ -106,7 +106,7 @@ export interface CatmaidMergeSemantic extends CatmaidSemanticBase {
   readonly inverseOrientation: "second-from-first" | "first-from-second";
 }
 
-export type CatmaidSemanticRecipe =
+export type CatmaidCapturedEdit =
   | CatmaidCreatedNodeSemantic
   | CatmaidDeleteNodeSemantic
   | CatmaidMoveNodeSemantic
@@ -115,10 +115,10 @@ export type CatmaidSemanticRecipe =
   | CatmaidSplitSemantic
   | CatmaidMergeSemantic;
 
-export type CatmaidWorkflowStep =
+export type CatmaidEditPlanStep =
   | {
       readonly kind: "restore-confidence";
-      readonly node: SpatialSkeletonLogicalNodeHandle;
+      readonly node: SpatialSkeletonStableNodeHandle;
       readonly confidence: number;
     }
   | {
@@ -167,8 +167,8 @@ export type CatmaidWorkflowStep =
  * Immutable CATMAID recipe retained by the generic engine. Physical attempts,
  * results, cursors, leases, and lifecycle are all canonical engine state.
  */
-type CatmaidWorkflowFor<TSemantic extends CatmaidSemanticRecipe> =
-  TSemantic extends CatmaidSemanticRecipe
+type CatmaidEditPlanFor<TSemantic extends CatmaidCapturedEdit> =
+  TSemantic extends CatmaidCapturedEdit
     ? Readonly<{
         kind: TSemantic["kind"];
         direction: "forward" | "inverse";
@@ -176,8 +176,8 @@ type CatmaidWorkflowFor<TSemantic extends CatmaidSemanticRecipe> =
       }>
     : never;
 
-/** Discriminated immutable CATMAID workflow recipe. */
-export type CatmaidWorkflow = CatmaidWorkflowFor<CatmaidSemanticRecipe>;
+/** Discriminated immutable CATMAID plan recipe. */
+export type CatmaidEditPlan = CatmaidEditPlanFor<CatmaidCapturedEdit>;
 
 export function requirePositiveId(value: bigint | undefined, label: string) {
   if (value === undefined || value === 0n) {
@@ -187,7 +187,7 @@ export function requirePositiveId(value: bigint | undefined, label: string) {
 }
 
 function getRestoreSteps(semantic: CatmaidDeleteNodeSemantic) {
-  const result: CatmaidWorkflowStep[] = [
+  const result: CatmaidEditPlanStep[] = [
     {
       kind: semantic.children.length === 0 ? "add-node" : "insert-node",
       semantic,
@@ -215,8 +215,8 @@ function getRestoreSteps(semantic: CatmaidDeleteNodeSemantic) {
 function getRerootSteps(
   semantic: CatmaidRerootSemantic | CatmaidMergeSemantic,
   direction: "forward" | "inverse",
-): readonly CatmaidWorkflowStep[] {
-  const steps: CatmaidWorkflowStep[] = [{ kind: "reroot", semantic }];
+): readonly CatmaidEditPlanStep[] {
+  const steps: CatmaidEditPlanStep[] = [{ kind: "reroot", semantic }];
   if (direction === "inverse") {
     const root = semantic.originalRoot;
     const confidence = semantic.originalRootConfidence;
@@ -228,9 +228,9 @@ function getRerootSteps(
 }
 
 export function makeSteps(
-  semantic: CatmaidSemanticRecipe,
+  semantic: CatmaidCapturedEdit,
   direction: "forward" | "inverse",
-): readonly CatmaidWorkflowStep[] {
+): readonly CatmaidEditPlanStep[] {
   switch (semantic.kind) {
     case "add-node":
       return Object.freeze([

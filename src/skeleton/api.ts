@@ -28,7 +28,7 @@ import type {
   SpatialSkeletonRerootCommandFactory,
   SpatialSkeletonSplitSkeletonsCommandFactory,
 } from "#src/skeleton/edit_commands.js";
-import type { SpatialSkeletonOptimisticEditingProvider } from "#src/skeleton/edit_queue/api.js";
+import type { SpatialSkeletonEditPlannerProvider } from "#src/skeleton/edit_queue/api.js";
 
 // One number per dimension of the model space, in its units, such as a position or a chunk size.
 export type SkeletonVector = ArrayLike<number>;
@@ -117,7 +117,7 @@ export interface SkeletonSpatialIndexSource {
 }
 
 export interface EditableSkeletonSource extends SkeletonFragmentSource {
-  readonly optimisticEditing: SpatialSkeletonOptimisticEditingProvider;
+  readonly editPlannerProvider: SpatialSkeletonEditPlannerProvider;
   readonly addNodesCommand: SpatialSkeletonAddNodesCommandFactory;
   readonly moveNodesCommand: SpatialSkeletonMoveNodesCommandFactory;
   readonly deleteNodesCommand: SpatialSkeletonDeleteNodesCommandFactory;

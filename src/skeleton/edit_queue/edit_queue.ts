@@ -16,28 +16,28 @@
 
 import type {
   SpatialSkeletonIntentDescription,
-  SpatialSkeletonLogicalIntent,
-  SpatialSkeletonMutationOutcome,
-  SpatialSkeletonProjectionIntentArtifact,
-  SpatialSkeletonIntentDriver,
-  SpatialSkeletonOptimisticHistoryPort,
-  SpatialSkeletonOptimisticPreparationPort,
-  SpatialSkeletonOptimisticProjectionPort,
-  SpatialSkeletonProjectionHistoryRecipe,
+  SpatialSkeletonIntentPlan,
+  SpatialSkeletonEditRequestOutcome,
+  SpatialSkeletonPreviewIntentArtifact,
+  SpatialSkeletonEditPlanner,
+  SpatialSkeletonHistoryPort,
+  SpatialSkeletonPendingEditPort,
+  SpatialSkeletonPreviewPort,
+  SpatialSkeletonPreviewHistoryRecipe,
 } from "#src/skeleton/edit_queue/api.js";
 import {
   SpatialSkeletonInspectionRequiredError,
-  SpatialSkeletonOptimisticQueueCapacityError,
+  SpatialSkeletonEditQueueCapacityError,
 } from "#src/skeleton/edit_queue/edit_errors.js";
-import {
-  SpatialSkeletonIntentJournal,
-  type SpatialSkeletonIntentKind,
-  type SpatialSkeletonCommittedMutationAttempt,
-  type SpatialSkeletonIntentRecord,
+import type {
+  SpatialSkeletonIntentKind,
+  SpatialSkeletonCommittedEditRequestAttempt,
+  SpatialSkeletonIntentRecord,
 } from "#src/skeleton/edit_queue/edit_intent_journal.js";
+import { SpatialSkeletonIntentJournal } from "#src/skeleton/edit_queue/edit_intent_journal.js";
 import {
-  projectSpatialSkeletonOptimisticQueueSnapshot,
-  projectSpatialSkeletonOptimisticRecentActivity,
+  buildSpatialSkeletonEditQueueRows,
+  buildSpatialSkeletonEditRecentActivity,
 } from "#src/skeleton/edit_queue/edit_queue_rows.js";
 import type {
   SpatialSkeletonPreparedQueueInput,
@@ -45,80 +45,77 @@ import type {
   SpatialSkeletonQueueInputPreparation,
 } from "#src/skeleton/edit_queue/queue_input.js";
 import type {
-  SpatialSkeletonMutationAttemptSettlement,
-  SpatialSkeletonMutationAttemptScheduler,
-  SpatialSkeletonMutationAttemptSubmission,
-  SpatialSkeletonMutationAuthorityLease,
+  SpatialSkeletonEditRequestAttemptSettlement,
+  SpatialSkeletonRequestScheduler,
+  SpatialSkeletonEditRequestAttemptSubmission,
+  SpatialSkeletonEditRequestLease,
 } from "#src/skeleton/edit_queue/request_scheduler.js";
-import { spatialSkeletonLogicalSegment } from "#src/skeleton/edit_queue/stable_id_handles.js";
+import { spatialSkeletonStableSegment } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import type {
-  SpatialSkeletonOptimisticEditExecution,
-  SpatialSkeletonOptimisticEditQueue,
-  SpatialSkeletonOptimisticEditSettlement,
-  SpatialSkeletonOptimisticFatalState,
-  SpatialSkeletonOptimisticAuthorityPresentation,
-  SpatialSkeletonOptimisticFatalStatePort,
+  SpatialSkeletonEditExecution,
+  SpatialSkeletonSessionEditQueue,
+  SpatialSkeletonEditSettlement,
+  SpatialSkeletonReloadRequiredDetails,
+  SpatialSkeletonAuthorityLabels,
+  SpatialSkeletonReloadRequiredPort,
 } from "#src/skeleton/edit_queue/types.js";
 import {
-  committedSpatialSkeletonOptimisticEditSettlement,
-  freezeSpatialSkeletonOptimisticFatalState,
-  SpatialSkeletonOptimisticReloadRequiredError,
-  unchangedSpatialSkeletonOptimisticEditSettlement,
+  committedSpatialSkeletonEditSettlement,
+  freezeSpatialSkeletonReloadRequiredDetails,
+  SpatialSkeletonReloadRequiredError,
+  unchangedSpatialSkeletonEditSettlement,
 } from "#src/skeleton/edit_queue/types.js";
 import { NullarySignal } from "#src/util/signal.js";
 
-export interface SpatialSkeletonOptimisticEngineHistoryOptions<
+export interface SpatialSkeletonEditQueueHistoryOptions<
   TInput,
   THistoryTicket,
-  TWorkflow,
-  TProjection,
-  TMutation,
+  TPlan,
+  TPreview,
+  TEditRequest,
   TResult,
   TReconciliation,
-  TInverseProjection,
+  TInversePreview,
 > {
-  readonly journal: EngineIntentJournal<
+  readonly journal: QueueIntentJournal<
     TInput,
-    TWorkflow,
+    TPlan,
     THistoryTicket,
-    TProjection,
-    TInverseProjection,
-    TMutation,
+    TPreview,
+    TInversePreview,
+    TEditRequest,
     TResult
   >;
-  readonly runtimes: Map<number, EngineIntentRuntime<TResult>>;
-  readonly history: SpatialSkeletonOptimisticHistoryPort<
-    TInput,
-    THistoryTicket
-  >;
-  readonly projection: SpatialSkeletonOptimisticProjectionPort<
-    TProjection,
+  readonly runtimes: Map<number, QueueIntentRuntime<TResult>>;
+  readonly history: SpatialSkeletonHistoryPort<TInput, THistoryTicket>;
+  readonly preview: SpatialSkeletonPreviewPort<
+    TPreview,
     TReconciliation,
-    TInverseProjection
+    TInversePreview
   >;
 }
 
 /** Read-only recipe and retention queries over canonical engine state. */
-class SpatialSkeletonOptimisticEngineHistory<
+class SpatialSkeletonEditQueueHistory<
   TInput,
   THistoryTicket,
-  TWorkflow,
-  TProjection,
-  TMutation,
+  TPlan,
+  TPreview,
+  TEditRequest,
   TResult,
   TReconciliation,
-  TInverseProjection,
+  TInversePreview,
 > {
   constructor(
-    private readonly options: SpatialSkeletonOptimisticEngineHistoryOptions<
+    private readonly options: SpatialSkeletonEditQueueHistoryOptions<
       TInput,
       THistoryTicket,
-      TWorkflow,
-      TProjection,
-      TMutation,
+      TPlan,
+      TPreview,
+      TEditRequest,
       TResult,
       TReconciliation,
-      TInverseProjection
+      TInversePreview
     >,
   ) {}
 
@@ -144,8 +141,8 @@ class SpatialSkeletonOptimisticEngineHistory<
     return undefined;
   }
 
-  getProjectedQueuedOppositeTarget(intent: "undo" | "redo") {
-    const historyEntryId = this.options.history.getProjectedEntryId(intent);
+  getPreviewedQueuedOppositeTarget(intent: "undo" | "redo") {
+    const historyEntryId = this.options.history.getPreviewedEntryId(intent);
     if (historyEntryId === undefined) return undefined;
     return this.options.journal
       .getEntries({ includeTerminal: false })
@@ -179,37 +176,31 @@ class SpatialSkeletonOptimisticEngineHistory<
           entry.sequence !== excludeIntentId &&
           entry.lifecycle.preview === "exact",
       )
-      .flatMap((entry) => this.getProjectionArtifact(entry.sequence));
+      .flatMap((entry) => this.getPreviewArtifact(entry.sequence));
   }
 
-  getProjectionArtifacts(intentIds: readonly number[]) {
-    return intentIds.flatMap((intentId) =>
-      this.getProjectionArtifact(intentId),
-    );
+  getPreviewArtifacts(intentIds: readonly number[]) {
+    return intentIds.flatMap((intentId) => this.getPreviewArtifact(intentId));
   }
 
-  private getProjectionArtifact(
+  private getPreviewArtifact(
     intentId: number,
-  ): readonly SpatialSkeletonProjectionIntentArtifact<
-    TProjection,
-    TInverseProjection
+  ): readonly SpatialSkeletonPreviewIntentArtifact<
+    TPreview,
+    TInversePreview
   >[] {
     const entry = this.options.journal.get(intentId);
-    const projection = entry?.requestedResult.value;
-    const inverseProjection = entry?.inverseDelta.value;
-    return projection === undefined || inverseProjection === undefined
+    const preview = entry?.requestedResult.value;
+    const inversePreview = entry?.inverseDelta.value;
+    return preview === undefined || inversePreview === undefined
       ? []
-      : [{ intentId, projection, inverseProjection }];
+      : [{ intentId, preview, inversePreview }];
   }
 
   getHistoryRecipeByEntryId(
     historyEntryId: string | number,
   ):
-    | SpatialSkeletonProjectionHistoryRecipe<
-        TWorkflow,
-        TProjection,
-        TInverseProjection
-      >
+    | SpatialSkeletonPreviewHistoryRecipe<TPlan, TPreview, TInversePreview>
     | undefined {
     const candidates = this.options.journal
       .getEntries()
@@ -246,43 +237,40 @@ class SpatialSkeletonOptimisticEngineHistory<
 
   private createHistoryRecipe(
     entry:
-      | EngineIntentRecord<
+      | QueueIntentRecord<
           TInput,
-          TWorkflow,
+          TPlan,
           THistoryTicket,
-          TProjection,
-          TInverseProjection,
-          TMutation,
+          TPreview,
+          TInversePreview,
+          TEditRequest,
           TResult
         >
       | undefined,
   ) {
-    const projection = entry?.requestedResult.value;
+    const preview = entry?.requestedResult.value;
     return entry === undefined ||
-      projection === undefined ||
-      entry.metadata.workflow === undefined
+      preview === undefined ||
+      entry.metadata.plan === undefined
       ? undefined
       : {
-          workflow: entry.metadata.workflow,
-          projection,
-          inverseProjection: entry.inverseDelta.value,
+          plan: entry.metadata.plan,
+          preview,
+          inversePreview: entry.inverseDelta.value,
         };
   }
 
   refreshCanonicalRecipeFromRedo(
-    redoEntry: EngineIntentRecord<
+    redoEntry: QueueIntentRecord<
       TInput,
-      TWorkflow,
+      TPlan,
       THistoryTicket,
-      TProjection,
-      TInverseProjection,
-      TMutation,
+      TPreview,
+      TInversePreview,
+      TEditRequest,
       TResult
     >,
-    artifact: SpatialSkeletonProjectionIntentArtifact<
-      TProjection,
-      TInverseProjection
-    >,
+    artifact: SpatialSkeletonPreviewIntentArtifact<TPreview, TInversePreview>,
   ) {
     if (redoEntry.kind !== "redo") return;
     const canonical = this.options.journal
@@ -298,11 +286,11 @@ class SpatialSkeletonOptimisticEngineHistory<
       );
     }
     this.options.journal.refreshRetainedRecord(canonical.sequence, {
-      requestedResult: { value: artifact.projection },
-      inverseDelta: { value: artifact.inverseProjection },
+      requestedResult: { value: artifact.preview },
+      inverseDelta: { value: artifact.inversePreview },
       metadata: {
         ...canonical.metadata,
-        workflow: redoEntry.metadata.workflow,
+        plan: redoEntry.metadata.plan,
       },
     });
   }
@@ -311,7 +299,7 @@ class SpatialSkeletonOptimisticEngineHistory<
     const retainedEntryIds = new Set(
       this.options.history.getRetainedEntryIds(),
     );
-    const projections = this.options.journal
+    const previews = this.options.journal
       .getEntries()
       .filter(
         (entry) =>
@@ -319,10 +307,10 @@ class SpatialSkeletonOptimisticEngineHistory<
           retainedEntryIds.has(entry.metadata.historyEntryId),
       )
       .flatMap((entry) => {
-        const projection = entry.requestedResult.value;
-        return projection === undefined ? [] : [projection];
+        const preview = entry.requestedResult.value;
+        return preview === undefined ? [] : [preview];
       });
-    this.options.projection.setRetainedHistoryProjections(projections);
+    this.options.preview.setRetainedHistoryPreviews(previews);
   }
 
   compactTerminalState() {
@@ -381,139 +369,131 @@ function createPromiseResolver<T>(): PromiseResolver<T> {
   };
 }
 
-export class SpatialSkeletonOptimisticQueueEngineDisposedError extends Error {
+export class SpatialSkeletonEditQueueDisposedError extends Error {
   constructor() {
     super("The optimistic queue was disposed before the intent settled.");
-    this.name = "SpatialSkeletonOptimisticQueueEngineDisposedError";
+    this.name = "SpatialSkeletonEditQueueDisposedError";
   }
 }
 
-export interface SpatialSkeletonOptimisticQueueEngineOptions<
+export interface SpatialSkeletonEditQueueOptions<
   TInput,
   THistoryTicket,
-  TWorkflow,
-  TProjection,
-  TMutation,
+  TPlan,
+  TPreview,
+  TEditRequest,
   TResult,
   TReconciliation,
-  TInverseProjection = TProjection,
+  TInversePreview = TPreview,
 > {
-  readonly driver: SpatialSkeletonIntentDriver<
+  readonly planner: SpatialSkeletonEditPlanner<
     TInput,
-    TWorkflow,
-    TProjection,
-    TMutation,
+    TPlan,
+    TPreview,
+    TEditRequest,
     TResult,
     TReconciliation,
-    TInverseProjection
+    TInversePreview
   >;
-  readonly projection: SpatialSkeletonOptimisticProjectionPort<
-    TProjection,
+  readonly preview: SpatialSkeletonPreviewPort<
+    TPreview,
     TReconciliation,
-    TInverseProjection
+    TInversePreview
   >;
-  readonly history: SpatialSkeletonOptimisticHistoryPort<
-    TInput,
-    THistoryTicket
-  >;
-  readonly attempts: SpatialSkeletonMutationAttemptScheduler<
-    TMutation,
-    TResult
-  >;
-  readonly preparation?: SpatialSkeletonOptimisticPreparationPort;
-  /** Layer-scoped, first-write-wins fatal state owned by SpatialSkeletonState. */
-  readonly fatalState: SpatialSkeletonOptimisticFatalStatePort;
+  readonly history: SpatialSkeletonHistoryPort<TInput, THistoryTicket>;
+  readonly attempts: SpatialSkeletonRequestScheduler<TEditRequest, TResult>;
+  readonly pendingEdit?: SpatialSkeletonPendingEditPort;
+  /** Layer-scoped, first-write-wins Reload-required state owned by SpatialSkeletonEditSession. */
+  readonly reloadRequired: SpatialSkeletonReloadRequiredPort;
   readonly onListenerError?: (error: unknown) => void;
 }
 
-export interface ProjectionValue<T> {
+export interface PreviewValue<T> {
   value?: T;
 }
 
-export interface EngineMetadata<TInput, TWorkflow, THistoryTicket> {
+export interface QueueMetadata<TInput, TPlan, THistoryTicket> {
   readonly input: TInput;
-  readonly workflow?: TWorkflow;
+  readonly plan?: TPlan;
   readonly inputPreparation?: SpatialSkeletonQueueInputPreparation;
   readonly historyTicket: THistoryTicket;
   readonly historyEntryId: string | number;
   readonly kind: string;
   readonly commandLabel?: string;
-  readonly authorityPresentation?: SpatialSkeletonOptimisticAuthorityPresentation;
+  readonly authorityLabels?: SpatialSkeletonAuthorityLabels;
 }
 
-type EngineIntentRecord<
+type QueueIntentRecord<
   TInput,
-  TWorkflow,
+  TPlan,
   THistoryTicket,
-  TProjection,
-  TInverseProjection,
-  TMutation,
+  TPreview,
+  TInversePreview,
+  TEditRequest,
   TResult,
 > = SpatialSkeletonIntentRecord<
-  ProjectionValue<TProjection>,
-  ProjectionValue<TInverseProjection>,
-  EngineMetadata<TInput, TWorkflow, THistoryTicket>,
-  SpatialSkeletonCommittedMutationAttempt<TMutation, TResult>
+  PreviewValue<TPreview>,
+  PreviewValue<TInversePreview>,
+  QueueMetadata<TInput, TPlan, THistoryTicket>,
+  SpatialSkeletonCommittedEditRequestAttempt<TEditRequest, TResult>
 >;
 
-type EngineIntentJournal<
+type QueueIntentJournal<
   TInput,
-  TWorkflow,
+  TPlan,
   THistoryTicket,
-  TProjection,
-  TInverseProjection,
-  TMutation,
+  TPreview,
+  TInversePreview,
+  TEditRequest,
   TResult,
 > = SpatialSkeletonIntentJournal<
   string | number,
-  ProjectionValue<TProjection>,
-  ProjectionValue<TInverseProjection>,
-  EngineMetadata<TInput, TWorkflow, THistoryTicket>,
-  SpatialSkeletonCommittedMutationAttempt<TMutation, TResult>
+  PreviewValue<TPreview>,
+  PreviewValue<TInversePreview>,
+  QueueMetadata<TInput, TPlan, THistoryTicket>,
+  SpatialSkeletonCommittedEditRequestAttempt<TEditRequest, TResult>
 >;
 
 /**
- * The only non-canonical per-intent runtime state. Semantic workflow state,
+ * The only non-canonical per-intent runtime state. Semantic plan state,
  * lifecycle, attempts, dependencies, and history identity live in the journal.
  */
-interface EngineIntentRuntime<TResult> {
+interface QueueIntentRuntime<TResult> {
   readonly exact: PromiseResolver<boolean>;
-  readonly settled: PromiseResolver<
-    SpatialSkeletonOptimisticEditSettlement<TResult>
-  >;
+  readonly settled: PromiseResolver<SpatialSkeletonEditSettlement<TResult>>;
   inputAbortController?: AbortController;
   releaseAdmissionInputs?: () => void;
-  lease?: SpatialSkeletonMutationAuthorityLease;
-  submission?: SpatialSkeletonMutationAttemptSubmission<TResult>;
+  lease?: SpatialSkeletonEditRequestLease;
+  submission?: SpatialSkeletonEditRequestAttemptSubmission<TResult>;
 }
 
 function createSpatialSkeletonNoOpExecution<TResult>(value: boolean) {
-  const promise = Promise.resolve(
-    value,
-  ) as SpatialSkeletonOptimisticEditExecution<boolean, TResult>;
+  const promise = Promise.resolve(value) as SpatialSkeletonEditExecution<
+    boolean,
+    TResult
+  >;
   Object.defineProperties(promise, {
     acceptedByQueue: { value: Promise.resolve() },
     settled: {
-      value: Promise.resolve(
-        unchangedSpatialSkeletonOptimisticEditSettlement("no-op"),
-      ),
+      value: Promise.resolve(unchangedSpatialSkeletonEditSettlement("no-op")),
     },
   });
   return promise;
 }
 
 function createSpatialSkeletonReloadRequiredExecution<TResult>(
-  fatalState: SpatialSkeletonOptimisticFatalState,
+  reloadRequired: SpatialSkeletonReloadRequiredDetails,
 ) {
-  const error = new SpatialSkeletonOptimisticReloadRequiredError(fatalState);
-  const promise = Promise.reject(
-    error,
-  ) as SpatialSkeletonOptimisticEditExecution<boolean, TResult>;
+  const error = new SpatialSkeletonReloadRequiredError(reloadRequired);
+  const promise = Promise.reject(error) as SpatialSkeletonEditExecution<
+    boolean,
+    TResult
+  >;
   Object.defineProperties(promise, {
     acceptedByQueue: { value: Promise.reject(error) },
     settled: {
       value: Promise.resolve(
-        unchangedSpatialSkeletonOptimisticEditSettlement("not-started", error),
+        unchangedSpatialSkeletonEditSettlement("not-started", error),
       ),
     },
   });
@@ -524,10 +504,12 @@ function createSpatialSkeletonReloadRequiredExecution<TResult>(
 }
 
 function createSpatialSkeletonExecution<TResult>(
-  runtime: EngineIntentRuntime<TResult>,
+  runtime: QueueIntentRuntime<TResult>,
 ) {
-  const execution = runtime.exact
-    .promise as SpatialSkeletonOptimisticEditExecution<boolean, TResult>;
+  const execution = runtime.exact.promise as SpatialSkeletonEditExecution<
+    boolean,
+    TResult
+  >;
   Object.defineProperties(execution, {
     acceptedByQueue: { value: Promise.resolve() },
     settled: { value: runtime.settled.promise },
@@ -535,15 +517,15 @@ function createSpatialSkeletonExecution<TResult>(
   return execution;
 }
 
-type EngineIntentRuntimeAllowedField =
+type QueueIntentRuntimeAllowedField =
   | "exact"
   | "settled"
   | "submission"
   | "lease"
   | "inputAbortController"
   | "releaseAdmissionInputs";
-const engineIntentRuntimeFieldGuard: {
-  [Field in keyof EngineIntentRuntime<unknown>]-?: Field extends EngineIntentRuntimeAllowedField
+const queueIntentRuntimeFieldGuard: {
+  [Field in keyof QueueIntentRuntime<unknown>]-?: Field extends QueueIntentRuntimeAllowedField
     ? true
     : never;
 } = {
@@ -554,92 +536,91 @@ const engineIntentRuntimeFieldGuard: {
   inputAbortController: true,
   releaseAdmissionInputs: true,
 };
-void engineIntentRuntimeFieldGuard;
-let nextSpatialSkeletonOptimisticQueueInstanceId = 1;
+void queueIntentRuntimeFieldGuard;
+let nextSpatialSkeletonEditQueueInstanceId = 1;
 
 /**
  * Datasource-neutral optimistic queue for logical user/history intents.
  *
  * The engine owns admission, dependency order, lifecycle, history settlement,
  * rollback closure selection, physical-attempt scheduling, and reload-required
- * lease ownership. Provider ports own opaque projection values and workflow
+ * lease ownership. Provider ports own opaque preview values and plan
  * details.
  */
-export class SpatialSkeletonOptimisticQueueEngine<
+export class SpatialSkeletonEditQueue<
   TInput,
   THistoryTicket,
-  TWorkflow,
-  TProjection,
-  TMutation,
+  TPlan,
+  TPreview,
+  TEditRequest,
   TResult,
   TReconciliation,
-  TInverseProjection = TProjection,
-> implements SpatialSkeletonOptimisticEditQueue
+  TInversePreview = TPreview,
+> implements SpatialSkeletonSessionEditQueue
 {
-  private readonly journal: EngineIntentJournal<
+  private readonly journal: QueueIntentJournal<
     TInput,
-    TWorkflow,
+    TPlan,
     THistoryTicket,
-    TProjection,
-    TInverseProjection,
-    TMutation,
+    TPreview,
+    TInversePreview,
+    TEditRequest,
     TResult
   >;
 
-  private readonly runtimes = new Map<number, EngineIntentRuntime<TResult>>();
-  private readonly queueInstanceId =
-    nextSpatialSkeletonOptimisticQueueInstanceId++;
+  private readonly runtimes = new Map<number, QueueIntentRuntime<TResult>>();
+  private readonly queueInstanceId = nextSpatialSkeletonEditQueueInstanceId++;
   private readonly changed = new NullarySignal();
-  private readonly historyOperations: SpatialSkeletonOptimisticEngineHistory<
+  private readonly historyOperations: SpatialSkeletonEditQueueHistory<
     TInput,
     THistoryTicket,
-    TWorkflow,
-    TProjection,
-    TMutation,
+    TPlan,
+    TPreview,
+    TEditRequest,
     TResult,
     TReconciliation,
-    TInverseProjection
+    TInversePreview
   >;
-  private readonly options: SpatialSkeletonOptimisticQueueEngineOptions<
+  private readonly options: SpatialSkeletonEditQueueOptions<
     TInput,
     THistoryTicket,
-    TWorkflow,
-    TProjection,
-    TMutation,
+    TPlan,
+    TPreview,
+    TEditRequest,
     TResult,
     TReconciliation,
-    TInverseProjection
+    TInversePreview
   >;
-  private handledFatalState?: SpatialSkeletonOptimisticFatalState;
-  private projectionArtifactSubscriptionCleanup?: () => void;
+  private handledReloadRequired?: SpatialSkeletonReloadRequiredDetails;
+  private previewArtifactSubscriptionCleanup?: () => void;
   private readonly disposalCompletionResolver = createPromiseResolver<void>();
-  private activeWorkflowCount = 0;
+  private activePlanCount = 0;
   private authorityGeneration = 0;
   private disposed = false;
 
   constructor(
-    options: SpatialSkeletonOptimisticQueueEngineOptions<
+    options: SpatialSkeletonEditQueueOptions<
       TInput,
       THistoryTicket,
-      TWorkflow,
-      TProjection,
-      TMutation,
+      TPlan,
+      TPreview,
+      TEditRequest,
       TResult,
       TReconciliation,
-      TInverseProjection
+      TInversePreview
     >,
   ) {
     this.options = options;
     this.journal = new SpatialSkeletonIntentJournal(options.history.capacity);
-    this.historyOperations = new SpatialSkeletonOptimisticEngineHistory({
+    this.historyOperations = new SpatialSkeletonEditQueueHistory({
       journal: this.journal,
       runtimes: this.runtimes,
       history: options.history,
-      projection: options.projection,
+      preview: options.preview,
     });
-    this.projectionArtifactSubscriptionCleanup =
-      options.projection.subscribeProjectionArtifacts((artifacts) =>
-        this.refreshExactProjectionArtifacts(artifacts),
+    this.previewArtifactSubscriptionCleanup =
+      options.preview.subscribePreviewArtifacts((artifacts) =>
+        this.refreshExactPreviewArtifacts(artifacts),
       );
   }
 
@@ -648,15 +629,15 @@ export class SpatialSkeletonOptimisticQueueEngine<
     queueInput:
       | SpatialSkeletonQueueInput
       | SpatialSkeletonQueueInputPreparation,
-  ): SpatialSkeletonOptimisticEditExecution<boolean, TResult> {
+  ): SpatialSkeletonEditExecution<boolean, TResult> {
     return this.submitTransition(input, "execute", queueInput);
   }
 
-  submitUndo(): SpatialSkeletonOptimisticEditExecution<boolean, TResult> {
+  submitUndo(): SpatialSkeletonEditExecution<boolean, TResult> {
     return this.submitTransition(undefined, "undo");
   }
 
-  submitRedo(): SpatialSkeletonOptimisticEditExecution<boolean, TResult> {
+  submitRedo(): SpatialSkeletonEditExecution<boolean, TResult> {
     return this.submitTransition(undefined, "redo");
   }
 
@@ -666,17 +647,15 @@ export class SpatialSkeletonOptimisticQueueEngine<
     queueInput?:
       | SpatialSkeletonQueueInput
       | SpatialSkeletonQueueInputPreparation,
-  ): SpatialSkeletonOptimisticEditExecution<boolean, TResult> {
+  ): SpatialSkeletonEditExecution<boolean, TResult> {
     this.requireActive();
     this.requireEditingAllowed();
     const capacityCoalescingTarget =
       intent === "execute"
         ? undefined
-        : this.historyOperations.getProjectedQueuedOppositeTarget(intent);
+        : this.historyOperations.getPreviewedQueuedOppositeTarget(intent);
     if (!this.journal.canAdmit(capacityCoalescingTarget)) {
-      throw new SpatialSkeletonOptimisticQueueCapacityError(
-        this.journal.capacity,
-      );
+      throw new SpatialSkeletonEditQueueCapacityError(this.journal.capacity);
     }
     let inputPreparation =
       queueInput !== undefined && "acquire" in queueInput
@@ -705,7 +684,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
     let historyTicketId: string | number;
     let historyEntryId: string | number;
     let descriptor: SpatialSkeletonIntentDescription &
-      Partial<SpatialSkeletonLogicalIntent<TWorkflow, TProjection>>;
+      Partial<SpatialSkeletonIntentPlan<TPlan, TPreview>>;
     let historyDependencySequences: number[];
     let transitionInput: TInput;
     let coalescesSequence: number | undefined;
@@ -743,18 +722,18 @@ export class SpatialSkeletonOptimisticQueueEngine<
         descriptor = {
           kind: target.metadata.kind,
           commandLabel: target.metadata.commandLabel,
-          authorityPresentation: target.metadata.authorityPresentation,
-          logicalResources: target.resources,
-          projection: target.requestedResult.value,
-          workflow: target.metadata.workflow,
+          authorityLabels: target.metadata.authorityLabels,
+          stableResources: target.resources,
+          preview: target.requestedResult.value,
+          plan: target.metadata.plan,
         };
       } else if (intent === "execute") {
         if (queueInput === undefined)
           throw new Error("Execute is missing its input policy.");
         descriptor =
           inputPreparation !== undefined
-            ? this.options.driver.describeIntent(transitionInput)
-            : this.options.driver.createLogicalIntent(transitionInput, {
+            ? this.options.planner.describeIntent(transitionInput)
+            : this.options.planner.planIntent(transitionInput, {
                 intentId: reservation.sequence,
                 intent,
                 queueInput: queueInput as SpatialSkeletonQueueInput,
@@ -763,27 +742,24 @@ export class SpatialSkeletonOptimisticQueueEngine<
         const recipe =
           this.historyOperations.getHistoryRecipeByEntryId(historyEntryId);
         if (
-          (recipe === undefined || recipe.inverseProjection === undefined) &&
+          (recipe === undefined || recipe.inversePreview === undefined) &&
           intent === "redo" &&
           inputPreparation !== undefined
         ) {
           releaseAdmissionInputs = inputPreparation.validate("redo");
-          descriptor = this.options.driver.describeIntent(transitionInput);
+          descriptor = this.options.planner.describeIntent(transitionInput);
         } else {
           if (
             recipe === undefined ||
-            (intent === "undo" && recipe.inverseProjection === undefined)
+            (intent === "undo" && recipe.inversePreview === undefined)
           ) {
             throw new Error("History is missing its exact recipe.");
           }
-          descriptor = this.options.driver.createLogicalIntent(
-            transitionInput,
-            {
-              intentId: reservation.sequence,
-              intent,
-              recipe,
-            },
-          );
+          descriptor = this.options.planner.planIntent(transitionInput, {
+            intentId: reservation.sequence,
+            intent,
+            recipe,
+          });
         }
       }
     } catch (error) {
@@ -798,9 +774,9 @@ export class SpatialSkeletonOptimisticQueueEngine<
         {
           kind: intent,
           historyTicketId,
-          resources: descriptor.logicalResources ?? [
+          resources: descriptor.stableResources ?? [
             {
-              handle: spatialSkeletonLogicalSegment("queue-input-preparation"),
+              handle: spatialSkeletonStableSegment("queue-input-preparation"),
               access: "write" as const,
             },
           ],
@@ -814,22 +790,22 @@ export class SpatialSkeletonOptimisticQueueEngine<
               .filter(
                 (entry) =>
                   (intent === "execute" && inputPreparation !== undefined) ||
-                  descriptor.workflow === undefined ||
-                  entry.metadata.workflow === undefined,
+                  descriptor.plan === undefined ||
+                  entry.metadata.plan === undefined,
               )
               .map((entry) => entry.sequence),
           ],
-          requestedResult: { value: descriptor.projection },
+          requestedResult: { value: descriptor.preview },
           inverseDelta: {},
           metadata: {
             input: transitionInput,
-            workflow: descriptor.workflow,
+            plan: descriptor.plan,
             inputPreparation,
             historyTicket,
             historyEntryId,
             kind: descriptor.kind,
             commandLabel: descriptor.commandLabel,
-            authorityPresentation: descriptor.authorityPresentation,
+            authorityLabels: descriptor.authorityLabels,
           },
           coalescesSequence,
         },
@@ -841,24 +817,21 @@ export class SpatialSkeletonOptimisticQueueEngine<
       releaseAdmissionInputs?.();
       throw error;
     }
-    const runtime: EngineIntentRuntime<TResult> = {
+    const runtime: QueueIntentRuntime<TResult> = {
       exact: createPromiseResolver<boolean>(),
-      settled:
-        createPromiseResolver<
-          SpatialSkeletonOptimisticEditSettlement<TResult>
-        >(),
+      settled: createPromiseResolver<SpatialSkeletonEditSettlement<TResult>>(),
       releaseAdmissionInputs,
     };
     void runtime.exact.promise.catch(() => undefined);
     void runtime.settled.promise.catch(() => undefined);
     this.runtimes.set(admitted.sequence, runtime);
     this.historyOperations.syncRetainedHistoryResources();
-    if (descriptor.preparation !== undefined) {
+    if (descriptor.pendingEdit !== undefined) {
       try {
-        this.options.preparation?.publish(
+        this.options.pendingEdit?.publish(
           admitted.sequence,
           intent,
-          descriptor.preparation,
+          descriptor.pendingEdit,
         );
       } catch (error) {
         this.options.onListenerError?.(error);
@@ -882,50 +855,57 @@ export class SpatialSkeletonOptimisticQueueEngine<
   }
 
   canUndo() {
-    if (this.getFatalState() !== undefined) return false;
+    if (this.getReloadRequired() !== undefined) return false;
     return this.options.history.canStage("undo");
   }
 
   canRedo() {
-    if (this.getFatalState() !== undefined) return false;
+    if (this.getReloadRequired() !== undefined) return false;
     return this.options.history.canStage("redo");
   }
 
   undoLatest() {
-    const fatalState = this.getFatalState();
-    if (fatalState !== undefined) {
-      return createSpatialSkeletonReloadRequiredExecution<TResult>(fatalState);
+    const reloadRequired = this.getReloadRequired();
+    if (reloadRequired !== undefined) {
+      return createSpatialSkeletonReloadRequiredExecution<TResult>(
+        reloadRequired,
+      );
     }
     return this.submitHistoryTransition("undo");
   }
 
   redoLatest() {
-    const fatalState = this.getFatalState();
-    if (fatalState !== undefined) {
-      return createSpatialSkeletonReloadRequiredExecution<TResult>(fatalState);
+    const reloadRequired = this.getReloadRequired();
+    if (reloadRequired !== undefined) {
+      return createSpatialSkeletonReloadRequiredExecution<TResult>(
+        reloadRequired,
+      );
     }
     return this.submitHistoryTransition("redo");
   }
 
   hasUnconfirmedActions() {
     return (
-      this.getFatalState() !== undefined || this.journal.hasUnresolvedIntents
+      this.getReloadRequired() !== undefined ||
+      this.journal.hasUnresolvedIntents
     );
   }
 
-  getFatalState() {
-    return this.options.fatalState.get();
+  getReloadRequired() {
+    return this.options.reloadRequired.get();
   }
 
-  handleFatalStateLatched(fatalState: SpatialSkeletonOptimisticFatalState) {
-    this.options.fatalState.latch(fatalState);
-    this.handleLatchedFatalState();
+  handleReloadRequiredLatched(
+    reloadRequired: SpatialSkeletonReloadRequiredDetails,
+  ) {
+    this.options.reloadRequired.latch(reloadRequired);
+    this.handleLatchedReloadRequired();
   }
 
-  getProtectedProjectionSegmentIds() {
+  getProtectedPreviewSegmentIds() {
     return [
       ...new Set([
-        ...this.options.projection.getProtectedSegmentIds(),
+        ...this.options.preview.getProtectedSegmentIds(),
         ...this.journal
           .getEntries({ includeTerminal: false })
           .flatMap(
@@ -937,18 +917,18 @@ export class SpatialSkeletonOptimisticQueueEngine<
   }
 
   ownsAuthoritativeReadSegment(segmentId: bigint) {
-    return this.options.projection.ownsAuthoritativeReadSegment(segmentId);
+    return this.options.preview.ownsAuthoritativeReadSegment(segmentId);
   }
 
   getSnapshot() {
-    return projectSpatialSkeletonOptimisticQueueSnapshot(
+    return buildSpatialSkeletonEditQueueRows(
       this.journal.getEntries(),
       this.queueInstanceId,
     );
   }
 
   getRecentActivity() {
-    return projectSpatialSkeletonOptimisticRecentActivity(
+    return buildSpatialSkeletonEditRecentActivity(
       this.journal.getEntries(),
       this.options.history.capacity,
     );
@@ -957,27 +937,23 @@ export class SpatialSkeletonOptimisticQueueEngine<
   dispose() {
     if (this.disposed) return this.disposalCompletionResolver.promise;
     this.disposed = true;
-    this.projectionArtifactSubscriptionCleanup?.();
-    this.projectionArtifactSubscriptionCleanup = undefined;
+    this.previewArtifactSubscriptionCleanup?.();
+    this.previewArtifactSubscriptionCleanup = undefined;
     this.options.attempts.dispose();
     const runtimes = [...this.runtimes.entries()];
-    const disposalError =
-      new SpatialSkeletonOptimisticQueueEngineDisposedError();
+    const disposalError = new SpatialSkeletonEditQueueDisposedError();
 
-    const rollbackIntents = this.historyOperations.getProjectionArtifacts(
+    const rollbackIntents = this.historyOperations.getPreviewArtifacts(
       runtimes.map(([intentId]) => intentId).sort((a, b) => b - a),
     );
     if (rollbackIntents.length !== 0) {
       try {
-        this.options.projection.rollbackAndReplay({
+        this.options.preview.rollbackAndReplay({
           rollbackIntents,
           replayIntents: [],
         });
       } catch (error) {
-        this.latchLocalProjectionResetFailure(
-          rollbackIntents[0]!.intentId,
-          error,
-        );
+        this.latchLocalPreviewResetFailure(rollbackIntents[0]!.intentId, error);
         this.options.onListenerError?.(error);
       }
     }
@@ -986,7 +962,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
     for (const [intentId, runtime] of runtimes) {
       const entry = this.journal.get(intentId);
       if (entry === undefined || entry.terminal) continue;
-      this.removePreparation(intentId);
+      this.removePendingEdit(intentId);
       runtime.exact.reject(disposalError);
       if (
         entry.lifecycle.authority === "committed" ||
@@ -1002,8 +978,8 @@ export class SpatialSkeletonOptimisticQueueEngine<
       ) {
         this.journal.setPreviewState(intentId, "rolled-back");
       }
-      this.options.projection.discardPrepared(intentId);
-      if (entry.committedMutationAttempts.length !== 0) {
+      this.options.preview.discardPrepared(intentId);
+      if (entry.committedEditRequestAttempts.length !== 0) {
         this.blockForReload(intentId, runtime, "committed", disposalError);
         continue;
       }
@@ -1024,24 +1000,24 @@ export class SpatialSkeletonOptimisticQueueEngine<
     return this.disposalCompletionResolver.promise;
   }
 
-  private refreshExactProjectionArtifacts(
-    artifacts: readonly SpatialSkeletonProjectionIntentArtifact<
-      TProjection,
-      TInverseProjection
+  private refreshExactPreviewArtifacts(
+    artifacts: readonly SpatialSkeletonPreviewIntentArtifact<
+      TPreview,
+      TInversePreview
     >[],
   ) {
     if (this.disposed || artifacts.length === 0) return;
     try {
-      this.journal.refreshExactProjectionArtifacts(
-        artifacts.map(({ intentId, projection, inverseProjection }) => ({
+      this.journal.refreshExactPreviewArtifacts(
+        artifacts.map(({ intentId, preview, inversePreview }) => ({
           sequence: intentId,
-          requestedResult: { value: projection },
-          inverseDelta: { value: inverseProjection },
+          requestedResult: { value: preview },
+          inverseDelta: { value: inversePreview },
         })),
       );
     } catch (error) {
-      // Projection adoption has already completed. A listener invariant is a
-      // reporting-only fault and must never trigger projection rollback or a
+      // Preview adoption has already completed. A listener invariant is a
+      // reporting-only fault and must never trigger preview rollback or a
       // datasource retry.
       try {
         this.options.onListenerError?.(error);
@@ -1057,7 +1033,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
 
   private startPreparation(
     intentId: number,
-    runtime: EngineIntentRuntime<TResult>,
+    runtime: QueueIntentRuntime<TResult>,
   ) {
     this.journal.setPreviewState(intentId, "preparing");
     this.notifyChanged();
@@ -1069,7 +1045,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
 
   private async prepareExact(
     intentId: number,
-    runtime: EngineIntentRuntime<TResult>,
+    runtime: QueueIntentRuntime<TResult>,
   ): Promise<void> {
     try {
       let entry = this.requireJournalEntry(intentId);
@@ -1077,7 +1053,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
       let acquired: SpatialSkeletonPreparedQueueInput | undefined;
       const generation = this.authorityGeneration;
       try {
-        const compilingInputs = entry.metadata.workflow === undefined;
+        const compilingInputs = entry.metadata.plan === undefined;
         if (compilingInputs) {
           const inputs = entry.metadata.inputPreparation;
           if (inputs === undefined)
@@ -1090,7 +1066,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
           );
           if (this.disposed || this.isTerminal(intentId)) return;
           acquired.assertCurrent();
-          const compiled = this.options.driver.createLogicalIntent(
+          const compiled = this.options.planner.planIntent(
             entry.metadata.input,
             {
               intentId,
@@ -1098,20 +1074,20 @@ export class SpatialSkeletonOptimisticQueueEngine<
               queueInput: acquired.input,
             },
           );
-          this.journal.refreshExactProjectionArtifacts([
+          this.journal.refreshExactPreviewArtifacts([
             {
               sequence: intentId,
-              requestedResult: { value: compiled.projection },
+              requestedResult: { value: compiled.preview },
               inverseDelta: {},
-              metadata: { ...entry.metadata, workflow: compiled.workflow },
+              metadata: { ...entry.metadata, plan: compiled.plan },
             },
           ]);
           entry = this.requireJournalEntry(intentId);
-          if (compiled.preparation !== undefined) {
-            this.options.preparation?.publish(
+          if (compiled.pendingEdit !== undefined) {
+            this.options.pendingEdit?.publish(
               intentId,
               entry.kind,
-              compiled.preparation,
+              compiled.pendingEdit,
             );
           }
         }
@@ -1124,24 +1100,23 @@ export class SpatialSkeletonOptimisticQueueEngine<
         const descriptor =
           historyRecipe === undefined || entry.kind === "execute"
             ? undefined
-            : this.options.driver.createLogicalIntent(entry.metadata.input, {
+            : this.options.planner.planIntent(entry.metadata.input, {
                 intentId,
                 intent: entry.kind,
                 recipe: historyRecipe,
               });
-        const projectionValue =
-          descriptor?.projection ?? entry.requestedResult.value;
-        if (projectionValue === undefined) {
+        const previewValue = descriptor?.preview ?? entry.requestedResult.value;
+        if (previewValue === undefined) {
           throw new Error(
-            `Optimistic intent ${intentId} has no projection recipe.`,
+            `Optimistic intent ${intentId} has no preview recipe.`,
           );
         }
-        const prepared = await this.options.projection.prepareExact(
+        const prepared = await this.options.preview.prepareExact(
           intentId,
-          projectionValue,
+          previewValue,
         );
         if (this.disposed || this.isTerminal(intentId)) {
-          this.options.projection.discardPrepared(intentId);
+          this.options.preview.discardPrepared(intentId);
           return;
         }
         if (historyRecipe !== undefined) {
@@ -1149,48 +1124,48 @@ export class SpatialSkeletonOptimisticQueueEngine<
             entry.metadata.historyEntryId,
           );
           if (
-            latest?.projection !== historyRecipe.projection ||
-            latest?.inverseProjection !== historyRecipe.inverseProjection
+            latest?.preview !== historyRecipe.preview ||
+            latest?.inversePreview !== historyRecipe.inversePreview
           ) {
             // Authority may finish while an asynchronous history preview is
             // preparing. Discard that candidate and use the corrected recipe.
-            this.options.projection.discardPrepared(intentId);
+            this.options.preview.discardPrepared(intentId);
             return this.prepareExact(intentId, runtime);
           }
         }
         // Store the initially prepared pair before publication. If publication
         // rebuilds against a newer retained/read generation, its synchronous
         // artifact notification must remain the last writer of the inverse.
-        this.journal.refreshExactProjectionArtifacts([
+        this.journal.refreshExactPreviewArtifacts([
           {
             sequence: intentId,
-            requestedResult: { value: prepared.projection },
-            inverseDelta: { value: prepared.inverseProjection },
+            requestedResult: { value: prepared.preview },
+            inverseDelta: { value: prepared.inversePreview },
             metadata:
               descriptor === undefined
                 ? undefined
-                : { ...entry.metadata, workflow: descriptor.workflow },
+                : { ...entry.metadata, plan: descriptor.plan },
           },
         ]);
         acquired?.assertCurrent();
-        this.options.projection.publishExact(intentId, prepared.projection);
+        this.options.preview.publishExact(intentId, prepared.preview);
         // A Redo whose Execute was canceled before input compilation publishes
         // its inspection seed once, then becomes the canonical history recipe.
         if (compilingInputs && entry.kind === "redo") {
           const published = this.requireJournalEntry(intentId);
           this.historyOperations.refreshCanonicalRecipeFromRedo(published, {
             intentId,
-            projection: published.requestedResult.value!,
-            inverseProjection: published.inverseDelta.value!,
+            preview: published.requestedResult.value!,
+            inversePreview: published.inverseDelta.value!,
           });
         }
         this.historyOperations.syncRetainedHistoryResources();
-        this.removePreparation(intentId);
+        this.removePendingEdit(intentId);
         this.journal.setPreviewState(intentId, "exact");
         this.notifyChanged();
         this.pumpPreparations();
         this.pump();
-        // Start any now-unblocked workflow before exposing exact-preview
+        // Start any now-unblocked plan before exposing exact-preview
         // completion. The promise still means only "preview is exact", but a
         // caller that immediately observes a synchronous adapter does not race
         // the queue's own pump microtask.
@@ -1204,18 +1179,18 @@ export class SpatialSkeletonOptimisticQueueEngine<
           (error.reason === "snapshot-changed" ||
             error.reason === "requirements-changed")
         ) {
-          this.options.projection.discardPrepared(intentId);
+          this.options.preview.discardPrepared(intentId);
           runtime.inputAbortController?.abort(
             new DOMException("Input versions changed.", "AbortError"),
           );
-          this.journal.refreshExactProjectionArtifacts([
+          this.journal.refreshExactPreviewArtifacts([
             {
               sequence: intentId,
               requestedResult: {},
               inverseDelta: {},
               metadata: {
                 ...this.requireJournalEntry(intentId).metadata,
-                workflow: undefined,
+                plan: undefined,
               },
             },
           ]);
@@ -1228,7 +1203,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
         acquired?.release();
       }
     } catch (error) {
-      this.options.projection.discardPrepared(intentId);
+      this.options.preview.discardPrepared(intentId);
       if (this.isTerminal(intentId) || this.disposed) return;
       this.rejectBeforeAttempt(intentId, error);
     }
@@ -1236,12 +1211,12 @@ export class SpatialSkeletonOptimisticQueueEngine<
 
   /**
    * Starts every independent preparation whose logical predecessors already
-   * own an exact projection. Preparing work never waits for authority, but a
+   * own an exact preview. Preparing work never waits for authority, but a
    * touching intent must not reduce against a workspace that is still missing
    * an earlier local delta.
    */
   private pumpPreparations() {
-    if (this.disposed || this.getFatalState() !== undefined) return;
+    if (this.disposed || this.getReloadRequired() !== undefined) return;
     for (const [intentId, runtime] of this.runtimes) {
       const entry = this.journal.get(intentId);
       if (
@@ -1251,7 +1226,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
       ) {
         continue;
       }
-      const waitsForExactProjection = entry.dependencySequences.some(
+      const waitsForExactPreview = entry.dependencySequences.some(
         (dependencyId) => {
           const dependency = this.journal.get(dependencyId);
           return (
@@ -1262,7 +1237,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
           );
         },
       );
-      if (waitsForExactProjection) continue;
+      if (waitsForExactPreview) continue;
       this.startPreparation(intentId, runtime);
     }
   }
@@ -1270,8 +1245,8 @@ export class SpatialSkeletonOptimisticQueueEngine<
   private pump() {
     if (
       this.disposed ||
-      this.getFatalState() !== undefined ||
-      this.activeWorkflowCount !== 0
+      this.getReloadRequired() !== undefined ||
+      this.activePlanCount !== 0
     ) {
       return;
     }
@@ -1288,39 +1263,45 @@ export class SpatialSkeletonOptimisticQueueEngine<
     }
     const runtime = this.runtimes.get(entry.sequence);
     if (runtime === undefined) return;
-    if (!this.journal.claimAuthorityWorkflow(entry.sequence)) return;
-    ++this.activeWorkflowCount;
+    if (!this.journal.claimAuthorityPlan(entry.sequence)) return;
+    ++this.activePlanCount;
     this.notifyChanged();
-    void this.runWorkflow(entry.sequence, runtime);
+    void this.runPlan(entry.sequence, runtime);
   }
 
-  private async runWorkflow(
+  private async runPlan(
     intentId: number,
-    runtime: EngineIntentRuntime<TResult>,
+    runtime: QueueIntentRuntime<TResult>,
   ) {
     try {
       const entry = this.requireJournalEntry(intentId);
-      const context = () => this.createWorkflowContext(intentId);
+      const context = () => this.createPlanContext(intentId);
       while (true) {
-        if (this.isTerminal(intentId) || this.getFatalState() !== undefined) {
+        if (
+          this.isTerminal(intentId) ||
+          this.getReloadRequired() !== undefined
+        ) {
           return;
         }
-        if (this.handleDisposedWorkflow(intentId, runtime)) return;
-        const attempt = await this.options.driver.nextAttempt(
-          this.requirePreparedWorkflow(entry),
+        if (this.handleDisposedPlan(intentId, runtime)) return;
+        const attempt = await this.options.planner.nextAttempt(
+          this.requirePreparedPlan(entry),
           context(),
         );
-        if (this.isTerminal(intentId) || this.getFatalState() !== undefined) {
+        if (
+          this.isTerminal(intentId) ||
+          this.getReloadRequired() !== undefined
+        ) {
           return;
         }
-        if (this.handleDisposedWorkflow(intentId, runtime)) return;
+        if (this.handleDisposedPlan(intentId, runtime)) return;
         if (attempt === undefined) break;
         this.journal.setReconciliationState(intentId, "waiting");
         this.notifyChanged();
         const submission =
           runtime.lease === undefined
             ? this.options.attempts.schedule(entry.kind, {
-                materializeMutation: attempt.materializeMutation,
+                materializeEditRequest: attempt.materializeEditRequest,
                 onLeaseAcquired: (lease) => {
                   runtime.lease = lease;
                 },
@@ -1331,7 +1312,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
                 },
               })
             : this.options.attempts.runWithLease(runtime.lease, entry.kind, {
-                materializeMutation: attempt.materializeMutation,
+                materializeEditRequest: attempt.materializeEditRequest,
                 onLeaseAcquired: (lease) => {
                   runtime.lease = lease;
                 },
@@ -1350,45 +1331,47 @@ export class SpatialSkeletonOptimisticQueueEngine<
           return;
         }
         if (this.disposed) {
-          this.handleDisposedWorkflow(intentId, runtime, settlement.outcome);
+          this.handleDisposedPlan(intentId, runtime, settlement.outcome);
           return;
         }
         if (settlement.outcome.status !== "committed") {
           this.handleAttemptFailure(intentId, runtime, settlement);
           return;
         }
-        if (settlement.mutation === undefined) {
-          throw new Error("A committed mutation settlement lost its request.");
+        if (settlement.editRequest === undefined) {
+          throw new Error(
+            "A committed edit request settlement lost its request.",
+          );
         }
-        this.journal.recordCommittedMutationAttempt(
+        this.journal.recordCommittedEditRequestAttempt(
           intentId,
           Object.freeze({
-            mutation: settlement.mutation,
+            editRequest: settlement.editRequest,
             result: settlement.outcome.result,
           }),
         );
         if (this.disposed) {
-          this.handleDisposedWorkflow(intentId, runtime);
+          this.handleDisposedPlan(intentId, runtime);
           return;
         }
-        if (this.getFatalState() !== undefined) {
+        if (this.getReloadRequired() !== undefined) {
           this.blockForReload(
             intentId,
             runtime,
             "committed",
-            this.getFatalState(),
+            this.getReloadRequired(),
           );
           return;
         }
       }
 
       if (this.disposed) {
-        this.handleDisposedWorkflow(intentId, runtime);
+        this.handleDisposedPlan(intentId, runtime);
         return;
       }
       if (
-        this.requireJournalEntry(intentId).committedMutationAttempts.length ===
-        0
+        this.requireJournalEntry(intentId).committedEditRequestAttempts
+          .length === 0
       ) {
         this.finishNoOp(intentId, runtime);
         return;
@@ -1399,25 +1382,25 @@ export class SpatialSkeletonOptimisticQueueEngine<
       let reconciliation: TReconciliation;
       try {
         this.journal.setReconciliationState(intentId, "applying");
-        reconciliation = await this.options.driver.createReconciliation(
-          this.requirePreparedWorkflow(entry),
+        reconciliation = await this.options.planner.createReconciliation(
+          this.requirePreparedPlan(entry),
           context(),
         );
-        if (this.getFatalState() !== undefined) {
+        if (this.getReloadRequired() !== undefined) {
           this.blockForReload(
             intentId,
             runtime,
             "committed",
-            this.getFatalState(),
+            this.getReloadRequired(),
           );
           return;
         }
         if (this.disposed) {
-          this.handleDisposedWorkflow(intentId, runtime);
+          this.handleDisposedPlan(intentId, runtime);
           return;
         }
-        const rebasedWorkflows = new Map<number, TWorkflow>();
-        const finalizedArtifact = this.options.projection.publishAuthoritative({
+        const rebasedPlans = new Map<number, TPlan>();
+        const finalizedArtifact = this.options.preview.publishAuthoritative({
           intentId,
           reconciliation,
           activePreviews:
@@ -1437,38 +1420,38 @@ export class SpatialSkeletonOptimisticQueueEngine<
               });
             if (canonical === undefined) return undefined;
             const prior = this.requireJournalEntry(canonical.intentId);
-            const descriptor = this.options.driver.createLogicalIntent(
+            const descriptor = this.options.planner.planIntent(
               active.metadata.input,
               {
                 intentId: activeIntentId,
                 intent: active.kind,
                 recipe: {
-                  workflow:
-                    rebasedWorkflows.get(canonical.intentId) ??
-                    this.requirePreparedWorkflow(prior),
-                  projection: canonical.projection,
-                  inverseProjection: canonical.inverseProjection,
+                  plan:
+                    rebasedPlans.get(canonical.intentId) ??
+                    this.requirePreparedPlan(prior),
+                  preview: canonical.preview,
+                  inversePreview: canonical.inversePreview,
                 },
               },
             );
-            rebasedWorkflows.set(activeIntentId, descriptor.workflow);
-            return descriptor.projection;
+            rebasedPlans.set(activeIntentId, descriptor.plan);
+            return descriptor.preview;
           },
         });
         ++this.authorityGeneration;
-        this.journal.refreshExactProjectionArtifacts([
+        this.journal.refreshExactPreviewArtifacts([
           {
             sequence: intentId,
-            requestedResult: { value: finalizedArtifact.projection },
-            inverseDelta: { value: finalizedArtifact.inverseProjection },
+            requestedResult: { value: finalizedArtifact.preview },
+            inverseDelta: { value: finalizedArtifact.inversePreview },
           },
-          ...[...rebasedWorkflows].map(([sequence, workflow]) => {
+          ...[...rebasedPlans].map(([sequence, plan]) => {
             const active = this.requireJournalEntry(sequence);
             return {
               sequence,
               requestedResult: active.requestedResult,
               inverseDelta: active.inverseDelta,
-              metadata: { ...active.metadata, workflow },
+              metadata: { ...active.metadata, plan },
             };
           }),
         ]);
@@ -1476,16 +1459,16 @@ export class SpatialSkeletonOptimisticQueueEngine<
           entry,
           finalizedArtifact,
         );
-        if (this.getFatalState() !== undefined) {
+        if (this.getReloadRequired() !== undefined) {
           this.blockForReload(
             intentId,
             runtime,
             "committed",
-            this.getFatalState(),
+            this.getReloadRequired(),
           );
           return;
         }
-        if (this.handleDisposedWorkflow(intentId, runtime)) return;
+        if (this.handleDisposedPlan(intentId, runtime)) return;
       } catch (error) {
         this.blockForReload(intentId, runtime, "committed", error);
         return;
@@ -1494,14 +1477,14 @@ export class SpatialSkeletonOptimisticQueueEngine<
     } catch (error) {
       const entry = this.journal.get(intentId);
       if (entry?.terminal === true) return;
-      if (this.handleDisposedWorkflow(intentId, runtime, undefined, error)) {
+      if (this.handleDisposedPlan(intentId, runtime, undefined, error)) {
         return;
       }
-      if ((entry?.committedMutationAttempts.length ?? 0) !== 0) {
+      if ((entry?.committedEditRequestAttempts.length ?? 0) !== 0) {
         this.blockForReload(intentId, runtime, "committed", error);
       } else this.rollbackDefinitive(intentId, "not-started", error);
     } finally {
-      --this.activeWorkflowCount;
+      --this.activePlanCount;
       this.notifyChanged();
       this.resolveDisposalCompletionIfReady();
       this.pump();
@@ -1509,14 +1492,14 @@ export class SpatialSkeletonOptimisticQueueEngine<
   }
 
   private resolveDisposalCompletionIfReady() {
-    if (this.disposed && this.activeWorkflowCount === 0) {
+    if (this.disposed && this.activePlanCount === 0) {
       this.disposalCompletionResolver.resolve(undefined);
     }
   }
 
-  private createWorkflowContext(intentId: number) {
+  private createPlanContext(intentId: number) {
     const entry = this.requireJournalEntry(intentId);
-    const committedAttempts = entry.committedMutationAttempts;
+    const committedAttempts = entry.committedEditRequestAttempts;
     return Object.freeze({
       intentId,
       intent: entry.kind,
@@ -1529,10 +1512,10 @@ export class SpatialSkeletonOptimisticQueueEngine<
    * Source/engine replacement is not allowed to turn an unsafe authoritative
    * result into a silent detached fence.
    */
-  private handleDisposedWorkflow(
+  private handleDisposedPlan(
     intentId: number,
-    runtime: EngineIntentRuntime<TResult>,
-    outcome?: SpatialSkeletonMutationOutcome<TResult>,
+    runtime: QueueIntentRuntime<TResult>,
+    outcome?: SpatialSkeletonEditRequestOutcome<TResult>,
     cause?: unknown,
   ) {
     if (!this.disposed) return false;
@@ -1545,16 +1528,21 @@ export class SpatialSkeletonOptimisticQueueEngine<
       cause ??
       (outcome !== undefined && outcome.status !== "committed"
         ? outcome.error
-        : new SpatialSkeletonOptimisticQueueEngineDisposedError());
+        : new SpatialSkeletonEditQueueDisposedError());
     if (outcome?.status === "indeterminate") {
-      this.enterFatalState(intentId, runtime, "indeterminate", outcome.error);
+      this.enterReloadRequired(
+        intentId,
+        runtime,
+        "indeterminate",
+        outcome.error,
+      );
       this.journal.markReloadRequired(intentId, "indeterminate");
       this.notifyChanged();
       return true;
     }
     if (
       outcome?.status === "committed" ||
-      entry.committedMutationAttempts.length !== 0
+      entry.committedEditRequestAttempts.length !== 0
     ) {
       this.blockForReload(intentId, runtime, "committed", disposedError);
       return true;
@@ -1574,34 +1562,35 @@ export class SpatialSkeletonOptimisticQueueEngine<
 
   private finishDisposedUnchanged(
     intentId: number,
-    runtime: EngineIntentRuntime<TResult>,
+    runtime: QueueIntentRuntime<TResult>,
     reason: "not-started" | "rejected",
     error: unknown,
   ) {
     if (runtime.settled.settled) return;
-    this.removePreparation(intentId);
-    this.options.projection.discardPrepared(intentId);
+    this.removePendingEdit(intentId);
+    this.options.preview.discardPrepared(intentId);
     runtime.exact.reject(error);
     this.journal.settleUnchanged(intentId, reason, error);
     runtime.settled.resolve(
-      unchangedSpatialSkeletonOptimisticEditSettlement(reason, error),
+      unchangedSpatialSkeletonEditSettlement(reason, error),
     );
     runtime.lease?.release();
   }
 
   private handleAttemptFailure(
     intentId: number,
-    runtime: EngineIntentRuntime<TResult>,
-    settlement: SpatialSkeletonMutationAttemptSettlement<TResult>,
+    runtime: QueueIntentRuntime<TResult>,
+    settlement: SpatialSkeletonEditRequestAttemptSettlement<TResult>,
   ) {
     const { outcome } = settlement;
     if (outcome.status === "committed") return;
     if (
-      this.requireJournalEntry(intentId).committedMutationAttempts.length !== 0
+      this.requireJournalEntry(intentId).committedEditRequestAttempts.length !==
+      0
     ) {
-      // A later workflow step cannot erase a commit already observed from
+      // A later plan step cannot erase a commit already observed from
       // authority. Keep the lease and require a reload instead of attempting
-      // another mutation or background reconciliation.
+      // another edit request or background reconciliation.
       this.blockForReload(intentId, runtime, "committed", outcome);
       return;
     }
@@ -1648,8 +1637,8 @@ export class SpatialSkeletonOptimisticQueueEngine<
     const suffixIds = suffix.map(({ sequence }) => sequence);
     const suffixIdSet = new Set(suffixIds);
     try {
-      this.options.projection.rollbackAndReplay({
-        rollbackIntents: this.historyOperations.getProjectionArtifacts(
+      this.options.preview.rollbackAndReplay({
+        rollbackIntents: this.historyOperations.getPreviewArtifacts(
           [...suffixIds].reverse(),
         ),
         replayIntents: this.historyOperations
@@ -1660,28 +1649,28 @@ export class SpatialSkeletonOptimisticQueueEngine<
       });
     } catch (publicationError) {
       // Authority is definitively unchanged, but the layer can no longer
-      // prove that its adopted projection matches canonical queue state.
+      // prove that its adopted preview matches canonical queue state.
       // Stop this layer, settle the rejected suffix, and require a reload
       // without retaining the datasource-wide lane.
-      this.latchLocalProjectionResetFailure(intentId, publicationError, true);
+      this.latchLocalPreviewResetFailure(intentId, publicationError, true);
       this.options.onListenerError?.(publicationError);
     }
     for (const suffixIntentId of suffixIds) {
-      this.removePreparation(suffixIntentId);
-      this.options.projection.discardPrepared(suffixIntentId);
+      this.removePendingEdit(suffixIntentId);
+      this.options.preview.discardPrepared(suffixIntentId);
     }
     this.journal.rejectActiveSuffix(intentId, {
       rootReason: reason,
       rootError: error,
       laterError,
     });
-    if (this.getFatalState() === undefined) {
+    if (this.getReloadRequired() === undefined) {
       try {
         this.options.history.rollbackFrom(
           this.requireJournalEntry(intentId).metadata.historyTicket,
         );
       } catch (historyError) {
-        this.latchLocalProjectionResetFailure(intentId, historyError, true);
+        this.latchLocalPreviewResetFailure(intentId, historyError, true);
         this.options.onListenerError?.(historyError);
       }
     }
@@ -1693,7 +1682,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
       const settlementError = isRoot ? error : laterError;
       suffixRuntime.exact.reject(settlementError);
       suffixRuntime.settled.resolve(
-        unchangedSpatialSkeletonOptimisticEditSettlement(
+        unchangedSpatialSkeletonEditSettlement(
           isRoot ? reason : "not-started",
           settlementError,
         ),
@@ -1705,45 +1694,47 @@ export class SpatialSkeletonOptimisticQueueEngine<
     this.pumpPreparations();
   }
 
-  private latchLocalProjectionResetFailure(
+  private latchLocalPreviewResetFailure(
     intentId: number,
     error: unknown,
     preserveRejectedSuffix = false,
   ) {
-    if (this.getFatalState() !== undefined) return false;
-    const fatalState = freezeSpatialSkeletonOptimisticFatalState({
-      reason: "local-projection-reset-failed",
+    if (this.getReloadRequired() !== undefined) return false;
+    const reloadRequired = freezeSpatialSkeletonReloadRequiredDetails({
+      reason: "local-preview-reset-failed",
       authority: "unchanged",
       intentId,
       cause: error,
     });
-    const latched = this.options.fatalState.latch(fatalState);
-    const effectiveFatalState = this.options.fatalState.get();
-    if (effectiveFatalState === undefined) {
-      throw new Error("The state-owned fatal latch discarded its first value.");
+    const latched = this.options.reloadRequired.latch(reloadRequired);
+    const effectiveReloadRequired = this.options.reloadRequired.get();
+    if (effectiveReloadRequired === undefined) {
+      throw new Error(
+        "The session-owned Reload-required latch discarded its first value.",
+      );
     }
     if (latched) {
-      this.handledFatalState = effectiveFatalState;
-      this.cancelUnsentForFatal(
+      this.handledReloadRequired = effectiveReloadRequired;
+      this.cancelUnsentForReloadRequired(
         intentId,
         false,
         preserveRejectedSuffix ? intentId : undefined,
       );
     } else {
-      this.handleLatchedFatalState(intentId);
+      this.handleLatchedReloadRequired(intentId);
     }
     return latched;
   }
 
   private rollbackUnknown(
     intentId: number,
-    runtime: EngineIntentRuntime<TResult>,
+    runtime: QueueIntentRuntime<TResult>,
     outcome: Exclude<
-      SpatialSkeletonMutationOutcome<TResult>,
+      SpatialSkeletonEditRequestOutcome<TResult>,
       { status: "committed" }
     >,
   ) {
-    this.enterFatalState(
+    this.enterReloadRequired(
       intentId,
       runtime,
       "indeterminate",
@@ -1766,11 +1757,11 @@ export class SpatialSkeletonOptimisticQueueEngine<
 
   private blockForReload(
     intentId: number,
-    runtime: EngineIntentRuntime<TResult>,
+    runtime: QueueIntentRuntime<TResult>,
     authority: "committed" | "indeterminate",
     error: unknown,
   ) {
-    this.enterFatalState(intentId, runtime, authority, error);
+    this.enterReloadRequired(intentId, runtime, authority, error);
     const journalRecord = this.journal.get(intentId);
     if (journalRecord !== undefined && !journalRecord.terminal) {
       this.journal.markReloadRequired(intentId, authority);
@@ -1783,20 +1774,20 @@ export class SpatialSkeletonOptimisticQueueEngine<
    * This ordering lets cancellation win every waiting-for-lease attempt before
    * the coordinator can hand it the source lease released by an unsafe result.
    */
-  private enterFatalState(
+  private enterReloadRequired(
     faultingIntentId: number,
-    faultingRuntime: EngineIntentRuntime<TResult>,
+    faultingRuntime: QueueIntentRuntime<TResult>,
     authority: "committed" | "indeterminate",
     error: unknown,
-    rollbackFaultingProjection = false,
+    rollbackFaultingPreview = false,
   ) {
-    const existing = this.getFatalState();
+    const existing = this.getReloadRequired();
     if (existing !== undefined) {
-      this.handleLatchedFatalState(faultingIntentId);
+      this.handleLatchedReloadRequired(faultingIntentId);
       faultingRuntime.lease?.retain();
       return false;
     }
-    const fatalState = freezeSpatialSkeletonOptimisticFatalState({
+    const reloadRequired = freezeSpatialSkeletonReloadRequiredDetails({
       reason:
         authority === "indeterminate"
           ? "authority-indeterminate"
@@ -1805,39 +1796,44 @@ export class SpatialSkeletonOptimisticQueueEngine<
       intentId: faultingIntentId,
       cause: error,
     });
-    const latched = this.options.fatalState.latch(fatalState);
-    const effectiveFatalState = this.options.fatalState.get();
-    if (effectiveFatalState === undefined) {
-      throw new Error("The state-owned fatal latch discarded its first value.");
+    const latched = this.options.reloadRequired.latch(reloadRequired);
+    const effectiveReloadRequired = this.options.reloadRequired.get();
+    if (effectiveReloadRequired === undefined) {
+      throw new Error(
+        "The session-owned Reload-required latch discarded its first value.",
+      );
     }
     if (latched) {
-      this.handledFatalState = effectiveFatalState;
-      this.cancelUnsentForFatal(faultingIntentId, rollbackFaultingProjection);
+      this.handledReloadRequired = effectiveReloadRequired;
+      this.cancelUnsentForReloadRequired(
+        faultingIntentId,
+        rollbackFaultingPreview,
+      );
     }
     faultingRuntime.lease?.retain();
     return latched;
   }
 
-  private handleLatchedFatalState(faultingIntentId?: number) {
+  private handleLatchedReloadRequired(faultingIntentId?: number) {
     if (this.disposed) return;
-    const effectiveFatalState = this.options.fatalState.get();
-    if (effectiveFatalState === undefined) return;
-    if (this.handledFatalState === effectiveFatalState) return;
-    this.handledFatalState = effectiveFatalState;
-    this.cancelUnsentForFatal(faultingIntentId);
+    const effectiveReloadRequired = this.options.reloadRequired.get();
+    if (effectiveReloadRequired === undefined) return;
+    if (this.handledReloadRequired === effectiveReloadRequired) return;
+    this.handledReloadRequired = effectiveReloadRequired;
+    this.cancelUnsentForReloadRequired(faultingIntentId);
     this.notifyChanged();
   }
 
-  private cancelUnsentForFatal(
+  private cancelUnsentForReloadRequired(
     faultingIntentId?: number,
-    rollbackFaultingProjection = false,
+    rollbackFaultingPreview = false,
     preserveIntentSequenceAtOrAfter?: number,
   ) {
     const cancellationError = new Error(
       "Canceled because another edit requires a page reload.",
     );
     this.options.history.reset();
-    const canceled: Array<readonly [number, EngineIntentRuntime<TResult>]> = [];
+    const canceled: Array<readonly [number, QueueIntentRuntime<TResult>]> = [];
     for (const [intentId, runtime] of this.runtimes) {
       const entry = this.journal.get(intentId);
       if (
@@ -1853,9 +1849,9 @@ export class SpatialSkeletonOptimisticQueueEngine<
       const canceledBeforeCommit =
         submission === undefined ||
         submission.cancelBeforeCommit(cancellationError);
-      if (entry.committedMutationAttempts.length !== 0) {
+      if (entry.committedEditRequestAttempts.length !== 0) {
         // A prior physical step already committed. Cancel any current step
-        // which has not crossed adapter.commit(), but keep the workflow and its
+        // which has not crossed adapter.commit(), but keep the plan and its
         // authority fence unresolved for Reload required.
         runtime.lease?.retain();
         if (canceledBeforeCommit) {
@@ -1871,13 +1867,13 @@ export class SpatialSkeletonOptimisticQueueEngine<
       canceled.push([intentId, runtime]);
     }
     const canceledIds = new Set(canceled.map(([intentId]) => intentId));
-    if (rollbackFaultingProjection && faultingIntentId !== undefined) {
+    if (rollbackFaultingPreview && faultingIntentId !== undefined) {
       canceledIds.add(faultingIntentId);
     }
-    const rollbackIntents = this.historyOperations.getProjectionArtifacts(
+    const rollbackIntents = this.historyOperations.getPreviewArtifacts(
       [
         ...canceled.map(([intentId]) => intentId),
-        ...(rollbackFaultingProjection && faultingIntentId !== undefined
+        ...(rollbackFaultingPreview && faultingIntentId !== undefined
           ? [faultingIntentId]
           : []),
       ]
@@ -1889,7 +1885,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
       .filter(({ intentId }) => !canceledIds.has(intentId));
     if (rollbackIntents.length !== 0) {
       try {
-        this.options.projection.rollbackAndReplay({
+        this.options.preview.rollbackAndReplay({
           rollbackIntents,
           replayIntents,
         });
@@ -1899,9 +1895,9 @@ export class SpatialSkeletonOptimisticQueueEngine<
     }
 
     for (const [intentId, runtime] of canceled) {
-      this.removePreparation(intentId);
+      this.removePendingEdit(intentId);
       try {
-        this.options.projection.discardPrepared(intentId);
+        this.options.preview.discardPrepared(intentId);
         runtime.exact.reject(cancellationError);
         this.journal.settleUnchanged(
           intentId,
@@ -1909,7 +1905,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
           cancellationError,
         );
         runtime.settled.resolve(
-          unchangedSpatialSkeletonOptimisticEditSettlement(
+          unchangedSpatialSkeletonEditSettlement(
             "not-started",
             cancellationError,
           ),
@@ -1924,35 +1920,31 @@ export class SpatialSkeletonOptimisticQueueEngine<
 
   private finishCommitted(
     intentId: number,
-    runtime: EngineIntentRuntime<TResult>,
+    runtime: QueueIntentRuntime<TResult>,
   ) {
     const entry = this.requireJournalEntry(intentId);
     this.options.history.confirm(entry.metadata.historyTicket);
     this.journal.settleSuccessful(intentId, "committed");
-    this.removePreparation(intentId);
+    this.removePendingEdit(intentId);
     runtime.lease?.release();
-    const lastResult = entry.committedMutationAttempts.at(-1)?.result;
-    runtime.settled.resolve(
-      committedSpatialSkeletonOptimisticEditSettlement(lastResult),
-    );
+    const lastResult = entry.committedEditRequestAttempts.at(-1)?.result;
+    runtime.settled.resolve(committedSpatialSkeletonEditSettlement(lastResult));
     this.historyOperations.compactTerminalState();
   }
 
-  private finishNoOp(intentId: number, runtime: EngineIntentRuntime<TResult>) {
+  private finishNoOp(intentId: number, runtime: QueueIntentRuntime<TResult>) {
     const entry = this.requireJournalEntry(intentId);
     this.options.history.confirm(entry.metadata.historyTicket);
     this.journal.settleSuccessful(intentId, "no-op");
-    this.removePreparation(intentId);
+    this.removePendingEdit(intentId);
     runtime.lease?.release();
-    runtime.settled.resolve(
-      unchangedSpatialSkeletonOptimisticEditSettlement("no-op"),
-    );
+    runtime.settled.resolve(unchangedSpatialSkeletonEditSettlement("no-op"));
     this.historyOperations.compactTerminalState();
   }
 
   private coalesceQueuedOpposite(
     oppositeIntentId: number,
-    opposite: EngineIntentRuntime<TResult>,
+    opposite: QueueIntentRuntime<TResult>,
     targetIntentId: number,
   ) {
     const target = this.runtimes.get(targetIntentId);
@@ -1970,11 +1962,11 @@ export class SpatialSkeletonOptimisticQueueEngine<
       return;
     }
     try {
-      const rollbackIntents = this.historyOperations.getProjectionArtifacts([
+      const rollbackIntents = this.historyOperations.getPreviewArtifacts([
         targetIntentId,
       ]);
       if (rollbackIntents.length !== 0) {
-        this.options.projection.rollbackAndReplay({
+        this.options.preview.rollbackAndReplay({
           rollbackIntents,
           replayIntents: [],
         });
@@ -1983,10 +1975,10 @@ export class SpatialSkeletonOptimisticQueueEngine<
       // settle immediately without manufacturing an inverse merely to remove
       // state which was never visible.  The retained forward recipe is enough
       // for a later Redo; that Redo captures its inverse during preparation.
-      this.options.projection.discardPrepared(targetIntentId);
-      this.options.projection.discardPrepared(oppositeIntentId);
-      this.removePreparation(targetIntentId);
-      this.removePreparation(oppositeIntentId);
+      this.options.preview.discardPrepared(targetIntentId);
+      this.options.preview.discardPrepared(oppositeIntentId);
+      this.removePendingEdit(targetIntentId);
+      this.removePendingEdit(oppositeIntentId);
       this.journal.setPreviewState(oppositeIntentId, "exact");
       this.journal.settleQueuedCancellationPair(
         targetIntentId,
@@ -1998,7 +1990,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
       for (const runtime of [target, opposite]) {
         runtime.exact.resolve(true);
         runtime.settled.resolve(
-          unchangedSpatialSkeletonOptimisticEditSettlement("no-op"),
+          unchangedSpatialSkeletonEditSettlement("no-op"),
         );
       }
       this.historyOperations.compactTerminalState();
@@ -2012,16 +2004,18 @@ export class SpatialSkeletonOptimisticQueueEngine<
     }
   }
 
-  private requirePreparedWorkflow(entry: {
-    readonly metadata: { readonly workflow?: TWorkflow };
-  }): TWorkflow {
-    if (entry.metadata.workflow === undefined) {
-      throw new Error("An unprepared intent cannot start a server mutation.");
+  private requirePreparedPlan(entry: {
+    readonly metadata: { readonly plan?: TPlan };
+  }): TPlan {
+    if (entry.metadata.plan === undefined) {
+      throw new Error(
+        "An unprepared intent cannot start a server edit request.",
+      );
     }
-    return entry.metadata.workflow;
+    return entry.metadata.plan;
   }
 
-  private removePreparation(intentId: number) {
+  private removePendingEdit(intentId: number) {
     const runtime = this.runtimes.get(intentId);
     runtime?.inputAbortController?.abort(
       new DOMException("Intent preparation ended.", "AbortError"),
@@ -2032,7 +2026,7 @@ export class SpatialSkeletonOptimisticQueueEngine<
       runtime.releaseAdmissionInputs = undefined;
     }
     try {
-      this.options.preparation?.remove(intentId);
+      this.options.pendingEdit?.remove(intentId);
     } catch (error) {
       this.options.onListenerError?.(error);
     }
@@ -2052,14 +2046,14 @@ export class SpatialSkeletonOptimisticQueueEngine<
 
   private requireActive() {
     if (this.disposed) {
-      throw new SpatialSkeletonOptimisticQueueEngineDisposedError();
+      throw new SpatialSkeletonEditQueueDisposedError();
     }
   }
 
   private requireEditingAllowed() {
-    const fatalState = this.getFatalState();
-    if (fatalState !== undefined) {
-      throw new SpatialSkeletonOptimisticReloadRequiredError(fatalState);
+    const reloadRequired = this.getReloadRequired();
+    if (reloadRequired !== undefined) {
+      throw new SpatialSkeletonReloadRequiredError(reloadRequired);
     }
   }
 

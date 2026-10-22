@@ -16,30 +16,28 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type {
-  SpatialSkeletonIntentDriver,
-  SpatialSkeletonMutationContext,
-  SpatialSkeletonMutationFailureDisposition,
-  SpatialSkeletonOptimisticHistoryPort,
-  SpatialSkeletonOptimisticMutationAdapter,
-  SpatialSkeletonOptimisticProjectionPort,
-  SpatialSkeletonProjectionArtifactsListener,
-  SpatialSkeletonProjectionIntentArtifact,
+  SpatialSkeletonEditPlanner,
+  SpatialSkeletonEditRequestContext,
+  SpatialSkeletonEditRequestFailureDisposition,
+  SpatialSkeletonHistoryPort,
+  SpatialSkeletonEditRequestAdapter,
+  SpatialSkeletonPreviewPort,
+  SpatialSkeletonPreviewArtifactsListener,
+  SpatialSkeletonPreviewIntentArtifact,
 } from "#src/skeleton/edit_queue/api.js";
-import { SpatialSkeletonOptimisticQueueEngine } from "#src/skeleton/edit_queue/edit_queue.js";
+import { SpatialSkeletonEditQueue } from "#src/skeleton/edit_queue/edit_queue.js";
 import type {
   SpatialSkeletonQueueInput,
   SpatialSkeletonQueueInputPreparation,
 } from "#src/skeleton/edit_queue/queue_input.js";
 import {
-  SpatialSkeletonMutationAttemptScheduler,
-  SpatialSkeletonMutationAuthorityLeaseCoordinator,
+  SpatialSkeletonRequestScheduler,
+  SpatialSkeletonEditRequestLock,
 } from "#src/skeleton/edit_queue/request_scheduler.js";
-import { spatialSkeletonLogicalSegment } from "#src/skeleton/edit_queue/stable_id_handles.js";
-import type { SpatialSkeletonOptimisticFatalState } from "#src/skeleton/edit_queue/types.js";
-import {
-  SpatialSkeletonCommandHistory,
-  type SpatialSkeletonCommandHistoryTransitionTicket as Ticket,
-} from "#src/skeleton/edit_queue/undo_history.js";
+import { spatialSkeletonStableSegment } from "#src/skeleton/edit_queue/stable_id_handles.js";
+import type { SpatialSkeletonReloadRequiredDetails } from "#src/skeleton/edit_queue/types.js";
+import type { SpatialSkeletonUndoHistoryTransitionTicket as Ticket } from "#src/skeleton/edit_queue/undo_history.js";
+import { SpatialSkeletonUndoHistory } from "#src/skeleton/edit_queue/undo_history.js";
 
 interface Input {
   readonly name: string;
@@ -48,11 +46,11 @@ interface Input {
   readonly prepare?: Promise<void>;
 }
 
-interface Workflow {
+interface Plan {
   readonly input: Input;
 }
 
-interface Mutation {
+interface EditRequest {
   readonly name: string;
 }
 
@@ -61,8 +59,8 @@ interface Result {
 }
 
 interface Commit {
-  readonly mutation: Mutation;
-  readonly context: SpatialSkeletonMutationContext;
+  readonly editRequest: EditRequest;
+  readonly context: SpatialSkeletonEditRequestContext;
   resolve(value: Result): void;
   reject(error: unknown): void;
 }
@@ -93,8 +91,8 @@ function makeHarness(
     delayPreparationFor?: string;
     capacity?: number;
     previewPreparation?: Promise<void>;
-    coordinator?: SpatialSkeletonMutationAuthorityLeaseCoordinator;
-    mutationScope?: object;
+    coordinator?: SpatialSkeletonEditRequestLock;
+    editRequestScope?: object;
     onListenerError?: (error: unknown) => void;
   } = {},
 ) {
@@ -102,13 +100,13 @@ function makeHarness(
   const commits: Commit[] = [];
   let failPublication = options.failPublication ?? false;
   let failRollback = options.failRollback ?? false;
-  let fatal: SpatialSkeletonOptimisticFatalState | undefined;
-  const commandHistory = new SpatialSkeletonCommandHistory({
+  let reloadRequired: SpatialSkeletonReloadRequiredDetails | undefined;
+  const commandHistory = new SpatialSkeletonUndoHistory({
     capacity: options.capacity,
   });
   const reset = vi.spyOn(commandHistory, "reset");
   const rollbackFrom = vi.spyOn(commandHistory, "rollbackFrom");
-  const history: SpatialSkeletonOptimisticHistoryPort<Input, Ticket> = {
+  const history: SpatialSkeletonHistoryPort<Input, Ticket> = {
     capacity: commandHistory.capacity,
     stageExecute: (input) => commandHistory.stageExecute(input.name),
     stageUndo: () => commandHistory.stageUndo(),
@@ -127,66 +125,62 @@ function makeHarness(
     canStage: (intent) =>
       (intent === "undo" ? commandHistory.canUndo : commandHistory.canRedo)
         .value,
-    getProjectedEntryId: (intent) =>
+    getPreviewedEntryId: (intent) =>
       (intent === "undo"
-        ? commandHistory.getProjectedUndoEntry()
-        : commandHistory.getProjectedRedoEntry()
+        ? commandHistory.getPreviewedUndoEntry()
+        : commandHistory.getPreviewedRedoEntry()
       )?.entryId,
     getRetainedEntryIds: () => commandHistory.getRetainedEntryIds(),
   };
 
-  const adapter: SpatialSkeletonOptimisticMutationAdapter<Mutation, Result> = {
-    mutationScope: options.mutationScope ?? {},
-    commit: (mutation, context) => {
+  const adapter: SpatialSkeletonEditRequestAdapter<EditRequest, Result> = {
+    editRequestScope: options.editRequestScope ?? {},
+    commit: (editRequest, context) => {
       const pending = deferred<Result>();
-      commits.push({ mutation, context, ...pending });
-      events.push(`commit:${mutation.name}`);
+      commits.push({ editRequest, context, ...pending });
+      events.push(`commit:${editRequest.name}`);
       return pending.promise;
     },
     classifyFailure: (error) =>
-      (error as { disposition?: SpatialSkeletonMutationFailureDisposition })
+      (error as { disposition?: SpatialSkeletonEditRequestFailureDisposition })
         .disposition ?? "indeterminate",
   };
 
   const active = new Map<
     number,
-    SpatialSkeletonProjectionIntentArtifact<string, string>
+    SpatialSkeletonPreviewIntentArtifact<string, string>
   >();
   const listeners = new Set<
-    SpatialSkeletonProjectionArtifactsListener<string, string>
+    SpatialSkeletonPreviewArtifactsListener<string, string>
   >();
   const emit = () => {
     const artifacts = [...active.values()];
     for (const listener of listeners) listener(artifacts);
   };
-  const projection: SpatialSkeletonOptimisticProjectionPort<
-    string,
-    string,
-    string
-  > = {
-    subscribeProjectionArtifacts: (listener) => {
+  const preview: SpatialSkeletonPreviewPort<string, string, string> = {
+    subscribePreviewArtifacts: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     prepareExact: async (intentId, value) => {
       if (
-        value === `projection:${options.failPreparationFor}` ||
-        value === `projection:${options.delayPreparationFor}`
+        value === `preview:${options.failPreparationFor}` ||
+        value === `preview:${options.delayPreparationFor}`
       ) {
         await options.previewPreparation;
       }
-      if (value === `projection:${options.failPreparationFor}`) {
+      if (value === `preview:${options.failPreparationFor}`) {
         throw new Error("preview preparation failed");
       }
       events.push(`prepare:${intentId}`);
-      return { projection: value, inverseProjection: `inverse:${value}` };
+      return { preview: value, inversePreview: `inverse:${value}` };
     },
     discardPrepared: (intentId) => events.push(`discard:${intentId}`),
     publishExact: (intentId, value) => {
       active.set(intentId, {
         intentId,
-        projection: value,
-        inverseProjection: `inverse:${value}`,
+        preview: value,
+        inversePreview: `inverse:${value}`,
       });
       events.push(`preview:${intentId}`);
       emit();
@@ -215,67 +209,65 @@ function makeHarness(
       emit();
       return artifact;
     },
-    setRetainedHistoryProjections: () => undefined,
+    setRetainedHistoryPreviews: () => undefined,
     ownsAuthoritativeReadSegment: () => false,
     getProtectedSegmentIds: () => [],
   };
 
-  const driver: SpatialSkeletonIntentDriver<
+  const planner: SpatialSkeletonEditPlanner<
     Input,
-    Workflow,
+    Plan,
     string,
-    Mutation,
+    EditRequest,
     Result,
     string,
     string
   > = {
     describeIntent: (input) => ({ kind: "test", commandLabel: input.name }),
-    createLogicalIntent: (input, context) => ({
+    planIntent: (input, context) => ({
       kind: "test",
       commandLabel: input.name,
-      logicalResources: [
+      stableResources: [
         {
-          handle: spatialSkeletonLogicalSegment(input.segment),
+          handle: spatialSkeletonStableSegment(input.segment),
           access: "write",
         },
       ],
-      projection:
+      preview:
         context.intent === "undo"
-          ? context.recipe.inverseProjection!
+          ? context.recipe.inversePreview!
           : context.intent === "redo"
-            ? context.recipe.projection
-            : `projection:${input.name}`,
-      workflow: { input },
+            ? context.recipe.preview
+            : `preview:${input.name}`,
+      plan: { input },
     }),
-    nextAttempt: async (workflow, context) => {
-      await workflow.input.prepare;
+    nextAttempt: async (plan, context) => {
+      await plan.input.prepare;
       const cursor = context.committedAttempts.length;
-      if (cursor >= (workflow.input.steps ?? 1)) return undefined;
+      if (cursor >= (plan.input.steps ?? 1)) return undefined;
       return {
-        materializeMutation: () => ({
-          name: `${workflow.input.name}:${cursor}`,
+        materializeEditRequest: () => ({
+          name: `${plan.input.name}:${cursor}`,
         }),
       };
     },
-    createReconciliation: (workflow) => `saved:${workflow.input.name}`,
+    createReconciliation: (plan) => `saved:${plan.input.name}`,
   };
 
-  const engine = new SpatialSkeletonOptimisticQueueEngine({
-    driver,
-    projection,
+  const engine = new SpatialSkeletonEditQueue({
+    planner,
+    preview,
     history,
     onListenerError: options.onListenerError,
-    attempts: new SpatialSkeletonMutationAttemptScheduler({
+    attempts: new SpatialSkeletonRequestScheduler({
       adapter,
-      coordinator:
-        options.coordinator ??
-        new SpatialSkeletonMutationAuthorityLeaseCoordinator(),
+      coordinator: options.coordinator ?? new SpatialSkeletonEditRequestLock(),
     }),
-    fatalState: {
-      get: () => fatal,
+    reloadRequired: {
+      get: () => reloadRequired,
       latch: (candidate) => {
-        if (fatal !== undefined) return false;
-        fatal = candidate;
+        if (reloadRequired !== undefined) return false;
+        reloadRequired = candidate;
         return true;
       },
     },
@@ -283,14 +275,14 @@ function makeHarness(
 
   return {
     engine,
-    projection,
+    preview,
     commits,
     events,
     history,
     commandHistory,
     reset,
     rollbackFrom,
-    getFatal: () => fatal,
+    getReloadRequired: () => reloadRequired,
   };
 }
 
@@ -313,9 +305,10 @@ function pendingInputs(read = deferred<void>()) {
   return { read, policy, signals, released };
 }
 
-describe("SpatialSkeletonOptimisticQueueEngine", () => {
+describe("SpatialSkeletonEditQueue", () => {
   it("reprepares Undo when authority finalizes its inverse during preparation", async () => {
-    const { engine, projection, commits, events, getFatal } = makeHarness();
+    const { engine, preview, commits, events, getReloadRequired } =
+      makeHarness();
     const execute = engine.submitExecute(
       { name: "merge", segment: 1 },
       queueInput,
@@ -323,22 +316,22 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     await execute;
     await flush();
     const gate = deferred<void>();
-    const prepare = projection.prepareExact.bind(projection);
-    vi.spyOn(projection, "prepareExact").mockImplementationOnce(
+    const prepare = preview.prepareExact.bind(preview);
+    vi.spyOn(preview, "prepareExact").mockImplementationOnce(
       async (...args) => {
         const result = await prepare(...args);
         await gate.promise;
         return result;
       },
     );
-    const publish = projection.publishAuthoritative.bind(projection);
-    vi.spyOn(projection, "publishAuthoritative").mockImplementationOnce(
+    const publish = preview.publishAuthoritative.bind(preview);
+    vi.spyOn(preview, "publishAuthoritative").mockImplementationOnce(
       (publication) => ({
         ...publish(publication),
-        inverseProjection: "corrected inverse",
+        inversePreview: "corrected inverse",
       }),
     );
-    const publishExact = vi.spyOn(projection, "publishExact");
+    const publishExact = vi.spyOn(preview, "publishExact");
     const undo = engine.submitUndo();
     await flush();
     commits[0].resolve({ value: "merged" });
@@ -354,7 +347,7 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     );
     commits[1].resolve({ value: "undone" });
     await undo.settled;
-    expect(getFatal()).toBeUndefined();
+    expect(getReloadRequired()).toBeUndefined();
   });
 
   async function save(harness: ReturnType<typeof makeHarness>, name: string) {
@@ -366,7 +359,7 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     await flush();
     harness.commits.at(-1)!.resolve({ value: `${name} saved` });
     await flush();
-    expect(harness.getFatal()).toBeUndefined();
+    expect(harness.getReloadRequired()).toBeUndefined();
     await execution.settled;
   }
 
@@ -427,7 +420,7 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     const redo = engine.submitRedo();
     await redo;
     await flush();
-    expect(commits.at(-1)!.mutation.name).toBe("original:0");
+    expect(commits.at(-1)!.editRequest.name).toBe("original:0");
     commits.at(-1)!.resolve({ value: "redone" });
     await redo.settled;
     expect(commandHistory.undoLabel.value).toBe("original");
@@ -458,7 +451,7 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
       const retry = kind === "undo" ? engine.submitUndo() : engine.submitRedo();
       await retry;
       await flush();
-      expect(commits.at(-1)!.mutation.name).toBe("original:0");
+      expect(commits.at(-1)!.editRequest.name).toBe("original:0");
       commits.at(-1)!.resolve({ value: "retry saved" });
       await retry.settled;
       expect(commandHistory.canUndo.value).toBe(kind === "redo");
@@ -504,11 +497,11 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
   );
 
   it("restores a staged Redo recipe after its activity rows have been evicted", async () => {
-    const preparation = deferred<void>();
+    const pendingEdit = deferred<void>();
     const { engine, commits, commandHistory } = makeHarness({
       capacity: 3,
       failPreparationFor: "bad preview",
-      previewPreparation: preparation.promise,
+      previewPreparation: pendingEdit.promise,
     });
     const earlier = engine.submitExecute(
       { name: "saving", segment: 1 },
@@ -543,7 +536,7 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
         .some(({ commandLabel }) => commandLabel === "restore to Redo"),
     ).toBe(false);
     const staleTickets = commandHistory.getStagedTransitions().slice(3);
-    preparation.resolve();
+    pendingEdit.resolve();
     await failedPreview;
     await failed.settled;
     expect(commandHistory.redoLabel.value).toBe("restore to Redo");
@@ -559,7 +552,7 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     commits[0]!.resolve({ value: "first saved" });
     await earlier.settled;
     await flush();
-    expect(commits.at(-1)!.mutation.name).toBe("restore to Redo:0");
+    expect(commits.at(-1)!.editRequest.name).toBe("restore to Redo:0");
     commits.at(-1)!.resolve({ value: "redone" });
     await redo.settled;
     expect(commandHistory.getStagedTransitions()).toEqual([]);
@@ -571,13 +564,14 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
   it.each([false, true])(
     "ignores canceled preparation when it finishes later (throws: %s)",
     async (throws) => {
-      const preparation = deferred<void>();
+      const pendingEdit = deferred<void>();
       const harness = makeHarness({
         delayPreparationFor: "later",
         failPreparationFor: throws ? "later" : undefined,
-        previewPreparation: preparation.promise,
+        previewPreparation: pendingEdit.promise,
       });
-      const { engine, commits, commandHistory, events, getFatal } = harness;
+      const { engine, commits, commandHistory, events, getReloadRequired } =
+        harness;
       await save(harness, "saved");
       const failed = engine.submitExecute(
         { name: "failed", segment: 1 },
@@ -595,9 +589,9 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
       await flush();
       commits.at(-1)!.reject(rejection());
       await Promise.all([failed.settled, later.settled, canceled]);
-      preparation.resolve();
+      pendingEdit.resolve();
       await flush();
-      expect(getFatal()).toBeUndefined();
+      expect(getReloadRequired()).toBeUndefined();
       expect(commandHistory.undoLabel.value).toBe("saved");
       expect(commandHistory.canRedo.value).toBe(false);
       expect(commandHistory.getStagedTransitions()).toEqual([]);
@@ -612,8 +606,14 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     "requires reload when history recovery fails: %s",
     async (failure) => {
       const harness = makeHarness();
-      const { engine, commits, commandHistory, rollbackFrom, reset, getFatal } =
-        harness;
+      const {
+        engine,
+        commits,
+        commandHistory,
+        rollbackFrom,
+        reset,
+        getReloadRequired,
+      } = harness;
       await save(harness, "saved");
       const failed = engine.submitExecute(
         { name: "failed", segment: 1 },
@@ -628,8 +628,8 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
         });
       commits.at(-1)!.reject(rejection());
       await failed.settled;
-      expect(getFatal()).toMatchObject({
-        reason: "local-projection-reset-failed",
+      expect(getReloadRequired()).toMatchObject({
+        reason: "local-preview-reset-failed",
         authority: "unchanged",
       });
       expect(reset).toHaveBeenCalled();
@@ -661,13 +661,15 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     firstPreparation.resolve();
     await expect(first).resolves.toBe(true);
     await flush();
-    expect(commits.map(({ mutation }) => mutation.name)).toEqual(["first:0"]);
+    expect(commits.map(({ editRequest }) => editRequest.name)).toEqual([
+      "first:0",
+    ]);
     commits[0]!.resolve({ value: "first saved" });
     await expect(first.settled).resolves.toMatchObject({
       outcome: "committed",
     });
     await flush();
-    expect(commits.map(({ mutation }) => mutation.name)).toEqual([
+    expect(commits.map(({ editRequest }) => editRequest.name)).toEqual([
       "first:0",
       "second:0",
     ]);
@@ -699,7 +701,7 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     expect(commits[0]!.context.operationId).not.toBe(
       commits[1]!.context.operationId,
     );
-    expect(commits[2]!.mutation.name).toBe("next:0");
+    expect(commits[2]!.editRequest.name).toBe("next:0");
     commits[2]!.resolve({ value: "next saved" });
     await expect(second.settled).resolves.toMatchObject({
       outcome: "committed",
@@ -710,10 +712,11 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     "retains the shared lane when a later compound step is %s",
     async (disposition) => {
       const options = {
-        coordinator: new SpatialSkeletonMutationAuthorityLeaseCoordinator(),
-        mutationScope: {},
+        coordinator: new SpatialSkeletonEditRequestLock(),
+        editRequestScope: {},
       };
-      const { engine, commits, events, getFatal } = makeHarness(options);
+      const { engine, commits, events, getReloadRequired } =
+        makeHarness(options);
       const peer = makeHarness(options);
       const compound = engine.submitExecute(
         { name: "compound", segment: 1, steps: 2 },
@@ -735,13 +738,13 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
       void compound.settled.then(settled);
       commits[0]!.resolve({ value: "first step saved" });
       await flush();
-      expect(commits[1]!.mutation.name).toBe("compound:1");
+      expect(commits[1]!.editRequest.name).toBe("compound:1");
       commits[1]!.reject(
         Object.assign(new Error("second step failed"), { disposition }),
       );
       await flush();
 
-      expect(getFatal()).toMatchObject({
+      expect(getReloadRequired()).toMatchObject({
         reason: "committed-local-publication-failed",
         authority: "committed",
       });
@@ -805,7 +808,7 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
   });
 
   it("requires reload if definitive suffix rollback cannot be published", async () => {
-    const { engine, commits, getFatal, reset } = makeHarness({
+    const { engine, commits, getReloadRequired, reset } = makeHarness({
       failRollback: true,
     });
     const failed = engine.submitExecute(
@@ -832,8 +835,8 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
       outcome: "unchanged",
       reason: "not-started",
     });
-    expect(getFatal()).toMatchObject({
-      reason: "local-projection-reset-failed",
+    expect(getReloadRequired()).toMatchObject({
+      reason: "local-preview-reset-failed",
       authority: "unchanged",
     });
     expect(engine.getSnapshot()[0]).toMatchObject({
@@ -879,12 +882,12 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
   });
 
   it("cancels earlier lane waiters when a local reset failure requires reload", async () => {
-    const coordinator = new SpatialSkeletonMutationAuthorityLeaseCoordinator();
-    const mutationScope = {};
-    const externalLease = await coordinator.acquire({ mutationScope });
-    const { engine, commits, getFatal } = makeHarness({
+    const coordinator = new SpatialSkeletonEditRequestLock();
+    const editRequestScope = {};
+    const externalLease = await coordinator.acquire({ editRequestScope });
+    const { engine, commits, getReloadRequired } = makeHarness({
       coordinator,
-      mutationScope,
+      editRequestScope,
       failPreparationFor: "bad preview",
       failRollback: true,
     });
@@ -902,8 +905,8 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
       outcome: "unchanged",
       reason: "not-started",
     });
-    expect(getFatal()).toMatchObject({
-      reason: "local-projection-reset-failed",
+    expect(getReloadRequired()).toMatchObject({
+      reason: "local-preview-reset-failed",
       authority: "unchanged",
     });
 
@@ -912,15 +915,15 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     expect(commits).toHaveLength(0);
   });
 
-  it("disposes unsent work without issuing an automatic inverse mutation", async () => {
-    const preparation = deferred<void>();
+  it("disposes unsent work without issuing an automatic inverse edit request", async () => {
+    const pendingEdit = deferred<void>();
     const { engine, commits, reset } = makeHarness();
     const execution = engine.submitExecute(
-      { name: "unsent", segment: 1, prepare: preparation.promise },
+      { name: "unsent", segment: 1, prepare: pendingEdit.promise },
       queueInput,
     );
     const disposal = engine.dispose();
-    preparation.resolve();
+    pendingEdit.resolve();
     await expect(disposal).resolves.toBeUndefined();
     await expect(execution).rejects.toThrow(/disposed/);
     await expect(execution.settled).resolves.toMatchObject({
@@ -955,7 +958,9 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
   });
 
   it("requires reload if disposal cannot remove its adopted preview", async () => {
-    const { engine, commits, getFatal } = makeHarness({ failRollback: true });
+    const { engine, commits, getReloadRequired } = makeHarness({
+      failRollback: true,
+    });
     const execution = engine.submitExecute(
       { name: "started", segment: 1 },
       queueInput,
@@ -964,8 +969,8 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     await flush();
 
     const disposal = engine.dispose();
-    expect(getFatal()).toMatchObject({
-      reason: "local-projection-reset-failed",
+    expect(getReloadRequired()).toMatchObject({
+      reason: "local-preview-reset-failed",
       authority: "unchanged",
     });
     commits[0]!.reject(
@@ -982,7 +987,7 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
   });
 
   it("retains a late commit after disposal as Reload required", async () => {
-    const { engine, commits, getFatal } = makeHarness();
+    const { engine, commits, getReloadRequired } = makeHarness();
     const execution = engine.submitExecute(
       { name: "started", segment: 1 },
       queueInput,
@@ -992,7 +997,7 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     const disposal = engine.dispose();
     commits[0]!.resolve({ value: "saved" });
     await expect(disposal).resolves.toBeUndefined();
-    expect(getFatal()).toMatchObject({
+    expect(getReloadRequired()).toMatchObject({
       reason: "committed-local-publication-failed",
       authority: "committed",
     });
@@ -1004,7 +1009,7 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
   });
 
   it("retains indeterminate authority and starts no later transport", async () => {
-    const { engine, commits, getFatal } = makeHarness();
+    const { engine, commits, getReloadRequired } = makeHarness();
     const first = engine.submitExecute(
       { name: "unknown", segment: 1 },
       queueInput,
@@ -1017,7 +1022,7 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
     await flush();
     commits[0]!.reject(new Error("network lost"));
     await flush();
-    expect(getFatal()).toMatchObject({
+    expect(getReloadRequired()).toMatchObject({
       reason: "authority-indeterminate",
       authority: "indeterminate",
     });
@@ -1090,11 +1095,11 @@ describe("SpatialSkeletonOptimisticQueueEngine", () => {
       "preview:1",
       "preview:2",
     ]);
-    expect(commits[0].mutation.name).toBe("cold:0");
+    expect(commits[0].editRequest.name).toBe("cold:0");
     commits[0].resolve({ value: "saved" });
     await first.settled;
     await flush();
-    expect(commits[1].mutation.name).toBe("warm:0");
+    expect(commits[1].editRequest.name).toBe("warm:0");
     commits[1].resolve({ value: "saved" });
     await second.settled;
     expect(cold.released).toHaveBeenCalledOnce();

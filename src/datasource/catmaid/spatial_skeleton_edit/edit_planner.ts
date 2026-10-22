@@ -25,18 +25,18 @@ import type {
   CatmaidMoveNodeSemantic,
   CatmaidRerootSemantic,
   CatmaidRetainedNode,
-  CatmaidSemanticRecipe,
+  CatmaidCapturedEdit,
   CatmaidSplitSemantic,
-  CatmaidWorkflow,
-  CatmaidWorkflowStep,
+  CatmaidEditPlan,
+  CatmaidEditPlanStep,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_plan.js";
 import {
   makeSteps,
   requirePositiveId,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_plan.js";
 import type {
-  CatmaidOptimisticMutation,
-  CatmaidOptimisticMutationResult,
+  CatmaidEditRequest,
+  CatmaidEditRequestResult,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_requests.js";
 import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import type {
@@ -45,37 +45,39 @@ import type {
 } from "#src/skeleton/edit_commands.js";
 import type {
   SpatialSkeletonIntentCreationContext,
-  SpatialSkeletonIntentDriver,
-  SpatialSkeletonLogicalIntent,
-  SpatialSkeletonMutationWorkflowContext,
-  SpatialSkeletonOptimisticIdentityService,
-  SpatialSkeletonOptimisticPreparationDescriptor,
+  SpatialSkeletonEditPlanner,
+  SpatialSkeletonIntentPlan,
+  SpatialSkeletonEditPlanContext,
+  SpatialSkeletonIdentityService,
+  SpatialSkeletonPendingEditDescriptor,
   SpatialSkeletonProvisionalNumericIdPolicy,
   SpatialSkeletonProvisionalNumericIdService,
 } from "#src/skeleton/edit_queue/api.js";
-import type { CompleteSkeletonSnapshotHandle } from "#src/skeleton/edit_queue/complete_skeleton.js";
+import type { CompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import type {
-  SpatialSkeletonProjectionDelta,
-  SpatialSkeletonProjectionInverseDelta,
+  SpatialSkeletonEditDelta,
+  SpatialSkeletonEditInverseDelta,
 } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
 import { getSkeletonNodeChanges } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
 import type { SpatialSkeletonIntentResource } from "#src/skeleton/edit_queue/edit_intent_journal.js";
 import type {
   SpatialSkeletonAuthoritativeReconciliation,
-  SpatialSkeletonProjectionInspectionSeed,
-  SpatialSkeletonProjectionIntentDelta,
+  SpatialSkeletonPreviewInspectionSeed,
+  SpatialSkeletonPreviewIntentDelta,
 } from "#src/skeleton/edit_queue/preview.js";
-import type { SpatialSkeletonProjectionUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
+import type { SpatialSkeletonPreviewUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
 import type { SpatialSkeletonQueueInput } from "#src/skeleton/edit_queue/queue_input.js";
-import {
-  getSpatialSkeletonLogicalResourceKey,
-  spatialSkeletonLogicalNode,
-  spatialSkeletonLogicalSegment,
-  type SpatialSkeletonLogicalNodeHandle,
-  type SpatialSkeletonLogicalResourceHandle,
-  type SpatialSkeletonLogicalSegmentHandle,
+import type {
+  SpatialSkeletonStableNodeHandle,
+  SpatialSkeletonStableResourceHandle,
+  SpatialSkeletonStableSegmentHandle,
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
-import type { SpatialSkeletonOptimisticAuthorityPresentation } from "#src/skeleton/edit_queue/types.js";
+import {
+  getSpatialSkeletonStableResourceKey,
+  spatialSkeletonStableNode,
+  spatialSkeletonStableSegment,
+} from "#src/skeleton/edit_queue/stable_id_handles.js";
+import type { SpatialSkeletonAuthorityLabels } from "#src/skeleton/edit_queue/types.js";
 import {
   getSkeletonNodeConfidence,
   getSkeletonNodeRadius,
@@ -88,49 +90,44 @@ interface CatmaidMaterializationContext {
   readonly localSegmentBindings: ReadonlyMap<string, bigint>;
 }
 
-type CatmaidWorkflowContext = SpatialSkeletonMutationWorkflowContext<
-  CatmaidOptimisticMutation,
-  CatmaidOptimisticMutationResult
+type CatmaidEditPlanContext = SpatialSkeletonEditPlanContext<
+  CatmaidEditRequest,
+  CatmaidEditRequestResult
 >;
 
-/** CATMAID authority half of the generic workflow driver. */
-abstract class CatmaidWorkflowAuthorityDriverBase {
-  constructor(
-    protected readonly identity: SpatialSkeletonOptimisticIdentityService,
-  ) {}
+/** CATMAID authority half of the generic edit planner. */
+abstract class CatmaidEditPlanCommitBase {
+  constructor(protected readonly identity: SpatialSkeletonIdentityService) {}
 
   protected segmentHandle(segmentId: bigint) {
     return this.identity.getOrCreateSegmentHandle(segmentId);
   }
 
-  nextAttempt(workflow: CatmaidWorkflow, context: CatmaidWorkflowContext) {
-    const steps = makeSteps(workflow.semantic, workflow.direction);
+  nextAttempt(plan: CatmaidEditPlan, context: CatmaidEditPlanContext) {
+    const steps = makeSteps(plan.semantic, plan.direction);
     const step = steps[context.committedAttempts.length];
     if (step === undefined) return undefined;
     const { committedAttempts } = context;
     return Object.freeze({
-      materializeMutation: () =>
-        this.makeMutationRequest(
-          this.createMaterializationContext(workflow, committedAttempts),
+      materializeEditRequest: () =>
+        this.makeEditRequest(
+          this.createMaterializationContext(plan, committedAttempts),
           step,
         ),
     });
   }
 
-  createReconciliation(
-    workflow: CatmaidWorkflow,
-    context: CatmaidWorkflowContext,
-  ) {
-    return this.reconcile(workflow, context);
+  createReconciliation(plan: CatmaidEditPlan, context: CatmaidEditPlanContext) {
+    return this.reconcile(plan, context);
   }
 
   private createMaterializationContext(
-    workflow: CatmaidWorkflow,
-    attempts: CatmaidWorkflowContext["committedAttempts"],
+    plan: CatmaidEditPlan,
+    attempts: CatmaidEditPlanContext["committedAttempts"],
   ): CatmaidMaterializationContext {
     const localNodeBindings = new Map<string, bigint>();
     const localSegmentBindings = new Map<string, bigint>();
-    const steps = makeSteps(workflow.semantic, workflow.direction);
+    const steps = makeSteps(plan.semantic, plan.direction);
     for (let index = 0; index < attempts.length; ++index) {
       const attempt = attempts[index];
       const step = steps[index]!;
@@ -213,7 +210,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
       }
     }
     return Object.freeze({
-      direction: workflow.direction,
+      direction: plan.direction,
       localNodeBindings,
       localSegmentBindings,
     });
@@ -221,7 +218,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
 
   private resolveNode(
     context: CatmaidMaterializationContext,
-    handle: SpatialSkeletonLogicalNodeHandle,
+    handle: SpatialSkeletonStableNodeHandle,
   ) {
     const local = context.localNodeBindings.get(handle.stableId);
     if (local !== undefined) return local;
@@ -229,7 +226,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
     if (physicalId === undefined) {
       const target = this.identity.resolveNodeTarget(handle);
       throw new Error(
-        `CATMAID workflow requires authoritative node ${handle.stableId}; it is ${target.state}.`,
+        `CATMAID plan requires authoritative node ${handle.stableId}; it is ${target.state}.`,
       );
     }
     return physicalId;
@@ -237,7 +234,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
 
   private resolveSegment(
     context: CatmaidMaterializationContext,
-    handle: SpatialSkeletonLogicalSegmentHandle,
+    handle: SpatialSkeletonStableSegmentHandle,
   ) {
     const local = context.localSegmentBindings.get(handle.stableId);
     if (local !== undefined) return local;
@@ -245,16 +242,16 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
     if (physicalId === undefined) {
       const target = this.identity.resolveSegmentTarget(handle);
       throw new Error(
-        `CATMAID workflow requires authoritative skeleton ${handle.stableId}; it is ${target.state}.`,
+        `CATMAID plan requires authoritative skeleton ${handle.stableId}; it is ${target.state}.`,
       );
     }
     return physicalId;
   }
 
-  private makeMutationRequest(
+  private makeEditRequest(
     context: CatmaidMaterializationContext,
-    step: CatmaidWorkflowStep,
-  ): CatmaidOptimisticMutation {
+    step: CatmaidEditPlanStep,
+  ): CatmaidEditRequest {
     switch (step.kind) {
       case "add-node": {
         const semantic = step.semantic as
@@ -278,7 +275,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
       case "insert-node": {
         const { semantic } = step;
         if (semantic.parent === undefined) {
-          throw new Error("CATMAID insert workflow is missing its parent.");
+          throw new Error("CATMAID insert plan is missing its parent.");
         }
         return {
           kind: "insert-node",
@@ -436,7 +433,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
                 this.resolveSegment(context, semantic.secondSegment),
               ],
         );
-        const mutation: CatmaidOptimisticMutation<"merge"> = Object.freeze({
+        const editRequest: CatmaidEditRequest<"merge"> = Object.freeze({
           kind: "merge",
           request: Object.freeze({
             fromNodeId: this.resolveNode(context, firstHandle),
@@ -444,7 +441,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
           }),
           inputSegmentIds,
         });
-        return mutation;
+        return editRequest;
       }
     }
   }
@@ -470,24 +467,24 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
   }
 
   private reconcile(
-    workflow: CatmaidWorkflow,
-    context: CatmaidWorkflowContext,
+    plan: CatmaidEditPlan,
+    context: CatmaidEditPlanContext,
   ): SpatialSkeletonAuthoritativeReconciliation {
     const materialization = this.createMaterializationContext(
-      workflow,
+      plan,
       context.committedAttempts,
     );
     const nodeBindings: Array<
-      readonly [SpatialSkeletonLogicalNodeHandle, bigint]
+      readonly [SpatialSkeletonStableNodeHandle, bigint]
     > = [];
     const segmentBindings: Array<
-      readonly [SpatialSkeletonLogicalSegmentHandle, bigint]
+      readonly [SpatialSkeletonStableSegmentHandle, bigint]
     > = [];
-    const retired = new Map<string, SpatialSkeletonLogicalResourceHandle>();
+    const retired = new Map<string, SpatialSkeletonStableResourceHandle>();
     const retiredSegmentIds = new Set<bigint>();
-    let finalizedProjectionDelta: SpatialSkeletonProjectionDelta | undefined;
+    let finalizedPreviewDelta: SpatialSkeletonEditDelta | undefined;
 
-    const steps = makeSteps(workflow.semantic, workflow.direction);
+    const steps = makeSteps(plan.semantic, plan.direction);
     const attempts = context.committedAttempts;
     for (let index = 0; index < attempts.length; ++index) {
       const committed = attempts[index];
@@ -516,7 +513,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
                 "description",
               )
           ) {
-            finalizedProjectionDelta = {
+            finalizedPreviewDelta = {
               kind: "node-attributes",
               segment: step.semantic.segment,
               node: step.semantic.node,
@@ -527,7 +524,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
         }
         case "delete-node": {
           retired.set(
-            getSpatialSkeletonLogicalResourceKey(step.semantic.node),
+            getSpatialSkeletonStableResourceKey(step.semantic.node),
             step.semantic.node,
           );
           if (
@@ -536,7 +533,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
             (step.semantic.kind === "delete-node" && step.semantic.wasSoleRoot)
           ) {
             retired.set(
-              getSpatialSkeletonLogicalResourceKey(step.semantic.segment),
+              getSpatialSkeletonStableResourceKey(step.semantic.segment),
               step.semantic.segment,
             );
           }
@@ -593,7 +590,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
               );
             }
             const [sourceId, downstreamId] = this.requireMergeInputSegmentIds(
-              committed.mutation,
+              committed.editRequest,
             );
             if (resultId !== sourceId || deletedId !== downstreamId) {
               throw new Error(
@@ -608,7 +605,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
             const mergeSemantic = step.semantic;
             const requestedOrientation = mergeSemantic.inverseOrientation;
             const [firstId, secondId] = this.requireMergeInputSegmentIds(
-              committed.mutation,
+              committed.editRequest,
             );
             if (
               !(
@@ -638,7 +635,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
               );
             }
             // Keep both semantic identities bound to the source-wide survivor.
-            // Later projected edits and history recipes may refer to either;
+            // Later previewed edits and history recipes may refer to either;
             // Undo overlays the restored loser with its fresh split id.
             segmentBindings.push(
               [step.semantic.firstSegment, resultId],
@@ -646,7 +643,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
               [step.semantic.mergedSegment, resultId],
             );
             if (actualOrientation !== requestedOrientation) {
-              finalizedProjectionDelta = {
+              finalizedPreviewDelta = {
                 kind: "merge",
                 firstSegment:
                   actualOrientation === "second-from-first"
@@ -683,19 +680,17 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
       ...(retiredSegmentIds.size === 0
         ? {}
         : { retiredSegmentIds: Object.freeze([...retiredSegmentIds]) }),
-      ...(finalizedProjectionDelta === undefined
-        ? {}
-        : { finalizedProjectionDelta }),
+      ...(finalizedPreviewDelta === undefined ? {} : { finalizedPreviewDelta }),
     });
   }
 
   private requireMergeInputSegmentIds(
-    mutation: CatmaidOptimisticMutation,
+    editRequest: CatmaidEditRequest,
   ): readonly [bigint, bigint] {
-    if (mutation.kind !== "merge") {
-      throw new Error("CATMAID merge reconciliation lost its mutation.");
+    if (editRequest.kind !== "merge") {
+      throw new Error("CATMAID merge reconciliation lost its edit request.");
     }
-    return mutation.inputSegmentIds;
+    return editRequest.inputSegmentIds;
   }
 }
 
@@ -703,7 +698,7 @@ abstract class CatmaidWorkflowAuthorityDriverBase {
 function resolveCatmaidPreparedCommand(
   command: CatmaidSpatialSkeletonCommandDescriptor,
   queueInput: SpatialSkeletonQueueInput,
-  identity: SpatialSkeletonOptimisticIdentityService,
+  identity: SpatialSkeletonIdentityService,
 ): CatmaidSpatialSkeletonCommandDescriptor {
   const resolveNode = <T extends { nodeId: bigint; segmentId: bigint }>(
     node: T,
@@ -810,7 +805,7 @@ function resolveCatmaidPreparedCommand(
   return Object.freeze({ ...command, payload: Object.freeze(resolved) });
 }
 
-export type { CatmaidWorkflow } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_plan.js";
+export type { CatmaidEditPlan } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_plan.js";
 
 // Match CATMAID creation defaults so later history captures complete values.
 const CATMAID_CREATED_NODE_ATTRIBUTES = Object.freeze({
@@ -822,7 +817,7 @@ const CATMAID_CREATED_NODE_ATTRIBUTES = Object.freeze({
 const CATMAID_OPTIMISTIC_STALLED_WARNING = Object.freeze({
   delayMs: 30_000,
   message:
-    "CATMAID has not confirmed the optimistic skeleton edit yet. The server mutation lane is stalled, but you may continue previewing independent edits while the request remains in order.",
+    "CATMAID has not confirmed the optimistic skeleton edit yet. The server edit request lane is stalled, but you may continue previewing independent edits while the request remains in order.",
 });
 
 const CATMAID_OPTIMISTIC_OPERATION_NOUNS = Object.freeze({
@@ -840,9 +835,9 @@ const CATMAID_OPTIMISTIC_OPERATION_NOUNS = Object.freeze({
   Record<CatmaidSpatialSkeletonCommandPayload["kind"], string>
 >;
 
-export function getCatmaidOptimisticAuthorityPresentation(
+export function getCatmaidAuthorityLabels(
   kind: CatmaidSpatialSkeletonCommandPayload["kind"],
-): SpatialSkeletonOptimisticAuthorityPresentation {
+): SpatialSkeletonAuthorityLabels {
   return Object.freeze({
     authorityLabel: "CATMAID",
     operationNoun: CATMAID_OPTIMISTIC_OPERATION_NOUNS[kind],
@@ -862,11 +857,11 @@ function copyVector(value: ArrayLike<number>): SkeletonVector {
 }
 
 function uniqueResources(
-  handles: readonly SpatialSkeletonLogicalResourceHandle[],
+  handles: readonly SpatialSkeletonStableResourceHandle[],
 ) {
   const resources = new Map<string, SpatialSkeletonIntentResource>();
   for (const handle of handles) {
-    resources.set(getSpatialSkeletonLogicalResourceKey(handle), {
+    resources.set(getSpatialSkeletonStableResourceKey(handle), {
       handle,
       access: "write",
     });
@@ -887,7 +882,7 @@ function freezeNode(node: SkeletonNode) {
 
 function makeRetainedNode(
   capturedNodeId: bigint,
-  handle: SpatialSkeletonLogicalNodeHandle,
+  handle: SpatialSkeletonStableNodeHandle,
 ): CatmaidRetainedNode {
   return Object.freeze({
     capturedNodeId,
@@ -921,21 +916,21 @@ export const CATMAID_PROVISIONAL_NUMERIC_ID_POLICY: SpatialSkeletonProvisionalNu
     },
   });
 
-export class CatmaidSpatialSkeletonWorkflowDriver
-  extends CatmaidWorkflowAuthorityDriverBase
+export class CatmaidEditPlanner
+  extends CatmaidEditPlanCommitBase
   implements
-    SpatialSkeletonIntentDriver<
+    SpatialSkeletonEditPlanner<
       CatmaidSpatialSkeletonCommandDescriptor,
-      CatmaidWorkflow,
-      SpatialSkeletonProjectionIntentDelta,
-      CatmaidOptimisticMutation,
-      CatmaidOptimisticMutationResult,
+      CatmaidEditPlan,
+      SpatialSkeletonPreviewIntentDelta,
+      CatmaidEditRequest,
+      CatmaidEditRequestResult,
       SpatialSkeletonAuthoritativeReconciliation,
-      SpatialSkeletonProjectionInverseDelta
+      SpatialSkeletonEditInverseDelta
     >
 {
   constructor(
-    identity: SpatialSkeletonOptimisticIdentityService,
+    identity: SpatialSkeletonIdentityService,
     private readonly provisionalIds: SpatialSkeletonProvisionalNumericIdService,
   ) {
     super(identity);
@@ -946,12 +941,10 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     return Object.freeze({
       kind: this.getQueueKind(payload.kind),
       commandLabel: input.label,
-      authorityPresentation: getCatmaidOptimisticAuthorityPresentation(
-        payload.kind,
-      ),
+      authorityLabels: getCatmaidAuthorityLabels(payload.kind),
       ...(payload.kind === "merge"
         ? {
-            preparation: Object.freeze({
+            pendingEdit: Object.freeze({
               kind: "merge" as const,
               segmentIds: Object.freeze([
                 payload.options.firstNode.segmentId,
@@ -980,20 +973,20 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     });
   }
 
-  createLogicalIntent(
+  planIntent(
     input: CatmaidSpatialSkeletonCommandDescriptor,
     context: SpatialSkeletonIntentCreationContext<
-      CatmaidWorkflow,
-      SpatialSkeletonProjectionIntentDelta,
-      SpatialSkeletonProjectionInverseDelta
+      CatmaidEditPlan,
+      SpatialSkeletonPreviewIntentDelta,
+      SpatialSkeletonEditInverseDelta
     >,
-  ): SpatialSkeletonLogicalIntent<
-    CatmaidWorkflow,
-    SpatialSkeletonProjectionIntentDelta
+  ): SpatialSkeletonIntentPlan<
+    CatmaidEditPlan,
+    SpatialSkeletonPreviewIntentDelta
   > {
     const direction = getDirection(context.intent);
-    let semantic: CatmaidSemanticRecipe;
-    let delta: SpatialSkeletonProjectionDelta;
+    let semantic: CatmaidCapturedEdit;
+    let delta: SpatialSkeletonEditDelta;
     if (context.intent === "execute") {
       semantic = this.createSemanticRecipe(
         input,
@@ -1004,42 +997,40 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     } else {
       const prior = context.recipe;
       semantic = this.prepareHistorySemantic(
-        prior.workflow.semantic,
-        prior.projection.delta,
-        prior.inverseProjection,
+        prior.plan.semantic,
+        prior.preview.delta,
+        prior.inversePreview,
       );
       if (context.intent === "undo") {
-        if (prior.inverseProjection === undefined) {
+        if (prior.inversePreview === undefined) {
           throw new Error("CATMAID Undo is missing its canonical inverse.");
         }
-        delta = prior.inverseProjection;
+        delta = prior.inversePreview;
       } else {
         delta = this.makeForwardDelta(semantic);
       }
     }
 
-    const projection = this.makeProjection(
+    const preview = this.makePreview(
       semantic,
       delta,
       context.intent,
       context.intentId,
       context.intent === "execute",
     );
-    const workflow = Object.freeze({
+    const plan = Object.freeze({
       kind: semantic.kind,
       direction,
       semantic,
-    }) as CatmaidWorkflow;
+    }) as CatmaidEditPlan;
     return {
       kind: this.getQueueKind(semantic.kind),
       commandLabel: input.label,
-      authorityPresentation: getCatmaidOptimisticAuthorityPresentation(
-        semantic.kind,
-      ),
-      logicalResources: this.getLogicalResources(semantic),
-      preparation: this.makePreparationDescriptor(semantic),
-      projection,
-      workflow,
+      authorityLabels: getCatmaidAuthorityLabels(semantic.kind),
+      stableResources: this.getStableResources(semantic),
+      pendingEdit: this.makePendingEditDescriptor(semantic),
+      preview,
+      plan,
     };
   }
 
@@ -1047,7 +1038,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     command: CatmaidSpatialSkeletonCommandDescriptor,
     intentId: number,
     queueInput: SpatialSkeletonQueueInput,
-  ): CatmaidSemanticRecipe {
+  ): CatmaidCapturedEdit {
     command = resolveCatmaidPreparedCommand(command, queueInput, this.identity);
     switch (command.payload.kind) {
       case "add-node":
@@ -1070,21 +1061,19 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     }
   }
 
-  /** History follows the engine's finalized canonical projection artifacts. */
+  /** History follows the engine's finalized canonical preview artifacts. */
   private prepareHistorySemantic(
-    semantic: CatmaidSemanticRecipe,
-    forwardProjection: SpatialSkeletonProjectionDelta,
-    inverseProjection: SpatialSkeletonProjectionInverseDelta | undefined,
-  ): CatmaidSemanticRecipe {
-    if (semantic.kind === "reroot" && inverseProjection !== undefined) {
-      if (inverseProjection.kind !== "restore-topology") {
+    semantic: CatmaidCapturedEdit,
+    forwardPreview: SpatialSkeletonEditDelta,
+    inversePreview: SpatialSkeletonEditInverseDelta | undefined,
+  ): CatmaidCapturedEdit {
+    if (semantic.kind === "reroot" && inversePreview !== undefined) {
+      if (inversePreview.kind !== "restore-topology") {
         throw new Error(
           "CATMAID reroot history has an invalid canonical inverse.",
         );
       }
-      const root = inverseProjection.patches.find(
-        ({ parent }) => parent === null,
-      );
+      const root = inversePreview.patches.find(({ parent }) => parent === null);
       if (root === undefined) {
         throw new Error("CATMAID canonical reroot inverse lost its root.");
       }
@@ -1096,25 +1085,25 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     }
     if (semantic.kind === "description") {
       if (
-        forwardProjection.kind !== "node-attributes" ||
-        forwardProjection.segment.stableId !== semantic.segment.stableId ||
-        forwardProjection.node.stableId !== semantic.node.stableId ||
-        !("description" in forwardProjection.changes)
+        forwardPreview.kind !== "node-attributes" ||
+        forwardPreview.segment.stableId !== semantic.segment.stableId ||
+        forwardPreview.node.stableId !== semantic.node.stableId ||
+        !("description" in forwardPreview.changes)
       ) {
         throw new Error(
-          "CATMAID description history has an invalid canonical projection.",
+          "CATMAID description history has an invalid canonical preview.",
         );
       }
-      const after = forwardProjection.changes.description;
+      const after = forwardPreview.changes.description;
       return after === semantic.after
         ? semantic
         : Object.freeze({ ...semantic, after });
     }
-    if (semantic.kind === "confidence" && inverseProjection !== undefined) {
+    if (semantic.kind === "confidence" && inversePreview !== undefined) {
       if (
-        inverseProjection.kind !== "node-attributes" ||
-        inverseProjection.node.stableId !== semantic.node.stableId ||
-        !("confidence" in inverseProjection.changes)
+        inversePreview.kind !== "node-attributes" ||
+        inversePreview.node.stableId !== semantic.node.stableId ||
+        !("confidence" in inversePreview.changes)
       ) {
         throw new Error(
           "CATMAID confidence history has an invalid canonical inverse.",
@@ -1122,27 +1111,27 @@ export class CatmaidSpatialSkeletonWorkflowDriver
       }
       return Object.freeze({
         ...semantic,
-        before: inverseProjection.changes.confidence ?? 0,
+        before: inversePreview.changes.confidence ?? 0,
       });
     }
-    if (semantic.kind === "split" && inverseProjection !== undefined) {
-      if (inverseProjection.kind !== "join-split") {
+    if (semantic.kind === "split" && inversePreview !== undefined) {
+      if (inversePreview.kind !== "join-split") {
         throw new Error(
           "CATMAID split history has an invalid canonical inverse.",
         );
       }
       return Object.freeze({
         ...semantic,
-        formerParent: this.retainHistoryNode(inverseProjection.formerParent),
+        formerParent: this.retainHistoryNode(inversePreview.formerParent),
       });
     }
-    if (semantic.kind === "delete-node" && inverseProjection !== undefined) {
-      if (inverseProjection.kind !== "restore-delete") {
+    if (semantic.kind === "delete-node" && inversePreview !== undefined) {
+      if (inversePreview.kind !== "restore-delete") {
         throw new Error(
           "CATMAID delete history has an invalid canonical inverse.",
         );
       }
-      const { snapshot, children } = inverseProjection;
+      const { snapshot, children } = inversePreview;
       const parent =
         snapshot.parent === null
           ? undefined
@@ -1166,25 +1155,23 @@ export class CatmaidSpatialSkeletonWorkflowDriver
       });
     }
     if (semantic.kind !== "merge") return semantic;
-    if (inverseProjection === undefined) return semantic;
-    if (inverseProjection.kind !== "unmerge") {
+    if (inversePreview === undefined) return semantic;
+    if (inversePreview.kind !== "unmerge") {
       throw new Error(
         "CATMAID merge history has an invalid canonical inverse.",
       );
     }
     const inverseOrientation =
-      inverseProjection.firstNode.stableId === semantic.firstNode.stableId &&
-      inverseProjection.secondNode.stableId === semantic.secondNode.stableId
+      inversePreview.firstNode.stableId === semantic.firstNode.stableId &&
+      inversePreview.secondNode.stableId === semantic.secondNode.stableId
         ? ("second-from-first" as const)
-        : inverseProjection.firstNode.stableId ===
-              semantic.secondNode.stableId &&
-            inverseProjection.secondNode.stableId ===
-              semantic.firstNode.stableId
+        : inversePreview.firstNode.stableId === semantic.secondNode.stableId &&
+            inversePreview.secondNode.stableId === semantic.firstNode.stableId
           ? ("first-from-second" as const)
           : undefined;
     if (inverseOrientation === undefined)
       throw new Error("CATMAID canonical merge inverse lost its endpoints.");
-    const originalRoot = inverseProjection.formerSecondTopology.find(
+    const originalRoot = inversePreview.formerSecondTopology.find(
       ({ parent }) => parent === null,
     );
     if (originalRoot === undefined)
@@ -1197,7 +1184,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     });
   }
 
-  private retainHistoryNode(handle: SpatialSkeletonLogicalNodeHandle) {
+  private retainHistoryNode(handle: SpatialSkeletonStableNodeHandle) {
     const nodeId = this.identity.resolveNode(handle);
     if (nodeId === undefined) {
       throw new Error(
@@ -1208,8 +1195,8 @@ export class CatmaidSpatialSkeletonWorkflowDriver
   }
 
   private makeForwardDelta(
-    semantic: CatmaidSemanticRecipe,
-  ): SpatialSkeletonProjectionDelta {
+    semantic: CatmaidCapturedEdit,
+  ): SpatialSkeletonEditDelta {
     switch (semantic.kind) {
       case "add-node":
         if (semantic.children?.length) {
@@ -1316,8 +1303,8 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     }
   }
 
-  private getLogicalResources(
-    semantic: CatmaidSemanticRecipe,
+  private getStableResources(
+    semantic: CatmaidCapturedEdit,
   ): readonly SpatialSkeletonIntentResource[] {
     switch (semantic.kind) {
       case "add-node":
@@ -1343,15 +1330,15 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     }
   }
 
-  private makePreparationDescriptor(
-    semantic: CatmaidSemanticRecipe,
-  ): SpatialSkeletonOptimisticPreparationDescriptor | undefined {
+  private makePendingEditDescriptor(
+    semantic: CatmaidCapturedEdit,
+  ): SpatialSkeletonPendingEditDescriptor | undefined {
     switch (semantic.kind) {
       case "delete-node":
         return Object.freeze({
           kind: "delete",
-          logicalNodeHandles: Object.freeze([semantic.node]),
-          logicalSegmentHandles: Object.freeze([semantic.segment]),
+          stableNodeHandles: Object.freeze([semantic.node]),
+          stableSegmentHandles: Object.freeze([semantic.segment]),
           segmentIds: Object.freeze(
             semantic.capturedSegments.map(({ physicalId }) => physicalId),
           ),
@@ -1366,11 +1353,11 @@ export class CatmaidSpatialSkeletonWorkflowDriver
       case "reroot":
         return Object.freeze({
           kind: "reroot",
-          logicalNodeHandles: Object.freeze([
+          stableNodeHandles: Object.freeze([
             semantic.node,
             semantic.originalRoot,
           ]),
-          logicalSegmentHandles: Object.freeze([semantic.segment]),
+          stableSegmentHandles: Object.freeze([semantic.segment]),
           segmentIds: Object.freeze(
             semantic.capturedSegments.map(({ physicalId }) => physicalId),
           ),
@@ -1380,11 +1367,11 @@ export class CatmaidSpatialSkeletonWorkflowDriver
       case "split":
         return Object.freeze({
           kind: "split",
-          logicalNodeHandles: Object.freeze([
+          stableNodeHandles: Object.freeze([
             semantic.node,
             semantic.formerParent,
           ]),
-          logicalSegmentHandles: Object.freeze([
+          stableSegmentHandles: Object.freeze([
             semantic.sourceSegment,
             semantic.downstreamSegment,
           ]),
@@ -1397,11 +1384,11 @@ export class CatmaidSpatialSkeletonWorkflowDriver
       case "merge":
         return Object.freeze({
           kind: "merge",
-          logicalNodeHandles: Object.freeze([
+          stableNodeHandles: Object.freeze([
             semantic.firstNode,
             semantic.secondNode,
           ]),
-          logicalSegmentHandles: Object.freeze([
+          stableSegmentHandles: Object.freeze([
             semantic.firstSegment,
             semantic.secondSegment,
             semantic.mergedSegment,
@@ -1481,10 +1468,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     return entry;
   }
 
-  private getPathToRoot(
-    snapshot: CompleteSkeletonSnapshotHandle,
-    targetNodeId: bigint,
-  ) {
+  private getPathToRoot(snapshot: CompleteSkeleton, targetNodeId: bigint) {
     const path: SkeletonNode[] = [];
     const seen = new Set<bigint>();
     let current = snapshot.getNode(targetNodeId);
@@ -1510,9 +1494,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
   }
 
   private requireCapturedNode(
-    capture: ReturnType<
-      CatmaidSpatialSkeletonWorkflowDriver["captureSegments"]
-    >,
+    capture: ReturnType<CatmaidEditPlanner["captureSegments"]>,
     nodeId: bigint,
   ) {
     for (const { snapshot } of capture.capturedSegments) {
@@ -1559,10 +1541,10 @@ export class CatmaidSpatialSkeletonWorkflowDriver
         return this.getRetainedNode(capture, nodeId);
       }),
     );
-    const node = spatialSkeletonLogicalNode(`intent:${intentId}:created-node`);
+    const node = spatialSkeletonStableNode(`intent:${intentId}:created-node`);
     const createsSegment = parent === undefined;
     const segment = createsSegment
-      ? spatialSkeletonLogicalSegment(`intent:${intentId}:created-segment`)
+      ? spatialSkeletonStableSegment(`intent:${intentId}:created-segment`)
       : this.segmentHandle(options.skeletonId);
     const position = copyVector(options.positionInModelSpace);
     return Object.freeze({
@@ -1781,7 +1763,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
       [target.nodeId, target.parentNodeId],
     );
     const sourceSegment = capture.capturedSegments[0].segment;
-    const downstreamSegment = spatialSkeletonLogicalSegment(
+    const downstreamSegment = spatialSkeletonStableSegment(
       `intent:${intentId}:split-output`,
     );
     const node = this.getRetainedNode(capture, target.nodeId)!;
@@ -1833,7 +1815,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     const secondRoot = secondPath.at(-1)!;
     const firstSegment = this.segmentHandle(first.segmentId);
     const secondSegment = this.segmentHandle(second.segmentId);
-    const mergedSegment = spatialSkeletonLogicalSegment(
+    const mergedSegment = spatialSkeletonStableSegment(
       `intent:${intentId}:merge-output`,
     );
     const firstHandle = this.getRetainedNode(capture, first.nodeId)!;
@@ -1853,7 +1835,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
   }
 
   private getCapturedNodeForHint(
-    semantic: CatmaidSemanticRecipe,
+    semantic: CatmaidCapturedEdit,
     retained: CatmaidRetainedNode,
   ) {
     for (const { snapshot } of semantic.capturedSegments) {
@@ -1869,24 +1851,24 @@ export class CatmaidSpatialSkeletonWorkflowDriver
    * owns selection, visibility, or remapping state.
    */
   private makeUiHints(
-    semantic: CatmaidSemanticRecipe,
+    semantic: CatmaidCapturedEdit,
     direction: "forward" | "inverse",
     intent: "execute" | "undo" | "redo",
     allowNavigation = true,
-  ): SpatialSkeletonProjectionUiHints {
+  ): SpatialSkeletonPreviewUiHints {
     const segmentVisibility: Array<
-      NonNullable<SpatialSkeletonProjectionUiHints["segmentVisibility"]>[number]
+      NonNullable<SpatialSkeletonPreviewUiHints["segmentVisibility"]>[number]
     > = [];
     const segmentMembershipRemaps: Array<
       NonNullable<
-        SpatialSkeletonProjectionUiHints["segmentMembershipRemaps"]
+        SpatialSkeletonPreviewUiHints["segmentMembershipRemaps"]
       >[number]
     > = [];
-    const retainSegments: SpatialSkeletonLogicalSegmentHandle[] = [];
-    let selectedNode: SpatialSkeletonProjectionUiHints["selectedNode"];
+    const retainSegments: SpatialSkeletonStableSegmentHandle[] = [];
+    let selectedNode: SpatialSkeletonPreviewUiHints["selectedNode"];
     const select = (
-      node: SpatialSkeletonLogicalNodeHandle,
-      segment: SpatialSkeletonLogicalSegmentHandle,
+      node: SpatialSkeletonStableNodeHandle,
+      segment: SpatialSkeletonStableSegmentHandle,
       position?: ArrayLike<number>,
       moveView = false,
     ) => {
@@ -1902,7 +1884,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
       });
     };
     const show = (
-      segment: SpatialSkeletonLogicalSegmentHandle,
+      segment: SpatialSkeletonStableSegmentHandle,
       selection?: "preserve" | "pin" | "unpin",
     ) => {
       segmentVisibility.push(
@@ -1913,7 +1895,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
         }),
       );
     };
-    const hide = (segment: SpatialSkeletonLogicalSegmentHandle) => {
+    const hide = (segment: SpatialSkeletonStableSegmentHandle) => {
       segmentVisibility.push(
         Object.freeze({ segment, visible: false, deselect: true }),
       );
@@ -2064,22 +2046,22 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     });
   }
 
-  private makeProjection(
-    semantic: CatmaidSemanticRecipe,
-    delta: SpatialSkeletonProjectionDelta,
+  private makePreview(
+    semantic: CatmaidCapturedEdit,
+    delta: SpatialSkeletonEditDelta,
     intent: "execute" | "undo" | "redo",
     intentId: number,
     includeInspectionSeed: boolean,
-  ): SpatialSkeletonProjectionIntentDelta {
+  ): SpatialSkeletonPreviewIntentDelta {
     const direction = getDirection(intent);
     const seed = includeInspectionSeed
       ? this.captureRetainedInspectionSeed(semantic)
       : undefined;
     const nodeBindings: Array<
-      readonly [SpatialSkeletonLogicalNodeHandle, bigint]
+      readonly [SpatialSkeletonStableNodeHandle, bigint]
     > = [];
     const segmentBindings: Array<
-      readonly [SpatialSkeletonLogicalSegmentHandle, bigint]
+      readonly [SpatialSkeletonStableSegmentHandle, bigint]
     > = [];
     if (semantic.kind === "add-node" && direction === "forward") {
       nodeBindings.push([
@@ -2141,22 +2123,22 @@ export class CatmaidSpatialSkeletonWorkflowDriver
         intent,
         false,
       ),
-      preparationIntentId: intentId,
+      pendingEditIntentId: intentId,
     });
   }
 
   private captureRetainedInspectionSeed(
-    semantic: CatmaidSemanticRecipe,
-  ): SpatialSkeletonProjectionInspectionSeed {
+    semantic: CatmaidCapturedEdit,
+  ): SpatialSkeletonPreviewInspectionSeed {
     const segments: Array<{
-      readonly segment: SpatialSkeletonLogicalSegmentHandle;
-      readonly snapshot: CompleteSkeletonSnapshotHandle;
+      readonly segment: SpatialSkeletonStableSegmentHandle;
+      readonly snapshot: CompleteSkeleton;
     }> = [];
     const nodeBindings: Array<
-      readonly [SpatialSkeletonLogicalNodeHandle, bigint]
+      readonly [SpatialSkeletonStableNodeHandle, bigint]
     > = [];
     const segmentBindings: Array<
-      readonly [SpatialSkeletonLogicalSegmentHandle, bigint]
+      readonly [SpatialSkeletonStableSegmentHandle, bigint]
     > = [];
     const expectedCacheRevisions = new Map<bigint, number>();
     const seenNodes = new Set<string>();
@@ -2196,7 +2178,7 @@ export class CatmaidSpatialSkeletonWorkflowDriver
     });
   }
 
-  private getQueueKind(kind: CatmaidSemanticRecipe["kind"]) {
+  private getQueueKind(kind: CatmaidCapturedEdit["kind"]) {
     switch (kind) {
       case "add-node":
         return "addNode";

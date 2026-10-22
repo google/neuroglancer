@@ -34,16 +34,16 @@ import type {
   CatmaidSpatialSkeletonTrueEndUpdateRequest,
   CatmaidSpatialSkeletonEditOperations,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_endpoints.js";
-import {
-  type SpatialSkeletonMutationContext,
-  type SpatialSkeletonOptimisticMutationAdapter,
+import type {
+  SpatialSkeletonEditRequestContext,
+  SpatialSkeletonEditRequestAdapter,
 } from "#src/skeleton/edit_queue/api.js";
 import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_queue/edit_errors.js";
 import { HttpError } from "#src/util/http_request.js";
 
-const catmaidMutationScopes = new Map<string, object>();
+const catmaidEditRequestScopes = new Map<string, object>();
 
-export function getCatmaidMutationScope(client: CatmaidClient) {
+export function getCatmaidEditRequestScope(client: CatmaidClient) {
   if (
     typeof client.baseUrl !== "string" ||
     !Number.isSafeInteger(client.projectId)
@@ -61,21 +61,21 @@ export function getCatmaidMutationScope(client: CatmaidClient) {
     normalizedBaseUrl = client.baseUrl.trim().replace(/\/+$/, "");
   }
   const key = `${normalizedBaseUrl}/${client.projectId}`;
-  let scope = catmaidMutationScopes.get(key);
+  let scope = catmaidEditRequestScopes.get(key);
   if (scope === undefined) {
     scope = Object.freeze({ key });
-    catmaidMutationScopes.set(key, scope);
+    catmaidEditRequestScopes.set(key, scope);
   }
   return scope;
 }
 
 /**
- * CATMAID mutations as seen by datasource-neutral optimistic machinery.
+ * CATMAID edit requests as seen by datasource-neutral optimistic machinery.
  *
  * Transport controls such as CATMAID's `nocheck` flag deliberately do not
  * cross this boundary. The CATMAID client applies its fixed transport policy.
  */
-export interface CatmaidOptimisticMutationMap {
+export interface CatmaidEditRequestMap {
   "add-node": {
     request: CatmaidSpatialSkeletonAddNodeRequest;
     result: CatmaidSpatialSkeletonAddNodeResult;
@@ -122,33 +122,33 @@ export interface CatmaidOptimisticMutationMap {
   };
 }
 
-export type CatmaidOptimisticMutationKind = keyof CatmaidOptimisticMutationMap;
+export type CatmaidEditRequestKind = keyof CatmaidEditRequestMap;
 
-export type CatmaidOptimisticMutation<
-  TKind extends CatmaidOptimisticMutationKind = CatmaidOptimisticMutationKind,
+export type CatmaidEditRequest<
+  TKind extends CatmaidEditRequestKind = CatmaidEditRequestKind,
 > = {
   [K in TKind]: {
     readonly kind: K;
-    readonly request: CatmaidOptimisticMutationMap[K]["request"];
+    readonly request: CatmaidEditRequestMap[K]["request"];
   } & (K extends "merge"
     ? { readonly inputSegmentIds: readonly [bigint, bigint] }
     : object);
 }[TKind];
 
-export type CatmaidOptimisticMutationResult<
-  TKind extends CatmaidOptimisticMutationKind = CatmaidOptimisticMutationKind,
-> = CatmaidOptimisticMutationMap[TKind]["result"];
+export type CatmaidEditRequestResult<
+  TKind extends CatmaidEditRequestKind = CatmaidEditRequestKind,
+> = CatmaidEditRequestMap[TKind]["result"];
 
 /** A generic cancellation was observed before any CATMAID operation began. */
-export class CatmaidOptimisticMutationNotStartedError extends Error {
+export class CatmaidEditRequestNotStartedError extends Error {
   constructor(readonly reason: unknown) {
-    super("The CATMAID mutation was cancelled before its request started.");
-    this.name = "CatmaidOptimisticMutationNotStartedError";
+    super("The CATMAID edit request was cancelled before its request started.");
+    this.name = "CatmaidEditRequestNotStartedError";
   }
 }
 
-/** Whether an error proves that CATMAID did not commit the mutation. */
-export function isDefinitiveCatmaidMutationRejection(error: unknown) {
+/** Whether an error proves that CATMAID did not commit the edit request. */
+export function isDefinitiveCatmaidEditRequestRejection(error: unknown) {
   return (
     error instanceof SpatialSkeletonEditConflictError ||
     (error instanceof HttpError && error.status >= 400 && error.status < 500) ||
@@ -156,65 +156,65 @@ export function isDefinitiveCatmaidMutationRejection(error: unknown) {
   );
 }
 
-export class CatmaidSpatialSkeletonOptimisticMutationAdapter
+export class CatmaidEditRequests
   implements
-    SpatialSkeletonOptimisticMutationAdapter<
-      CatmaidOptimisticMutation,
-      CatmaidOptimisticMutationResult
+    SpatialSkeletonEditRequestAdapter<
+      CatmaidEditRequest,
+      CatmaidEditRequestResult
     >
 {
   constructor(
     private readonly editOperations: CatmaidSpatialSkeletonEditOperations,
   ) {}
 
-  get mutationScope() {
-    return this.editOperations.mutationScope;
+  get editRequestScope() {
+    return this.editOperations.editRequestScope;
   }
 
-  commit<TKind extends CatmaidOptimisticMutationKind>(
-    mutation: CatmaidOptimisticMutation<TKind>,
-    context: SpatialSkeletonMutationContext,
-  ): Promise<CatmaidOptimisticMutationResult<TKind>>;
+  commit<TKind extends CatmaidEditRequestKind>(
+    editRequest: CatmaidEditRequest<TKind>,
+    context: SpatialSkeletonEditRequestContext,
+  ): Promise<CatmaidEditRequestResult<TKind>>;
   commit(
-    mutation: CatmaidOptimisticMutation,
-    context: SpatialSkeletonMutationContext,
-  ): Promise<CatmaidOptimisticMutationResult> {
+    editRequest: CatmaidEditRequest,
+    context: SpatialSkeletonEditRequestContext,
+  ): Promise<CatmaidEditRequestResult> {
     if (context.signal?.aborted) {
       return Promise.reject(
-        new CatmaidOptimisticMutationNotStartedError(context.signal.reason),
+        new CatmaidEditRequestNotStartedError(context.signal.reason),
       );
     }
-    switch (mutation.kind) {
+    switch (editRequest.kind) {
       case "add-node":
-        return this.editOperations.commitAddNode(mutation.request);
+        return this.editOperations.commitAddNode(editRequest.request);
       case "insert-node":
-        return this.editOperations.commitInsertNode(mutation.request);
+        return this.editOperations.commitInsertNode(editRequest.request);
       case "move-node":
-        return this.editOperations.commitMoveNode(mutation.request);
+        return this.editOperations.commitMoveNode(editRequest.request);
       case "delete-node":
-        return this.editOperations.commitDeleteNode(mutation.request);
+        return this.editOperations.commitDeleteNode(editRequest.request);
       case "reroot":
-        return this.editOperations.commitReroot(mutation.request);
+        return this.editOperations.commitReroot(editRequest.request);
       case "description":
-        return this.editOperations.commitDescription(mutation.request);
+        return this.editOperations.commitDescription(editRequest.request);
       case "true-end":
-        return this.editOperations.commitTrueEnd(mutation.request);
+        return this.editOperations.commitTrueEnd(editRequest.request);
       case "radius":
-        return this.editOperations.commitRadius(mutation.request);
+        return this.editOperations.commitRadius(editRequest.request);
       case "confidence":
-        return this.editOperations.commitConfidence(mutation.request);
+        return this.editOperations.commitConfidence(editRequest.request);
       case "merge":
-        return this.editOperations.commitMerge(mutation.request);
+        return this.editOperations.commitMerge(editRequest.request);
       case "split":
-        return this.editOperations.commitSplit(mutation.request);
+        return this.editOperations.commitSplit(editRequest.request);
     }
   }
 
   classifyFailure(error: unknown) {
-    if (error instanceof CatmaidOptimisticMutationNotStartedError) {
+    if (error instanceof CatmaidEditRequestNotStartedError) {
       return "not-started" as const;
     }
-    return isDefinitiveCatmaidMutationRejection(error)
+    return isDefinitiveCatmaidEditRequestRejection(error)
       ? ("rejected" as const)
       : ("indeterminate" as const);
   }

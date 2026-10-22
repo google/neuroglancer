@@ -98,13 +98,13 @@ function makeToolActivation() {
 }
 
 function withConnectionContext(layer: {
-  spatialSkeletonState?: unknown;
+  spatialSkeletonEditSession?: unknown;
   spatiallyIndexedSkeletonLayer?: { readonly value: unknown };
   skeletonSourceConnection?: object;
 }) {
   const connection = (layer.skeletonSourceConnection ??= {});
   Object.defineProperties(connection, {
-    spatialSkeletonState: { get: () => layer.spatialSkeletonState },
+    spatialSkeletonEditSession: { get: () => layer.spatialSkeletonEditSession },
     getSpatiallyIndexedSkeletonLayer: {
       value: () => layer.spatiallyIndexedSkeletonLayer?.value,
     },
@@ -217,7 +217,7 @@ function makeFindPathToolHarness(
     annotationDisplayState: {
       hoverState: { value: undefined },
     },
-    spatialSkeletonState: {
+    spatialSkeletonEditSession: {
       getFullSegmentNodes,
       getCachedSegmentNodes: vi.fn((segmentId: bigint) =>
         cachedSegmentNodes.get(segmentId),
@@ -239,7 +239,7 @@ function makeFindPathToolHarness(
           getSegmentNodes: (
             segmentId: bigint,
           ): readonly SkeletonNode[] | undefined =>
-            layer.spatialSkeletonState.getCachedSegmentNodes(segmentId),
+            layer.spatialSkeletonEditSession.getCachedSegmentNodes(segmentId),
           nodesChanged: new NullarySignal(),
           hasPickableNodes: false,
           parentsInferred: false,
@@ -496,7 +496,7 @@ describe("skeleton Find Path tool", () => {
       ]);
       expect(harness.getFullSegmentNodes).not.toHaveBeenCalled();
       expect(
-        harness.layer.spatialSkeletonState.getCachedSegmentNodes,
+        harness.layer.spatialSkeletonEditSession.getCachedSegmentNodes,
       ).toHaveBeenCalledWith(11n);
       expect(harness.state.result?.map(({ position }) => position)).toEqual([
         nodes[2].position,
