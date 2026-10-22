@@ -25,17 +25,17 @@ import type { SegmentationLayerSelectionState } from "#src/layer/segmentation/in
 import type { RenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { Uint64MapEntry } from "#src/segmentation_display_state/base.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
+import type { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type {
   SpatialSkeletonProjectionSelectionPin,
   SpatialSkeletonResolvedProjectionUiHints,
-} from "#src/skeleton/optimistic_edit/projection_ui_hints.js";
+} from "#src/skeleton/edit_queue/preview_ui_hints.js";
 import {
   type SkeletonNavigation,
   SkeletonNavigator,
   type SkeletonNodeAccess,
 } from "#src/skeleton/skeleton_navigator.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
-import type { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 import {
   WatchableValue,

@@ -34,7 +34,8 @@ import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import {
   SpatialSkeletonActions,
   type SpatialSkeletonAction,
-} from "#src/skeleton/command_protocol.js";
+} from "#src/skeleton/edit/command_protocol.js";
+import { SpatialSkeletonMergeTargetPrefetch } from "#src/skeleton/edit/merge_target_prefetch.js";
 import {
   executeSpatialSkeletonAddNode,
   executeSpatialSkeletonDeleteNode,
@@ -43,8 +44,8 @@ import {
   executeSpatialSkeletonMoveNode,
   executeSpatialSkeletonSplit,
   showSpatialSkeletonActionError,
-} from "#src/skeleton/commands.js";
-import type { SpatialSkeletonOptimisticEditExecution } from "#src/skeleton/optimistic_edit/types.js";
+} from "#src/skeleton/edit/submit_edits.js";
+import type { SpatialSkeletonOptimisticEditExecution } from "#src/skeleton/edit_queue/types.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { StatusMessage } from "#src/status.js";
 import svg_addNodeCursor from "#src/ui/images/add_node_cursor.svg?raw";
@@ -74,7 +75,6 @@ import {
   SKELETON_EDIT_TOOL_INPUT_EVENT_MAP,
   SPATIAL_SKELETON_EDIT_TOOL_NAME,
 } from "#src/ui/skeleton_edit_tool_shortcuts.js";
-import { SpatialSkeletonMergeTargetPrefetch } from "#src/ui/skeleton_merge_target_prefetch.js";
 import {
   getActionPanel,
   bindSpatialSkeletonViewDrag,

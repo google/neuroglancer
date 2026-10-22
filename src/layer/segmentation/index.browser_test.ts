@@ -17,7 +17,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { emptyInvalidCoordinateSpace } from "#src/coordinate_transform.js";
-import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
+import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_edit/command_factories.js";
 import { LocalDataSource } from "#src/datasource/local.js";
 import { TrackableDataSelectionState } from "#src/layer/index.js";
 import { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
@@ -26,11 +26,11 @@ import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_sourc
 import { LocalSegmentationGraphSource } from "#src/segmentation_graph/local.js";
 import { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";
 import { SkeletonEdgeDirection } from "#src/skeleton/api.js";
-import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
-import { executeSpatialSkeletonAddNode } from "#src/skeleton/commands.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit/command_protocol.js";
+import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { executeSpatialSkeletonAddNode } from "#src/skeleton/edit/submit_edits.js";
 import { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
 import { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
-import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { SelectionDetailsPanel } from "#src/ui/selection_details.js";

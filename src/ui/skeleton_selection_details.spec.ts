@@ -17,7 +17,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { emptyInvalidCoordinateSpace } from "#src/coordinate_transform.js";
-import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
+import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_edit/command_factories.js";
 import type {
   LayerSelectedValues,
   UserLayer,
@@ -30,14 +30,14 @@ import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_sourc
 import type { SegmentationGroupState } from "#src/segmentation_display_state/frontend.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import { KnownSkeletonNodeAttribute } from "#src/skeleton/api.js";
+import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   executeSpatialSkeletonNodeRadiusUpdate,
   executeSpatialSkeletonReroot,
-} from "#src/skeleton/commands.js";
+} from "#src/skeleton/edit/submit_edits.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
 import { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
-import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { displaySkeletonNodeSelection } from "#src/ui/skeleton_selection_details.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
@@ -45,7 +45,7 @@ import { Uint64Set } from "#src/uint64_set.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 
-vi.mock("#src/skeleton/commands.js", async (importOriginal) => ({
+vi.mock("#src/skeleton/edit/submit_edits.js", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   executeSpatialSkeletonReroot: vi.fn(() => Promise.resolve()),
   executeSpatialSkeletonNodeRadiusUpdate: vi.fn(() => Promise.resolve()),

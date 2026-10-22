@@ -16,11 +16,11 @@
 
 import { describe, expect, it } from "vitest";
 
+import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   resolveSpatiallyIndexedSkeletonNodePick,
   resolveSpatiallyIndexedSkeletonSegmentPick,
 } from "#src/skeleton/spatial/picking.js";
-import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 
 function makePickGeometry(
   nodes: readonly {

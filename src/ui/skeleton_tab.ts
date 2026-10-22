@@ -37,21 +37,21 @@ import {
   SpatialSkeletonActions,
   SpatialSkeletonHistoryActions,
   type SpatialSkeletonAction,
-} from "#src/skeleton/command_protocol.js";
+} from "#src/skeleton/edit/command_protocol.js";
 import {
   executeSpatialSkeletonDeleteNode,
   executeSpatialSkeletonNodeTrueEndUpdate,
   redoSpatialSkeletonCommand,
   showSpatialSkeletonActionError,
   undoSpatialSkeletonCommand,
-} from "#src/skeleton/commands.js";
+} from "#src/skeleton/edit/submit_edits.js";
+import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/fatal.js";
 import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import {
   getSkeletonNodeFilterLabel,
   getSkeletonNodeTypeLabel,
   type SkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
-import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/optimistic_edit/fatal.js";
 import { SkeletonNavigation } from "#src/skeleton/skeleton_navigator.js";
 import { StatusMessage } from "#src/status.js";
 import {
@@ -60,8 +60,8 @@ import {
   registerNestedSync,
   makeCachedDerivedWatchableValue,
 } from "#src/trackable_value.js";
+import { registerSpatialSkeletonOptimisticEditQueueTab } from "#src/ui/skeleton_edit_queue_tab.js";
 import { getSkeletonNodeTypeIcon } from "#src/ui/skeleton_node_icons.js";
-import { registerSpatialSkeletonOptimisticEditQueueTab } from "#src/ui/skeleton_optimistic_edit_queue_tab.js";
 import {
   buildSkeletonSegmentRenderState,
   buildSkeletonVirtualListItems,

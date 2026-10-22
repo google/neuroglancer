@@ -17,12 +17,12 @@
 import type { Annotation } from "#src/annotation/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { SKELETON_FIND_PATH_SELECT_ENDPOINT } from "#src/skeleton/actions.js";
-import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
-import type { SkeletonFindPathEndpoint } from "#src/skeleton/find_path.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit/command_protocol.js";
+import type { SkeletonFindPathEndpoint } from "#src/skeleton/find_path/find_path.js";
 import {
   SPATIAL_SKELETON_FIND_PATH_SOURCE_DESCRIPTION,
   SPATIAL_SKELETON_FIND_PATH_TARGET_DESCRIPTION,
-} from "#src/skeleton/find_path_annotations.js";
+} from "#src/skeleton/find_path/find_path_annotations.js";
 import {
   getPathBetweenNodes,
   type SkeletonNavigationGraph,

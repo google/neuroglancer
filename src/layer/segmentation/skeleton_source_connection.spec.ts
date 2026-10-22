@@ -17,7 +17,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { emptyInvalidCoordinateSpace } from "#src/coordinate_transform.js";
-import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
+import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_edit/command_factories.js";
 import type {
   LayerSelectedValues,
   UserLayer,
@@ -28,15 +28,15 @@ import { SkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
 import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_source_connection.js";
 import type { SegmentationGroupState } from "#src/segmentation_display_state/frontend.js";
 import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
-import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
-import { executeSpatialSkeletonDeleteNode } from "#src/skeleton/commands.js";
-import { SkeletonFindPathState } from "#src/skeleton/find_path.js";
-import type { SpatialSkeletonResolvedProjectionUiHints } from "#src/skeleton/optimistic_edit/projection_ui_hints.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit/command_protocol.js";
+import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { executeSpatialSkeletonDeleteNode } from "#src/skeleton/edit/submit_edits.js";
+import type { SpatialSkeletonResolvedProjectionUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
+import { SkeletonFindPathState } from "#src/skeleton/find_path/find_path.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
 import type { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
 import type { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
-import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import { Uint64Set } from "#src/uint64_set.js";

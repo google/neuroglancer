@@ -17,9 +17,9 @@
 import { describe, expect, it } from "vitest";
 
 import type { SkeletonNode } from "#src/skeleton/api.js";
+import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import { buildSkeletonNavigationGraph } from "#src/skeleton/navigation_graph.js";
 import { SkeletonNodeFilterType } from "#src/skeleton/node_types.js";
-import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/spatial_skeleton_manager.js";
 import {
   buildSkeletonSegmentRenderState,
   buildSkeletonVirtualListItems,

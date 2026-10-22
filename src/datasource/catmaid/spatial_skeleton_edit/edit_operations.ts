@@ -31,7 +31,7 @@ import type {
   CatmaidSpatialSkeletonSplitRequest,
   CatmaidSpatialSkeletonSplitResult,
   CatmaidSpatialSkeletonTrueEndUpdateRequest,
-} from "#src/datasource/catmaid/spatial_skeleton_edit_api.js";
+} from "#src/datasource/catmaid/spatial_skeleton_edit/edit_endpoints.js";
 
 export interface CatmaidSpatialSkeletonEditOperations {
   /** Stable identity of the physical CATMAID mutation target. */

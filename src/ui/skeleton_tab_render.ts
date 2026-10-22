@@ -15,6 +15,7 @@
  */
 
 import type { SkeletonNode } from "#src/skeleton/api.js";
+import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   getFlatListNodeIds,
   type SkeletonNavigationGraph,
@@ -26,7 +27,6 @@ import {
   SkeletonDisplayNodeType,
   SkeletonNodeFilterType,
 } from "#src/skeleton/node_types.js";
-import type { SpatialSkeletonPreparationIntent } from "#src/skeleton/spatial_skeleton_manager.js";
 
 type SkeletonNodeType = SkeletonDisplayNodeType;
 

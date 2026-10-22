@@ -116,7 +116,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/skeleton/optimistic_edit/**/*.ts"],
+    files: ["src/skeleton/edit_queue/**/*.ts"],
 
     rules: {
       "no-restricted-imports": [
@@ -146,10 +146,7 @@ export default tseslint.config(
     },
   },
   {
-    files: [
-      "src/datasource/catmaid/spatial_skeleton_edit/**/*.ts",
-      "src/datasource/catmaid/spatial_skeleton_commands.ts",
-    ],
+    files: ["src/datasource/catmaid/spatial_skeleton_edit/**/*.ts"],
 
     rules: {
       "max-lines": [

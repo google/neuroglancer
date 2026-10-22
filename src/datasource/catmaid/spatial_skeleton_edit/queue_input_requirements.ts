@@ -18,7 +18,7 @@ import type {
   SpatialSkeletonCommandContext,
   SpatialSkeletonQueueInputRequirement,
   SpatialSkeletonQueueInputRequirements,
-} from "#src/skeleton/command_protocol.js";
+} from "#src/skeleton/edit/command_protocol.js";
 
 /** Resolve the current skeleton/node IDs required by a CATMAID queue input. */
 export function getCatmaidQueueInputRequirement(

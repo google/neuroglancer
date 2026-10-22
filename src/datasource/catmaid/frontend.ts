@@ -38,7 +38,7 @@ import {
   makeCatmaidClient,
   parseCatmaidUrl,
 } from "#src/datasource/catmaid/base.js";
-import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
+import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_edit/command_factories.js";
 import type {
   DataSource,
   DataSourceProvider,
@@ -57,7 +57,7 @@ import {
   type SkeletonManifest,
   type SkeletonSpatialIndexMetadata,
 } from "#src/skeleton/api.js";
-import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
+import { SkeletonDataSourceState } from "#src/skeleton/find_path/find_path.js";
 import {
   SpatiallyIndexedSkeletonSource,
   MultiscaleSpatiallyIndexedSkeletonSource,

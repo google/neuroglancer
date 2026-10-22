@@ -17,13 +17,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.js";
+import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   buildSpatiallyIndexedSkeletonOverlayGeometry,
   getPendingNodeOverride,
   SkeletonOverlaySegments,
 } from "#src/skeleton/spatial/overlay_segments.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
-import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { bigintCompare } from "#src/util/bigint.js";

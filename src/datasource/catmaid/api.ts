@@ -24,7 +24,7 @@ import type {
   SkeletonVector,
   SkeletonNode,
 } from "#src/skeleton/api.js";
-import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_errors.js";
+import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_queue/edit_errors.js";
 import { setSkeletonNodeAttributes } from "#src/skeleton/node_attributes.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import { HttpError } from "#src/util/http_request.js";

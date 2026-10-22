@@ -22,21 +22,21 @@ import {
   isSpatialSkeletonEditAction,
   type SpatialSkeletonAction,
   SpatialSkeletonActions,
-} from "#src/skeleton/command_protocol.js";
-import type { SkeletonFindPathState } from "#src/skeleton/find_path.js";
-import type { SpatialSkeletonFindPathAnnotationController } from "#src/skeleton/find_path_attachment.js";
-import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/optimistic_edit/fatal.js";
-import { ensureSpatialSkeletonOptimisticEditQueue } from "#src/skeleton/optimistic_edit/host.js";
-import type { SpatialSkeletonResolvedProjectionUiHints } from "#src/skeleton/optimistic_edit/projection_ui_hints.js";
-import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
-import type { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
-import type { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
-import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
+} from "#src/skeleton/edit/command_protocol.js";
+import { ensureSpatialSkeletonOptimisticEditQueue } from "#src/skeleton/edit/host.js";
 import {
   editableSpatiallyIndexedSkeletonSourceSupportsAction,
   type SpatialSkeletonLayerContext,
   type SpatialSkeletonState,
-} from "#src/skeleton/spatial_skeleton_manager.js";
+} from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/fatal.js";
+import type { SpatialSkeletonResolvedProjectionUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
+import type { SkeletonFindPathState } from "#src/skeleton/find_path/find_path.js";
+import type { SpatialSkeletonFindPathAnnotationController } from "#src/skeleton/find_path/find_path_attachment.js";
+import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
+import type { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
+import type { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
+import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { Uint64Set } from "#src/uint64_set.js";
 import { RefCounted } from "#src/util/disposable.js";

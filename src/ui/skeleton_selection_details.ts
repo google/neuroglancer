@@ -28,8 +28,9 @@ import {
 } from "#src/layer/segmentation/selection.js";
 import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import type { SpatialSkeletonAction } from "#src/skeleton/command_protocol.js";
-import { SpatialSkeletonActions } from "#src/skeleton/command_protocol.js";
+import type { SpatialSkeletonAction } from "#src/skeleton/edit/command_protocol.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit/command_protocol.js";
+import type { SpatialSkeletonPresentationSnapshot } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   executeSpatialSkeletonDeleteNode,
   executeSpatialSkeletonNodeConfidenceUpdate,
@@ -38,7 +39,8 @@ import {
   executeSpatialSkeletonNodeTrueEndUpdate,
   executeSpatialSkeletonReroot,
   showSpatialSkeletonActionError,
-} from "#src/skeleton/commands.js";
+} from "#src/skeleton/edit/submit_edits.js";
+import type { SpatialSkeletonOptimisticIdentityService } from "#src/skeleton/edit_queue/api.js";
 import {
   getSkeletonNodeConfidence,
   getSkeletonNodeRadius,
@@ -49,8 +51,6 @@ import {
   getSkeletonNodeTypeLabel,
   SkeletonDisplayNodeType,
 } from "#src/skeleton/node_types.js";
-import type { SpatialSkeletonOptimisticIdentityService } from "#src/skeleton/optimistic_edit/api.js";
-import type { SpatialSkeletonPresentationSnapshot } from "#src/skeleton/spatial_skeleton_manager.js";
 import { StatusMessage } from "#src/status.js";
 import { getSkeletonNodeTypeIcon } from "#src/ui/skeleton_node_icons.js";
 import { serializeColor } from "#src/util/color.js";

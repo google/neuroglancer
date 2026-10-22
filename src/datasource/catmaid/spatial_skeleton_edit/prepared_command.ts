@@ -15,9 +15,9 @@
  */
 
 import type { CatmaidSpatialSkeletonCommandPayload } from "#src/datasource/catmaid/spatial_skeleton_edit/command_payloads.js";
-import type { CatmaidSpatialSkeletonCommandDescriptor } from "#src/datasource/catmaid/spatial_skeleton_edit/workflow_driver.js";
-import type { SpatialSkeletonQueueInput } from "#src/skeleton/command_protocol.js";
-import type { SpatialSkeletonOptimisticIdentityService } from "#src/skeleton/optimistic_edit/api.js";
+import type { CatmaidSpatialSkeletonCommandDescriptor } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_planner.js";
+import type { SpatialSkeletonQueueInput } from "#src/skeleton/edit/command_protocol.js";
+import type { SpatialSkeletonOptimisticIdentityService } from "#src/skeleton/edit_queue/api.js";
 
 /** Resolve a queued user intent against the complete, ordered input bundle. */
 export function resolveCatmaidPreparedCommand(

@@ -16,15 +16,15 @@
 
 import { expect, it, vi } from "vitest";
 import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
-import { createCompleteSkeletonSnapshot } from "#src/skeleton/complete_skeleton_snapshot.js";
+import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { createCompleteSkeletonSnapshot } from "#src/skeleton/edit_queue/complete_skeleton.js";
+import { SpatialSkeletonProjectionWorkspace } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
+import { SpatialSkeletonOptimisticProjectionRuntime } from "#src/skeleton/edit_queue/preview.js";
 import {
   SpatialSkeletonLogicalHandleMappings,
   spatialSkeletonLogicalNode,
   spatialSkeletonLogicalSegment,
-} from "#src/skeleton/logical_identity.js";
-import { SpatialSkeletonOptimisticProjectionRuntime } from "#src/skeleton/optimistic_edit/projection_runtime.js";
-import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
-import { SpatialSkeletonProjectionWorkspace } from "#src/skeleton/spatial_skeleton_projection_reducer.js";
+} from "#src/skeleton/edit_queue/stable_id_handles.js";
 
 function makeWholeSkeletonReads(
   getSkeleton: (

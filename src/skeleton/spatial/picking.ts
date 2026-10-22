@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
+import type { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type { SkeletonPickGeometry } from "#src/skeleton/spatial/frontend.js";
-import type { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 
 export function resolveSpatiallyIndexedSkeletonSegmentPick(
   geometry: Pick<

@@ -84,8 +84,9 @@ import { SegmentationGraphSourceTab } from "#src/segmentation_graph/source.js";
 import { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";
 import { SharedWatchableValue } from "#src/shared_watchable_value.js";
 import type { EditableSkeletonSource } from "#src/skeleton/api.js";
-import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
-import { attachFindPath } from "#src/skeleton/find_path_attachment.js";
+import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import { SkeletonDataSourceState } from "#src/skeleton/find_path/find_path.js";
+import { attachFindPath } from "#src/skeleton/find_path/find_path_attachment.js";
 import {
   PerspectiveViewSkeletonLayer,
   SkeletonLayer,
@@ -105,7 +106,6 @@ import {
   SpatiallyIndexedSkeletonLayer,
   type SpatiallyIndexedSkeletonLayerDisplayState,
 } from "#src/skeleton/spatial/skeleton_render_layer.js";
-import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { DataType, VolumeType } from "#src/sliceview/volume/base.js";
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";

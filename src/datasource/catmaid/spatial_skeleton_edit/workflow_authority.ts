@@ -5,10 +5,6 @@
  */
 
 import {
-  type CatmaidOptimisticMutation,
-  type CatmaidOptimisticMutationResult,
-} from "#src/datasource/catmaid/spatial_skeleton_edit/mutation_adapter.js";
-import {
   makeSteps,
   requirePositiveId,
   type CatmaidAttributeSemantic,
@@ -20,22 +16,26 @@ import {
   type CatmaidSplitSemantic,
   type CatmaidWorkflow,
   type CatmaidWorkflowStep,
-} from "#src/datasource/catmaid/spatial_skeleton_edit/workflow_recipe.js";
+} from "#src/datasource/catmaid/spatial_skeleton_edit/edit_plan.js";
+import {
+  type CatmaidOptimisticMutation,
+  type CatmaidOptimisticMutationResult,
+} from "#src/datasource/catmaid/spatial_skeleton_edit/edit_requests.js";
+import type { SpatialSkeletonOptimisticIdentityService } from "#src/skeleton/edit_queue/api.js";
+import type { SpatialSkeletonProjectionDelta } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
+import type { SpatialSkeletonMutationWorkflowContext } from "#src/skeleton/edit_queue/ports.js";
+import type { SpatialSkeletonAuthoritativeReconciliation } from "#src/skeleton/edit_queue/preview.js";
 import {
   getSpatialSkeletonLogicalResourceKey,
   type SpatialSkeletonLogicalNodeHandle,
   type SpatialSkeletonLogicalResourceHandle,
   type SpatialSkeletonLogicalSegmentHandle,
-} from "#src/skeleton/logical_identity.js";
+} from "#src/skeleton/edit_queue/stable_id_handles.js";
 import {
   getSkeletonNodeConfidence,
   getSkeletonNodeRadius,
   isSkeletonNodeTrueEnd,
 } from "#src/skeleton/node_attributes.js";
-import type { SpatialSkeletonOptimisticIdentityService } from "#src/skeleton/optimistic_edit/api.js";
-import type { SpatialSkeletonMutationWorkflowContext } from "#src/skeleton/optimistic_edit/ports.js";
-import type { SpatialSkeletonAuthoritativeReconciliation } from "#src/skeleton/optimistic_edit/projection_runtime.js";
-import type { SpatialSkeletonProjectionDelta } from "#src/skeleton/spatial_skeleton_projection_reducer.js";
 
 interface CatmaidMaterializationContext {
   readonly direction: "forward" | "inverse";

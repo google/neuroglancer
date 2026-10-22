@@ -17,11 +17,11 @@
 import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.js";
 import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import type {
   SpatialSkeletonPresentationSnapshot,
   SpatialSkeletonState,
-} from "#src/skeleton/spatial_skeleton_manager.js";
+} from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { bigintCompare } from "#src/util/bigint.js";

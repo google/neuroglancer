@@ -27,12 +27,12 @@ import {
   SKELETON_ENTER_SPLIT_MODE,
 } from "#src/skeleton/actions.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import * as skeletonCommands from "#src/skeleton/commands.js";
+import { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import * as skeletonCommands from "#src/skeleton/edit/submit_edits.js";
 import {
   SpatialSkeletonLogicalHandleMappings,
   spatialSkeletonLogicalNode,
-} from "#src/skeleton/logical_identity.js";
-import { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
+} from "#src/skeleton/edit_queue/stable_id_handles.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import svg_addNodeCursor from "#src/ui/images/add_node_cursor.svg?raw";

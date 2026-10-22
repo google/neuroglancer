@@ -55,6 +55,7 @@ import {
   type SkeletonFragmentSource,
   type SkeletonNode,
 } from "#src/skeleton/api.js";
+import type { SpatialSkeletonState } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   DEFAULT_FRAGMENT_MAIN,
   getSkeletonNodeDiameter,
@@ -66,10 +67,6 @@ import {
   type VertexAttributeRenderInfo,
   type ViewSpecificSkeletonRenderingOptions,
 } from "#src/skeleton/frontend.js";
-import type { SkeletonNodeHighlightSelection } from "#src/skeleton/node_highlight.js";
-import { SkeletonNodeHighlight } from "#src/skeleton/node_highlight.js";
-import type { SkeletonPanelView } from "#src/skeleton/node_overlay.js";
-import { SkeletonNodeOverlay } from "#src/skeleton/node_overlay.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
 import {
   forEachSpatialSkeletonSourceScale,
@@ -88,6 +85,10 @@ import {
   uploadSegmentIdTexture,
   SPATIAL_SKELETON_SOURCE_OPTIONS,
 } from "#src/skeleton/spatial/frontend.js";
+import type { SkeletonNodeHighlightSelection } from "#src/skeleton/spatial/node_highlight.js";
+import { SkeletonNodeHighlight } from "#src/skeleton/spatial/node_highlight.js";
+import type { SkeletonPanelView } from "#src/skeleton/spatial/node_overlay.js";
+import { SkeletonNodeOverlay } from "#src/skeleton/spatial/node_overlay.js";
 import type {
   SkeletonOverlaySegments,
   SpatiallyIndexedSkeletonOverlayGeometry,
@@ -97,7 +98,6 @@ import {
   resolveSpatiallyIndexedSkeletonNodePick,
   resolveSpatiallyIndexedSkeletonSegmentPick,
 } from "#src/skeleton/spatial/picking.js";
-import type { SpatialSkeletonState } from "#src/skeleton/spatial_skeleton_manager.js";
 import { type TransformedSource } from "#src/sliceview/base.js";
 import type { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
