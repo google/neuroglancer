@@ -87,7 +87,7 @@ async function flush() {
 }
 
 describe("SpatialSkeletonRequestScheduler", () => {
-  it("dispatches under one active lease and leaves settlement to the engine", async () => {
+  it("sends an edit and keeps the source locked until the queue releases it", async () => {
     const { adapter, commits } = makeAdapter();
     const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     const attempt = scheduler.schedule(
@@ -116,7 +116,7 @@ describe("SpatialSkeletonRequestScheduler", () => {
     settlement.lease?.release();
   });
 
-  it("serializes all work in the same edit request scope across schedulers", async () => {
+  it("sends edits to one source one at a time, in the order they were made", async () => {
     const editRequestScope = {};
     const coordinator = new SpatialSkeletonEditRequestLock();
     const { adapter, commits } = makeAdapter(editRequestScope);
@@ -136,6 +136,14 @@ describe("SpatialSkeletonRequestScheduler", () => {
       "execute",
       attemptRequest({ name: "second" }),
     );
+    const thirdScheduler = new SpatialSkeletonRequestScheduler({
+      adapter,
+      coordinator,
+    });
+    const third = thirdScheduler.schedule(
+      "execute",
+      attemptRequest({ name: "third" }),
+    );
     await flush();
 
     expect(commits.map(({ editRequest }) => editRequest.name)).toEqual([
@@ -153,10 +161,18 @@ describe("SpatialSkeletonRequestScheduler", () => {
       "second",
     ]);
     commits[1]!.resolve({ authority: "second" });
-    (await second.settled).lease?.release();
+    const secondSettlement = await second.settled;
+    await flush();
+    expect(commits).toHaveLength(2);
+
+    secondSettlement.lease?.release();
+    await flush();
+    expect(commits[2]!.editRequest.name).toBe("third");
+    commits[2]!.resolve({ authority: "third" });
+    (await third.settled).lease?.release();
   });
 
-  it("allows different edit request scopes to commit concurrently", async () => {
+  it("saves edits to different sources at the same time", async () => {
     const coordinator = new SpatialSkeletonEditRequestLock();
     const firstAdapter = makeAdapter();
     const secondAdapter = makeAdapter();
@@ -187,7 +203,7 @@ describe("SpatialSkeletonRequestScheduler", () => {
     (await second.settled).lease?.release();
   });
 
-  it("returns an active indeterminate fence for the engine to retain", async () => {
+  it("holds back later edits after a save whose outcome is unknown", async () => {
     const coordinator = new SpatialSkeletonEditRequestLock();
     const { adapter, commits } = makeAdapter();
     const scheduler = new SpatialSkeletonRequestScheduler({
@@ -218,7 +234,7 @@ describe("SpatialSkeletonRequestScheduler", () => {
     (await blocked.settled).lease?.release();
   });
 
-  it("reuses one lease for compound steps without letting a queued intent pass", async () => {
+  it("sends every step of a multi-step edit before the next edit", async () => {
     const { adapter, commits } = makeAdapter();
     const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     const first = scheduler.schedule(
@@ -254,7 +270,7 @@ describe("SpatialSkeletonRequestScheduler", () => {
     (await queuedIntent.settled).lease?.release();
   });
 
-  it("cancels a FIFO waiter without materializing or invoking its adapter", async () => {
+  it("a canceled waiting edit is never sent", async () => {
     const { adapter, commits } = makeAdapter();
     const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     const running = scheduler.schedule(
@@ -264,6 +280,16 @@ describe("SpatialSkeletonRequestScheduler", () => {
     const materializeQueued = vi.fn(() => ({ name: "queued" }));
     const queued = scheduler.schedule("execute", {
       materializeEditRequest: materializeQueued,
+    });
+    const later = scheduler.schedule(
+      "execute",
+      attemptRequest({ name: "later" }),
+    );
+    const abortedController = new AbortController();
+    abortedController.abort("stopped");
+    const alreadyAborted = scheduler.schedule("execute", {
+      ...attemptRequest({ name: "already-aborted" }),
+      signal: abortedController.signal,
     });
     await flush();
 
@@ -275,15 +301,27 @@ describe("SpatialSkeletonRequestScheduler", () => {
         outcome: expect.objectContaining({ status: "not-started" }),
       }),
     );
+    await expect(alreadyAborted.settled).resolves.toEqual(
+      expect.objectContaining({
+        outcome: expect.objectContaining({ status: "not-started" }),
+      }),
+    );
     expect(materializeQueued).not.toHaveBeenCalled();
     expect(commits.map(({ editRequest }) => editRequest.name)).toEqual([
       "running",
     ]);
     commits[0]!.resolve({ authority: "running" });
     (await running.settled).lease?.release();
+    await flush();
+    expect(commits.map(({ editRequest }) => editRequest.name)).toEqual([
+      "running",
+      "later",
+    ]);
+    commits[1]!.resolve({ authority: "later" });
+    (await later.settled).lease?.release();
   });
 
-  it("closes the lease-grant/commit race when cancellation wins", async () => {
+  it("an edit canceled as its turn arrives is not sent", async () => {
     const { adapter, commits } = makeAdapter();
     const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     const running = scheduler.schedule(
@@ -310,7 +348,7 @@ describe("SpatialSkeletonRequestScheduler", () => {
     ]);
   });
 
-  it("materializes authoritative identities only after acquiring the lane", async () => {
+  it("a waiting edit is sent with the server IDs known when its turn comes", async () => {
     const { adapter, commits } = makeAdapter();
     const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     const running = scheduler.schedule(
@@ -335,7 +373,7 @@ describe("SpatialSkeletonRequestScheduler", () => {
     (await waiting.settled).lease?.release();
   });
 
-  it("never releases a lease after ownership transfers to the engine", async () => {
+  it("an edit that cannot be built keeps later edits waiting until the queue releases the source", async () => {
     const editRequestScope = {};
     const { adapter, commits } = makeAdapter(editRequestScope);
     const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
@@ -368,7 +406,7 @@ describe("SpatialSkeletonRequestScheduler", () => {
     (await blocked.settled).lease?.release();
   });
 
-  it("honors re-entrant cancellation without releasing engine-owned authority", async () => {
+  it("an edit canceled just before sending is not sent and keeps the source locked", async () => {
     const { adapter, commits } = makeAdapter();
     const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     let acquiredLease: SpatialSkeletonEditRequestLease | undefined;
@@ -393,7 +431,7 @@ describe("SpatialSkeletonRequestScheduler", () => {
     acquiredLease?.release();
   });
 
-  it("disposal aborts pre-commit work but does not alter transferred leases", async () => {
+  it("closing stops edits that have not been sent and refuses new ones", async () => {
     const { adapter, commits } = makeAdapter();
     const scheduler = new SpatialSkeletonRequestScheduler({ adapter });
     let acquiredLease: SpatialSkeletonEditRequestLease | undefined;
@@ -448,7 +486,7 @@ describe("SpatialSkeletonRequestScheduler", () => {
     settlement.lease?.release();
   });
 
-  it("snapshots edit request scope once and rejects foreign or inactive leases", async () => {
+  it("refuses a follow-up step on another source's lock or on a held lock", async () => {
     const coordinator = new SpatialSkeletonEditRequestLock();
     const editRequestScope = {};
     const { adapter, commits, getEditRequestScope } =

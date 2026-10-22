@@ -23,7 +23,7 @@ import {
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
 
 describe("stable node and skeleton ids", () => {
-  it("keeps logical handles stable while physical node and segment ids remap", () => {
+  it("a node keeps its name while the server renumbers it", () => {
     const mappings = new SpatialSkeletonStableIdHandles<number, number>();
     const node = spatialSkeletonStableNode("created:1");
     const firstSegment = spatialSkeletonStableSegment("merge:first");
@@ -56,7 +56,7 @@ describe("stable node and skeleton ids", () => {
     expect(mappings.revision).toBe(4);
   });
 
-  it("binds a complete snapshot node set with one mapping revision", () => {
+  it("naming every node of a loaded skeleton counts as one change, and repeating it counts as none", () => {
     const mappings = new SpatialSkeletonStableIdHandles<number, number>();
     const bindings = Array.from(
       { length: 5_000 },
@@ -71,7 +71,7 @@ describe("stable node and skeleton ids", () => {
     expect(mappings.resolveNode(bindings.at(-1)![0])).toBe(5_000);
   });
 
-  it("finds the first logical handles for many physical node ids", () => {
+  it("looking up many server IDs returns the oldest name for each", () => {
     const mappings = new SpatialSkeletonStableIdHandles<number, number>();
     const first = spatialSkeletonStableNode("first");
     const alias = spatialSkeletonStableNode("alias");
@@ -90,7 +90,7 @@ describe("stable node and skeleton ids", () => {
     );
   });
 
-  it("rolls back only the provisional mapping owned by an intent", () => {
+  it("undoing a rejected edit removes only the IDs that edit created", () => {
     const mappings = new SpatialSkeletonStableIdHandles<number, number>();
     const segment = spatialSkeletonStableSegment("restored");
     mappings.bindSegment(segment, 17);
@@ -118,7 +118,7 @@ describe("stable node and skeleton ids", () => {
     });
   });
 
-  it("keeps confirmed ids accessible beneath later recreation previews", () => {
+  it("a saved ID still resolves while a pending edit recreates the node", () => {
     const mappings = new SpatialSkeletonStableIdHandles<number, number>();
     const node = spatialSkeletonStableNode("recreated-node");
     const segment = spatialSkeletonStableSegment("recreated-segment");
@@ -154,7 +154,7 @@ describe("stable node and skeleton ids", () => {
     });
   });
 
-  it("supports multiple historical handles for one authoritative segment", () => {
+  it("several old names of a merged skeleton all point at the survivor", () => {
     const mappings = new SpatialSkeletonStableIdHandles<number, number>();
     const result = spatialSkeletonStableSegment("merge-result");
     const deleted = spatialSkeletonStableSegment("merge-deleted");

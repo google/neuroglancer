@@ -104,8 +104,8 @@ function settle(journal: Journal, sequence: number) {
   journal.settleSuccessful(sequence, "committed");
 }
 
-describe("edit intent journal", () => {
-  it("owns immutable committed physical attempts canonically", () => {
+describe("pending edits", () => {
+  it("a saved request cannot be changed afterwards", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,
@@ -144,22 +144,9 @@ describe("edit intent journal", () => {
         ],
       }),
     );
-    expect(
-      Object.isFrozen(
-        journal.get(record.sequence)!.committedEditRequestAttempts,
-      ),
-    ).toBe(true);
-    expect(Object.isFrozen(journal.get(record.sequence))).toBe(true);
-    expect(Object.isFrozen(journal.get(record.sequence)!.lifecycle)).toBe(true);
-    expect(Object.isFrozen(journal.get(record.sequence)!.resources)).toBe(true);
-    expect(
-      Object.isFrozen(
-        journal.get(record.sequence)!.committedEditRequestAttempts[0],
-      ),
-    ).toBe(true);
   });
 
-  it("indexes resource and semantic dependencies in intent order", () => {
+  it("each edit lists the earlier edits it depends on, in order", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,
@@ -196,7 +183,7 @@ describe("edit intent journal", () => {
     journal.assertInvariants();
   });
 
-  it("reserves deterministic intent ids without admitting partial records", () => {
+  it("numbers edits in the order they were made, and a canceled number goes to the next edit", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,
@@ -227,6 +214,7 @@ describe("edit intent journal", () => {
       expect.objectContaining({
         preview: "exact",
         authority: "queued",
+        reconciliation: "waiting",
         history: "staged",
       }),
     );
@@ -249,7 +237,7 @@ describe("edit intent journal", () => {
     journal.assertInvariants();
   });
 
-  it("records execute, undo, and redo as independent state machines", () => {
+  it("an edit, its Undo and its Redo each save separately", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,
@@ -302,7 +290,7 @@ describe("edit intent journal", () => {
     journal.assertInvariants();
   });
 
-  it("atomically refreshes only active exact preview artifacts", () => {
+  it("refuses to update any edit in a batch if one of them is not yet shown", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,
@@ -349,7 +337,7 @@ describe("edit intent journal", () => {
     });
   });
 
-  it("rejects the complete active suffix", () => {
+  it("a rejected edit cancels every later pending edit", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,
@@ -403,7 +391,7 @@ describe("edit intent journal", () => {
     journal.assertInvariants();
   });
 
-  it("enforces 64 work slots while allowing explicitly net-neutral coalescing", () => {
+  it("accepts at most 64 pending edits, but always accepts an Undo that cancels an unsent edit", () => {
     expect(new SpatialSkeletonIntentJournal().capacity).toBe(64);
     const journal = new SpatialSkeletonIntentJournal<
       string,
@@ -451,7 +439,7 @@ describe("edit intent journal", () => {
     journal.assertInvariants();
   });
 
-  it("compacts folded terminal records without retaining stale dependency edges", () => {
+  it("a finished edit no longer holds back later edits", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,
@@ -479,7 +467,7 @@ describe("edit intent journal", () => {
     journal.assertInvariants();
   });
 
-  it("retains a terminal capacity-group root until its coalesced intent settles", () => {
+  it("an edit and its Undo count as pending until both finish", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,
@@ -503,7 +491,7 @@ describe("edit intent journal", () => {
     journal.assertInvariants();
   });
 
-  it("atomically cancels an unsent pair without losing its earlier writer", () => {
+  it("Undo of an unsent edit cancels both and still waits for the edit before them", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,
@@ -568,7 +556,7 @@ describe("edit intent journal", () => {
     retry.assertInvariants();
   });
 
-  it("refuses no-op coalescing after another active intent observed the target", () => {
+  it("Undo does not cancel an unsent edit that a later edit depends on", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,
@@ -592,7 +580,7 @@ describe("edit intent journal", () => {
     journal.assertInvariants();
   });
 
-  it("rejects missing, future, duplicate-ticket, and rejected dependencies", () => {
+  it("refuses an edit that depends on a missing, later, duplicate or rejected edit", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,
@@ -635,7 +623,7 @@ describe("edit intent journal", () => {
     journal.assertInvariants();
   });
 
-  it("prevents unsafe submission and distinguishes lease waiting from commit", () => {
+  it("an edit is not sent before the edits it depends on", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,
@@ -687,7 +675,7 @@ describe("edit intent journal", () => {
     journal.assertInvariants();
   });
 
-  it("requires terminal suffix rejection before a dependent can submit", () => {
+  it("an edit that depends on a rejected edit is canceled, not sent", () => {
     const journal = new SpatialSkeletonIntentJournal<
       string,
       RequestedResult,

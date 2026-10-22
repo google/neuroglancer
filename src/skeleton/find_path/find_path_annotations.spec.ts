@@ -127,7 +127,7 @@ describe("SpatialSkeletonFindPathAnnotations", () => {
     state.dispose();
   });
 
-  it("keeps annotations and transforms isolated between datasource states", () => {
+  it("each data source shows only its own Find Path markers", () => {
     const firstState = new SkeletonFindPathState();
     const secondState = new SkeletonFindPathState();
     firstState.setSource(endpoint(1, 100, [1, 2, 3]));
@@ -196,7 +196,7 @@ describe("SpatialSkeletonFindPathAnnotations", () => {
     state.dispose();
   });
 
-  it("maps user deletions back to endpoint and result state", () => {
+  it("deleting a Find Path marker clears that endpoint or the route", () => {
     const state = new SkeletonFindPathState();
     setResolvedPath(state);
     const { findPathAnnotations } = makeFixture(state);

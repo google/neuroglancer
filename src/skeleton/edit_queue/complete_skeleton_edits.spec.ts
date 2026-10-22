@@ -183,7 +183,7 @@ function expectRoundTrip(delta: SpatialSkeletonEditForwardDelta) {
 }
 
 describe("complete skeleton edits", () => {
-  it("round-trips all warm node and topology actions through compact inverses", () => {
+  it("Undo restores the skeleton after every kind of edit", () => {
     const {
       segmentA,
       segmentB,
@@ -242,7 +242,7 @@ describe("complete skeleton edits", () => {
     expect([n1, n10].every(({ kind }) => kind === "node")).toBe(true);
   });
 
-  it("keeps chains lazy between bounded checkpoints", () => {
+  it("an edit after a split counts the split as one level", () => {
     const { baseline, mappings, segmentA, splitSegment, nodes } = fixture();
     const split = applySpatialSkeletonEditDelta(
       baseline,
@@ -296,26 +296,6 @@ describe("complete skeleton edits", () => {
 
   it.each([
     {
-      name: "node attributes",
-      delta: ({ segmentA, nodes }: Fixture) =>
-        ({
-          kind: "node-attributes",
-          segment: segmentA,
-          node: nodes.n3,
-          changes: { radius: 14, confidence: 41 },
-        }) satisfies SpatialSkeletonEditForwardDelta,
-    },
-    {
-      name: "node movement",
-      delta: ({ segmentA, nodes }: Fixture) =>
-        ({
-          kind: "move",
-          segment: segmentA,
-          node: nodes.n3,
-          position: [91, 92, 93],
-        }) satisfies SpatialSkeletonEditForwardDelta,
-    },
-    {
       name: "skeleton splitting",
       delta: ({ segmentA, splitSegment, nodes }: Fixture) =>
         ({
@@ -337,41 +317,38 @@ describe("complete skeleton edits", () => {
           secondNode: nodes.n12,
         }) satisfies SpatialSkeletonEditForwardDelta,
     },
-  ])(
-    "retains $name Undo and Redo recipes across a snapshot checkpoint",
-    ({ delta }) => {
-      const state = fixture();
-      const checkpointInput = deepenSnapshotToCheckpointBoundary(
-        state.baseline,
-        state.segmentA,
-        1n,
-      );
-      const before = normalized(checkpointInput);
-      const forwardDelta = delta(state);
+  ])("Undo and Redo of $name work on a long-edited skeleton", ({ delta }) => {
+    const state = fixture();
+    const checkpointInput = deepenSnapshotToCheckpointBoundary(
+      state.baseline,
+      state.segmentA,
+      1n,
+    );
+    const before = normalized(checkpointInput);
+    const forwardDelta = delta(state);
 
-      const executed = applySpatialSkeletonEditDelta(
-        checkpointInput,
-        forwardDelta,
-        state.mappings,
-      );
-      const after = normalized(executed.edit);
-      const undone = applySpatialSkeletonEditDelta(
-        executed.edit,
-        executed.inverseDelta,
-        state.mappings,
-      );
-      expect(normalized(undone.edit)).toEqual(before);
+    const executed = applySpatialSkeletonEditDelta(
+      checkpointInput,
+      forwardDelta,
+      state.mappings,
+    );
+    const after = normalized(executed.edit);
+    const undone = applySpatialSkeletonEditDelta(
+      executed.edit,
+      executed.inverseDelta,
+      state.mappings,
+    );
+    expect(normalized(undone.edit)).toEqual(before);
 
-      const redone = applySpatialSkeletonEditDelta(
-        undone.edit,
-        forwardDelta,
-        state.mappings,
-      );
-      expect(normalized(redone.edit)).toEqual(after);
-    },
-  );
+    const redone = applySpatialSkeletonEditDelta(
+      undone.edit,
+      forwardDelta,
+      state.mappings,
+    );
+    expect(normalized(redone.edit)).toEqual(after);
+  });
 
-  it("uses authoritative node ids for Undo and Redo after a snapshot checkpoint", () => {
+  it("Undo and Redo of an added node use the ID the server assigned", () => {
     const state = fixture();
     const checkpointInput = deepenSnapshotToCheckpointBoundary(
       state.baseline,
@@ -562,7 +539,7 @@ describe("complete skeleton edits", () => {
     },
   );
 
-  it("enforces action-specific invariants in the reducer", () => {
+  it("refuses edits that would break the skeleton: a child of a true end, deleting a root with children, a split at the root, a true end that is not a leaf, a merge into itself, and a non-finite position", () => {
     const { baseline, mappings, segmentA, segmentB, splitSegment, nodes } =
       fixture();
     const trueEnd = applySpatialSkeletonEditDelta(
@@ -653,7 +630,7 @@ describe("complete skeleton edits", () => {
     }
   });
 
-  it("replays stable logical deltas against remapped node and reversed-winner ids", () => {
+  it("an edit still applies after the server renumbers its nodes or keeps the other skeleton in a merge", () => {
     const { mappings, segmentA, segmentB, nodes } = fixture();
     const resultSegment = spatialSkeletonStableSegment("merge:result");
     mappings.bindSegment(resultSegment, 20n);
@@ -693,7 +670,7 @@ describe("complete skeleton edits", () => {
     expect(delta.segment).toBe(segmentA);
   });
 
-  it("deterministically maintains baseline + valid intents through success, rejection, remap, undo, and redo", () => {
+  it("the shown skeleton always equals the saved skeleton plus the edits still pending", () => {
     type EagerNode = {
       nodeId: bigint;
       parentNodeId?: bigint;

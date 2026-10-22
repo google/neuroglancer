@@ -45,7 +45,7 @@ describe("spatial skeleton edit errors", () => {
     });
   });
 
-  it("distinguishes a missing node from a cold complete snapshot", () => {
+  it("tells a missing node apart from a skeleton that has not loaded yet", () => {
     const error = new SpatialSkeletonInspectionRequiredError(
       {
         segmentId: 11n,

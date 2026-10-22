@@ -129,7 +129,7 @@ function exactArtifact(
 }
 
 describe("SpatialSkeletonEditPreview", () => {
-  it("retires the authoritative singleton while preserving a pending Undo replacement", () => {
+  it("deleting the last node removes its skeleton, and a pending Undo brings it back under a new ID", () => {
     const state = new SpatialSkeletonEditSession();
     state.replaceCachedSegmentSnapshots([[10n, [node(1n, 10n)]]]);
     const snapshot = state.getCachedSegmentSnapshotHandle(10n)!.handle;
@@ -206,7 +206,7 @@ describe("SpatialSkeletonEditPreview", () => {
     });
   });
 
-  it("retains initial history snapshots without materializing them", () => {
+  it("keeping skeletons for Undo builds no node lists", () => {
     const segment = spatialSkeletonStableSegment("retained");
     const mappings = new SpatialSkeletonStableIdHandles<bigint, bigint>();
     mappings.bindSegment(segment, 10n);
@@ -236,7 +236,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(snapshot.materializationCount).toBe(0);
   });
 
-  it("gets or creates a node-handle batch atomically with one mapping revision", () => {
+  it("looking up many nodes either names all of them or changes nothing", () => {
     const known = spatialSkeletonStableNode("known");
     const occupiedCanonical = spatialSkeletonStableNode("authority:12");
     const mappings = new SpatialSkeletonStableIdHandles<bigint, bigint>();
@@ -269,7 +269,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(runtime.mappingRevision).toBe(beforeInvalidBatch + 1);
   });
 
-  it("rebuilds a prepared preview after a later admission adds identity bindings", () => {
+  it("an edit built before a later edit started still shows correctly", () => {
     const { runtime, state, segment, nodes } = fixture();
     const prepared = runtime.prepareExact(
       1,
@@ -292,7 +292,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(Array.from(state.getCachedNode(2n)!.position)).toEqual([20, 21, 22]);
   });
 
-  it("uses fresh authority handles when canonical node and segment ids were rebound", () => {
+  it("a server ID that now belongs to another node gets a new name rather than reusing the old one", () => {
     const reboundNode = spatialSkeletonStableNode("authority:11");
     const reboundSegment = spatialSkeletonStableSegment("authority:17");
     const mappings = new SpatialSkeletonStableIdHandles<bigint, bigint>();
@@ -316,7 +316,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(runtime.resolveSegment(freshSegment)).toBe(17n);
   });
 
-  it("does not undo a reversed merge binding during a later physical lookup", () => {
+  it("looking up a node after a merge where the server kept the other skeleton does not undo the merge", () => {
     const state = new SpatialSkeletonEditSession();
     state.replaceCachedSegmentSnapshots(
       [
@@ -388,7 +388,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(runtime.resolveSegment(laterPhysicalEleven)).toBe(17n);
   });
 
-  it("removes a losing seeded segment in the first atomic merge preview", () => {
+  it("the merged-away skeleton disappears in the same frame the merge is shown", () => {
     const state = new SpatialSkeletonEditSession();
     state.replaceCachedSegmentSnapshots(
       [
@@ -448,7 +448,7 @@ describe("SpatialSkeletonEditPreview", () => {
     });
   });
 
-  it("does not seed an earlier active provisional segment into the baseline", () => {
+  it("a skeleton not yet saved is not treated as saved by a later edit", () => {
     const state = new SpatialSkeletonEditSession();
     const runtime = new SpatialSkeletonEditPreview(state);
     const segment = spatialSkeletonStableSegment("provisional-root-segment");
@@ -496,7 +496,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(runtime.retainedHistoryWorkspace.segments).toEqual([]);
   });
 
-  it("prepares off-screen and adopts cache, identities, and cue removal in one frame", () => {
+  it("an edit appears in one frame, with its node IDs and with its pending marker removed", () => {
     const { state, segment, nodes, runtime, baselineHandle } = fixture();
     state.addSpatialSkeletonPendingEdit({
       intentId: 1,
@@ -558,7 +558,7 @@ describe("SpatialSkeletonEditPreview", () => {
     ]);
   });
 
-  it("accepts a retained inspected handle whose owned cache revision advanced", () => {
+  it("a later edit is accepted after the edit's own earlier change was saved", () => {
     const { state, segment, nodes, runtime } = fixture();
     const first = runtime.prepareExact(1, {
       delta: {
@@ -595,7 +595,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(state.getCachedNode(2n)?.description).toBe("second");
   });
 
-  it("keeps a preview adopted and reports the error when an observer throws", () => {
+  it("an edit stays shown and the error is reported when a listener throws", () => {
     const { state, segment, nodes, runtime, auxiliaryErrors } = fixture();
     state.addSpatialSkeletonPendingEdit({
       intentId: 1,
@@ -643,7 +643,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(auxiliaryErrors).toHaveBeenCalledWith(nodeObserverFailure);
   });
 
-  it("keeps an authoritative result adopted and reports the error when an observer throws", () => {
+  it("a saved result stays shown and the error is reported when a listener throws", () => {
     const { state, segment, nodes, runtime, auxiliaryErrors } = fixture();
     const add = runtime.prepareExact(1, {
       delta: {
@@ -687,7 +687,7 @@ describe("SpatialSkeletonEditPreview", () => {
     });
   });
 
-  it("returns an exact canonical pair for an authority-finalized delta", () => {
+  it("after the server adjusts an edit, Undo and Redo use the server's value", () => {
     const { state, segment, nodes, runtime } = fixture();
     const preview = runtime.prepareExact(
       1,
@@ -725,7 +725,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(state.getCachedNode(2n)?.position).toEqual([2, 2.25, 2.5]);
   });
 
-  it("refolds surviving intents without exposing retained history state", () => {
+  it("removing one edit leaves the later edits shown, in one frame", () => {
     const { state, segment, nodes, runtime } = fixture();
     const first = runtime.prepareExact(
       1,
@@ -760,7 +760,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(state.getCachedNode(3n)?.position).toEqual([30, 30, 30]);
   });
 
-  it("retains baseline slices still owned by an active preview", () => {
+  it("an edit that drops out of Undo history can still be undone on screen if it is rejected", () => {
     const { state, segment, nodes, runtime } = fixture();
     const prepared = runtime.prepareExact(
       1,
@@ -779,7 +779,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(state.getCachedNode(2n)?.position).toEqual([2, 2.25, 2.5]);
   });
 
-  it("remaps provisional ids, promotes authority, and refolds later previews atomically", () => {
+  it("a new node switches to its server ID in one frame, and later edits follow it", () => {
     const { state, segment, nodes, runtime } = fixture();
     const add = runtime.prepareExact(1, {
       delta: {
@@ -847,7 +847,7 @@ describe("SpatialSkeletonEditPreview", () => {
     });
   });
 
-  it("resolves UI hints only after adoption and isolates hint failures", () => {
+  it("selection follows an edit only once it is shown, and a failing selection update does not undo it", () => {
     const { state, segment, nodes, mappings, baseline } = fixture();
     const auxiliaryErrors = vi.fn();
     const applyHints = vi.fn((hints) => {
@@ -895,7 +895,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(runtime.generation).toBe(1);
   });
 
-  it("uses the retired provisional mapping for post-rollback UI cleanup", () => {
+  it("a rejected new node is deselected by the ID it had on screen", () => {
     const { state, mappings, baseline } = fixture();
     const applyHints = vi.fn();
     const runtime = new SpatialSkeletonEditPreview(state, {
@@ -943,7 +943,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(state.getCachedNode(1001n)).toBeUndefined();
   });
 
-  it("skips unchanged replay and repeated disposal rollback of a provisional intent", () => {
+  it("removing a new node twice redraws and deselects once", () => {
     const { state, mappings, baseline } = fixture();
     const applyHints = vi.fn();
     const auxiliaryErrors = vi.fn();
@@ -1016,7 +1016,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(auxiliaryErrors).not.toHaveBeenCalled();
   });
 
-  it("automatically publishes authoritative node and segment membership remaps", () => {
+  it("selection moves to the server IDs of a new node and skeleton", () => {
     const { state, mappings, baseline } = fixture();
     const applyHints = vi.fn((hints) => {
       expect(state.getCachedNode(9n)).toBeDefined();
@@ -1062,9 +1062,13 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(state.getCachedNode(9n)).toMatchObject({ segmentId: 19n });
   });
 
-  it.each([false, true])(
-    "retires the physical Merge target while retaining logical aliases (pending Undo: %s)",
-    (pendingUndo) => {
+  it.each([
+    { pendingUndo: false, evictSurvivor: false },
+    { pendingUndo: true, evictSurvivor: false },
+    { pendingUndo: false, evictSurvivor: true },
+  ])(
+    "after a merge is saved, both skeleton names point at the survivor, and a late read of the other does not reappear (pending Undo: $pendingUndo, survivor evicted: $evictSurvivor)",
+    ({ pendingUndo, evictSurvivor }) => {
       const state = new SpatialSkeletonEditSession();
       state.replaceCachedSegmentSnapshots(
         [
@@ -1152,6 +1156,7 @@ describe("SpatialSkeletonEditPreview", () => {
       expect(runtime.resolveSegment(secondSegment)).toBe(
         pendingUndo ? 1017n : 11n,
       );
+      if (evictSurvivor) state.evictInactiveSegmentNodes([]);
       expect(
         runtime.publishAuthoritativeRead(
           [
@@ -1166,6 +1171,13 @@ describe("SpatialSkeletonEditPreview", () => {
           { expectedCacheRevisions },
         ),
       ).toBe(false);
+      if (evictSurvivor) {
+        expect(state.getCachedNode(201n)).toBeUndefined();
+      } else {
+        expect(state.getCachedNode(201n)).toMatchObject({
+          segmentId: pendingUndo ? 1017n : 11n,
+        });
+      }
       if (pendingUndo) {
         runtime.publishAuthoritative({
           intentId: 2,
@@ -1187,7 +1199,7 @@ describe("SpatialSkeletonEditPreview", () => {
     },
   );
 
-  it("applies reversed-winner merge corrections before authoritative aliasing", () => {
+  it("a merge where the server kept the other skeleton shows the server's result", () => {
     const state = new SpatialSkeletonEditSession();
     state.replaceCachedSegmentSnapshots(
       [
@@ -1274,7 +1286,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(runtime.resolveSegment(secondSegment)).toBe(17n);
   });
 
-  it("rejects a stale cache fence without adopting any part of a preview", () => {
+  it("an edit built on skeleton data that changed since is refused and nothing on screen changes", () => {
     const { state, segment, nodes, runtime, baselineHandle } = fixture();
     state.addSpatialSkeletonPendingEdit({
       intentId: 1,
@@ -1310,7 +1322,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(state.spatialSkeletonDisplay.value.pendingEdits).toHaveLength(1);
   });
 
-  it("fails local reducer and reconciliation guards before touching visible state", () => {
+  it("an invalid edit or server result is refused before anything on screen changes", () => {
     const { state, segment, nodes, runtime, baselineHandle } = fixture();
     const beforeDisplay = state.spatialSkeletonDisplay.value;
 
@@ -1359,7 +1371,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(runtime.resolveNode(nodes.first)).toBe(2n);
   });
 
-  it("keeps rebased history bindings private when the candidate cannot be reduced", () => {
+  it("an edit that cannot be applied leaves Undo history unchanged", () => {
     const { state, segment, nodes, runtime } = fixture();
     const first = runtime.prepareExact(
       1,
@@ -1409,7 +1421,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(state.getCachedNode(500n)?.parentNodeId).toBe(1n);
   });
 
-  it("rebuilds independently prepared previews against the latest adopted generation", () => {
+  it("two edits built at the same time both show", () => {
     const { state, segment, nodes, runtime } = fixture();
     const first = runtime.prepareExact(
       1,
@@ -1431,7 +1443,7 @@ describe("SpatialSkeletonEditPreview", () => {
     });
   });
 
-  it("discards a same-segment ordinary read whose cache revision predates a preview", () => {
+  it("a skeleton read that started before an edit does not overwrite the edit", () => {
     const { state, segment, nodes, runtime } = fixture();
     const expectedCacheRevisions = revisionsOf(state, [10n]);
     const exact = runtime.prepareExact(
@@ -1463,7 +1475,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(state.spatialSkeletonDisplay.value).toBe(display);
   });
 
-  it("accepts an unrelated ordinary read across another segment's preview", () => {
+  it("an edit to one skeleton does not block a read of another", () => {
     const { state, segment, nodes, runtime } = fixture();
     state.replaceCachedSegmentSnapshots(
       [[20n, [node(21n, 20n), node(22n, 20n, 21n)]]],
@@ -1499,7 +1511,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(state.getCachedNode(22n)?.position).toEqual([44, 44, 44]);
   });
 
-  it("does not bind every node while adopting an authoritative read", () => {
+  it("loading a skeleton does not name its nodes until an edit asks", () => {
     const state = new SpatialSkeletonEditSession();
     state.replaceCachedSegmentSnapshots(
       [[20n, [node(21n, 20n), node(22n, 20n, 21n)]]],
@@ -1530,7 +1542,7 @@ describe("SpatialSkeletonEditPreview", () => {
     expect(runtime.mappingRevision).toBe(revisionAfterRead + 1);
   });
 
-  it("adopts a later ordinary read into the baseline and refolds active previews once", () => {
+  it("a fresh skeleton read updates the saved state and keeps pending edits shown, in one frame", () => {
     const { state, segment, nodes, runtime, auxiliaryErrors } = fixture();
     const artifactFrames: Array<
       readonly {

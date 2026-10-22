@@ -306,7 +306,7 @@ function pendingInputs(read = deferred<void>()) {
 }
 
 describe("SpatialSkeletonEditQueue", () => {
-  it("reprepares Undo when authority finalizes its inverse during preparation", async () => {
+  it("Undo restores the value the server saved, even if it arrives while Undo is being built", async () => {
     const { engine, preview, commits, events, getReloadRequired } =
       makeHarness();
     const execute = engine.submitExecute(
@@ -392,7 +392,7 @@ describe("SpatialSkeletonEditQueue", () => {
     },
   );
 
-  it("restores and executes a Redo branch cleared by a rejected new edit", async () => {
+  it("Redo comes back and saves after a new edit is rejected", async () => {
     const harness = makeHarness();
     const { engine, commits, commandHistory, reset } = harness;
     await save(harness, "original");
@@ -460,7 +460,7 @@ describe("SpatialSkeletonEditQueue", () => {
   );
 
   it.each(["committed", "rejected"] as const)(
-    "preserves an earlier in-flight ticket after preparation failure until it is %s",
+    "an edit still saving is kept when a later edit fails to start, until it is %s",
     async (outcome) => {
       const harness = makeHarness({ failPreparationFor: "bad preview" });
       const { engine, commits, commandHistory, reset } = harness;
@@ -496,7 +496,7 @@ describe("SpatialSkeletonEditQueue", () => {
     },
   );
 
-  it("restores a staged Redo recipe after its activity rows have been evicted", async () => {
+  it("Redo still works after its rows leave the activity list", async () => {
     const pendingEdit = deferred<void>();
     const { engine, commits, commandHistory } = makeHarness({
       capacity: 3,
@@ -562,7 +562,7 @@ describe("SpatialSkeletonEditQueue", () => {
   });
 
   it.each([false, true])(
-    "ignores canceled preparation when it finishes later (throws: %s)",
+    "an edit canceled while it is built is never shown or saved (throws: %s)",
     async (throws) => {
       const pendingEdit = deferred<void>();
       const harness = makeHarness({
@@ -641,7 +641,7 @@ describe("SpatialSkeletonEditQueue", () => {
     },
   );
 
-  it("publishes previews concurrently but starts authority strictly by sequence", async () => {
+  it("shows each edit as soon as it is ready, but saves them in the order they were made", async () => {
     const firstPreparation = deferred<void>();
     const { engine, commits, events } = makeHarness();
     const first = engine.submitExecute(
@@ -679,37 +679,8 @@ describe("SpatialSkeletonEditQueue", () => {
     });
   });
 
-  it("reuses one lease for compound steps and releases before the next intent", async () => {
-    const { engine, commits } = makeHarness();
-    const first = engine.submitExecute(
-      { name: "compound", segment: 1, steps: 2 },
-      queueInput,
-    );
-    const second = engine.submitExecute(
-      { name: "next", segment: 2 },
-      queueInput,
-    );
-    await Promise.all([first, second]);
-    await flush();
-    commits[0]!.resolve({ value: "step one" });
-    await flush();
-    commits[1]!.resolve({ value: "step two" });
-    await expect(first.settled).resolves.toMatchObject({
-      outcome: "committed",
-    });
-    await flush();
-    expect(commits[0]!.context.operationId).not.toBe(
-      commits[1]!.context.operationId,
-    );
-    expect(commits[2]!.editRequest.name).toBe("next:0");
-    commits[2]!.resolve({ value: "next saved" });
-    await expect(second.settled).resolves.toMatchObject({
-      outcome: "committed",
-    });
-  });
-
   it.each(["rejected", "indeterminate"] as const)(
-    "retains the shared lane when a later compound step is %s",
+    "asks for a reload and blocks other edits when a later step of a multi-step edit is %s",
     async (disposition) => {
       const options = {
         coordinator: new SpatialSkeletonEditRequestLock(),
@@ -739,6 +710,9 @@ describe("SpatialSkeletonEditQueue", () => {
       commits[0]!.resolve({ value: "first step saved" });
       await flush();
       expect(commits[1]!.editRequest.name).toBe("compound:1");
+      expect(commits[1]!.context.operationId).not.toBe(
+        commits[0]!.context.operationId,
+      );
       commits[1]!.reject(
         Object.assign(new Error("second step failed"), { disposition }),
       );
@@ -769,7 +743,7 @@ describe("SpatialSkeletonEditQueue", () => {
     },
   );
 
-  it("rolls back and cancels the complete suffix after definitive rejection", async () => {
+  it("a rejected edit is undone on screen and cancels every later edit", async () => {
     const { engine, commits, reset } = makeHarness();
     const failed = engine.submitExecute(
       { name: "failed", segment: 1 },
@@ -807,7 +781,7 @@ describe("SpatialSkeletonEditQueue", () => {
     expect(commits).toHaveLength(1);
   });
 
-  it("requires reload if definitive suffix rollback cannot be published", async () => {
+  it("asks for a reload when a rejected edit cannot be removed from the screen", async () => {
     const { engine, commits, getReloadRequired, reset } = makeHarness({
       failRollback: true,
     });
@@ -848,7 +822,7 @@ describe("SpatialSkeletonEditQueue", () => {
     expect(commits).toHaveLength(1);
   });
 
-  it("rejects both queued opposites when coalescing preview rollback fails", async () => {
+  it("an edit and its Undo both fail when the screen cannot drop them", async () => {
     const earlierPreparation = deferred<void>();
     const { engine, commits } = makeHarness({ failRollback: true });
     const earlier = engine.submitExecute(
@@ -881,7 +855,7 @@ describe("SpatialSkeletonEditQueue", () => {
     await disposal;
   });
 
-  it("cancels earlier lane waiters when a local reset failure requires reload", async () => {
+  it("asks for a reload and sends no waiting edit when the screen cannot be reset", async () => {
     const coordinator = new SpatialSkeletonEditRequestLock();
     const editRequestScope = {};
     const externalLease = await coordinator.acquire({ editRequestScope });
@@ -915,7 +889,7 @@ describe("SpatialSkeletonEditQueue", () => {
     expect(commits).toHaveLength(0);
   });
 
-  it("disposes unsent work without issuing an automatic inverse edit request", async () => {
+  it("closing the layer drops unsent edits without sending an Undo", async () => {
     const pendingEdit = deferred<void>();
     const { engine, commits, reset } = makeHarness();
     const execution = engine.submitExecute(
@@ -935,7 +909,7 @@ describe("SpatialSkeletonEditQueue", () => {
     await expect(engine.dispose()).resolves.toBeUndefined();
   });
 
-  it("classifies late rejection after disposal and releases the lane", async () => {
+  it("a save rejected after the layer closes is reported as not saved", async () => {
     const { engine, commits } = makeHarness();
     const execution = engine.submitExecute(
       { name: "started", segment: 1 },
@@ -957,7 +931,7 @@ describe("SpatialSkeletonEditQueue", () => {
     expect(commits).toHaveLength(1);
   });
 
-  it("requires reload if disposal cannot remove its adopted preview", async () => {
+  it("asks for a reload when closing cannot remove a shown edit", async () => {
     const { engine, commits, getReloadRequired } = makeHarness({
       failRollback: true,
     });
@@ -986,7 +960,7 @@ describe("SpatialSkeletonEditQueue", () => {
     expect(commits).toHaveLength(1);
   });
 
-  it("retains a late commit after disposal as Reload required", async () => {
+  it("asks for a reload when an edit saves after the layer closes", async () => {
     const { engine, commits, getReloadRequired } = makeHarness();
     const execution = engine.submitExecute(
       { name: "started", segment: 1 },
@@ -1008,7 +982,7 @@ describe("SpatialSkeletonEditQueue", () => {
     expect(commits).toHaveLength(1);
   });
 
-  it("retains indeterminate authority and starts no later transport", async () => {
+  it("after a save with an unknown outcome, asks for a reload and sends nothing more", async () => {
     const { engine, commits, getReloadRequired } = makeHarness();
     const first = engine.submitExecute(
       { name: "unknown", segment: 1 },
@@ -1040,7 +1014,7 @@ describe("SpatialSkeletonEditQueue", () => {
     expect(commits).toHaveLength(1);
   });
 
-  it("keeps explicit Undo/Redo history recipes independent of checkpoints", async () => {
+  it("sends Undo and Redo of a saved edit as undo and redo requests", async () => {
     const { engine, commits } = makeHarness();
     const execute = engine.submitExecute(
       { name: "move", segment: 1 },
@@ -1065,7 +1039,7 @@ describe("SpatialSkeletonEditQueue", () => {
     commits[2]!.resolve({ value: "redone" });
     await expect(redo.settled).resolves.toMatchObject({ outcome: "committed" });
   });
-  it("admits loading and ready inputs in call order, before either recipe is built", async () => {
+  it("an edit waiting for its skeleton to load keeps its place ahead of later edits", async () => {
     const { engine, events, commits } = makeHarness();
     const cold = pendingInputs();
     const warm = pendingInputs();
@@ -1107,7 +1081,7 @@ describe("SpatialSkeletonEditQueue", () => {
   });
 
   it.each([false, true])(
-    "undoes an unprepared action and redoes it with fresh preparation (read started: %s)",
+    "Undo of an edit still loading cancels it, and Redo starts it again (read started: %s)",
     async (started) => {
       const { engine, events, commits } = makeHarness();
       const cold = pendingInputs();
@@ -1139,7 +1113,7 @@ describe("SpatialSkeletonEditQueue", () => {
     },
   );
 
-  it("rolls back a failed input read and cancels its queued suffix before transport", async () => {
+  it("a skeleton that fails to load cancels its edit and every later edit before anything is sent", async () => {
     const { engine, commits, commandHistory } = makeHarness();
     const cold = pendingInputs();
     const warm = pendingInputs();
@@ -1172,7 +1146,7 @@ describe("SpatialSkeletonEditQueue", () => {
     expect(warm.released).toHaveBeenCalledOnce();
   });
 
-  it("counts preparing intents against capacity before running validation or reads", async () => {
+  it("an edit still loading counts toward the pending-edit limit", async () => {
     const { engine } = makeHarness({ capacity: 1 });
     const cold = pendingInputs();
     const rejected = pendingInputs();
@@ -1190,7 +1164,7 @@ describe("SpatialSkeletonEditQueue", () => {
     expect(cold.released).toHaveBeenCalledOnce();
   });
 
-  it("disposes pending acquisition without allowing a late response to publish or save", async () => {
+  it("closing the layer while a skeleton loads stops the edit from being shown or saved", async () => {
     const { engine, events, commits } = makeHarness();
     const cold = pendingInputs();
     const first = engine.submitExecute(

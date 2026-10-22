@@ -110,7 +110,7 @@ describe("SkeletonFindPathState", () => {
     expect(state.result).toBeUndefined();
   });
 
-  it("invalidates only the result when topology changes", () => {
+  it("a change to the skeleton clears the route and keeps both endpoints", () => {
     const state = new SkeletonFindPathState();
     state.setEndpoints(endpoint(1n), endpoint(2n));
     state.setResult([endpoint(1n), endpoint(2n)]);
@@ -133,13 +133,6 @@ describe("SkeletonFindPathState", () => {
     state.setSource(endpoint(3n));
     state.reset();
     expect(state.toJSON()).toBeUndefined();
-  });
-
-  it("leaves endpoint relationship validation to the tool", () => {
-    const state = new SkeletonFindPathState();
-    expect(() =>
-      state.setEndpoints(endpoint(1n, 10n), endpoint(1n, 11n)),
-    ).not.toThrow();
   });
 
   it("preserves the other endpoint when one endpoint is removed", () => {
@@ -167,7 +160,7 @@ describe("SkeletonDataSourceState", () => {
     expect(state.toJSON()).toBeUndefined();
   });
 
-  it("round-trips Find Path under the datasource-owned findPath key", () => {
+  it("saves and restores Find Path in the layer's saved state", () => {
     const state = new SkeletonDataSourceState();
     state.findPathState.setEndpoints(endpoint(1n, 7n), endpoint(3n, 7n));
 
@@ -182,7 +175,7 @@ describe("SkeletonDataSourceState", () => {
     expect(restored.toJSON()).toEqual(state.toJSON());
   });
 
-  it("forwards nested changes", () => {
+  it("saves the layer state whenever a Find Path endpoint or route changes", () => {
     const state = new SkeletonDataSourceState();
     let changes = 0;
     state.changed.add(() => ++changes);

@@ -52,7 +52,7 @@ function makeNode(
   };
 }
 
-describe("skeleton/navigation", () => {
+describe("skeleton navigation", () => {
   const graph = buildSkeletonNavigationGraph([
     makeNode(1n, undefined),
     makeNode(2n, 1n),
@@ -249,7 +249,7 @@ describe("skeleton/navigation", () => {
       expect(getPathBetweenNodes(disconnectedGraph, 1n, 4n)).toBeUndefined();
     });
 
-    it("is cycle-safe and chooses deterministic shortest paths", () => {
+    it("finds the same shortest path every time, even if the skeleton has a loop", () => {
       const cycleGraph = buildSkeletonNavigationGraph([
         makeNode(1n, 4n),
         makeNode(2n, 1n),
@@ -271,7 +271,7 @@ describe("skeleton/navigation", () => {
       ]);
     });
 
-    it("handles long chains iteratively", () => {
+    it("finds a path along a very long chain", () => {
       const nodeCount = 10_000;
       const chainGraph = buildSkeletonNavigationGraph(
         Array.from({ length: nodeCount }, (_, index) =>

@@ -40,8 +40,8 @@ function rejectedEntry(error: unknown): SpatialSkeletonEditQueueRow {
   };
 }
 
-describe("optimistic queue failure explanations", () => {
-  it("retains the final-node explanation in both queue and completed activity without the request URL", () => {
+describe("edit queue failure messages", () => {
+  it("shows why the last node could not be deleted, in the queue and in recent activity, without the request URL", () => {
     const error = new HttpError(
       "https://catmaid.example.test/1/treenode/delete?private=secret",
       409,

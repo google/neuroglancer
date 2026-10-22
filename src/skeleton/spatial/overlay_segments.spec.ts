@@ -29,7 +29,7 @@ import { Uint64Set } from "#src/uint64_set.js";
 import { bigintCompare } from "#src/util/bigint.js";
 
 describe("buildSpatiallyIndexedSkeletonOverlayGeometry", () => {
-  it("packs inspected segment nodes into overlay geometry with deduped nodes", () => {
+  it("draws each node of an edited skeleton once", () => {
     const geometry = buildSpatiallyIndexedSkeletonOverlayGeometry(
       [
         [
@@ -72,7 +72,7 @@ describe("buildSpatiallyIndexedSkeletonOverlayGeometry", () => {
     expect([...geometry.indices]).toEqual([1, 0]);
   });
 
-  it("preserves the maximum provisional node id used for picking", () => {
+  it("a click can pick the newest unsaved node", () => {
     const maxProvisionalNodeId = 2n ** 63n + 0x7fff_ffffn;
     const geometry = buildSpatiallyIndexedSkeletonOverlayGeometry([
       [
@@ -88,7 +88,7 @@ describe("buildSpatiallyIndexedSkeletonOverlayGeometry", () => {
     expect(geometry.nodeIds[0]).toBeGreaterThan(0n);
   });
 
-  it("returns a nodeIndex map aligned with the packed vertex order", () => {
+  it("a picked vertex finds its node", () => {
     const geometry = buildSpatiallyIndexedSkeletonOverlayGeometry([
       [
         { nodeId: 5n, segmentId: 11n, position: new Float32Array([1, 2, 3]) },

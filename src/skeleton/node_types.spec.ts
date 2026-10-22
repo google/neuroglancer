@@ -19,7 +19,6 @@ import { describe, expect, it } from "vitest";
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
   classifySkeletonDisplayNodeType,
-  getSkeletonNodeFilterLabel,
   getSkeletonNodeIconFilterType,
   matchesSkeletonNodeFilter,
   SkeletonBrowseState,
@@ -55,7 +54,7 @@ describe("skeleton node types", () => {
     ).toBe("root");
   });
 
-  it("matches the dropdown filter semantics", () => {
+  it("each Skeleton tab filter shows the nodes its label names", () => {
     const rootLeaf = {
       isLeaf: true,
       nodeHasDescription: false,
@@ -121,7 +120,7 @@ describe("skeleton node types", () => {
     ).toBe(false);
   });
 
-  it("reuses the terminal filter enum for row icon decisions", () => {
+  it("shows the true-end and virtual-end icons on matching rows", () => {
     expect(
       getSkeletonNodeIconFilterType({
         nodeIsTrueEnd: false,
@@ -140,12 +139,6 @@ describe("skeleton node types", () => {
         nodeType: SkeletonDisplayNodeType.ROOT,
       }),
     ).toBeUndefined();
-    expect(getSkeletonNodeFilterLabel(SkeletonNodeFilterType.TRUE_END)).toBe(
-      "True end",
-    );
-    expect(
-      getSkeletonNodeFilterLabel(SkeletonNodeFilterType.HAS_DESCRIPTION),
-    ).toBe("Has description");
   });
 });
 

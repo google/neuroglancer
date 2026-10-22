@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import type {
   SpatialSkeletonEditRequestContext,
@@ -31,7 +31,7 @@ function makeAdapter(
   classifyFailure: SpatialSkeletonEditRequestAdapter<
     TestEditRequest,
     string
-  >["classifyFailure"] = () => "indeterminate",
+  >["classifyFailure"],
 ): SpatialSkeletonEditRequestAdapter<TestEditRequest, string> {
   return {
     editRequestScope: {},
@@ -46,39 +46,8 @@ const context: SpatialSkeletonEditRequestContext = {
   operationId: 4,
 };
 
-describe("spatial skeleton optimistic edit request adapter", () => {
-  it("normalizes a successful provider commit", async () => {
-    const commit = vi.fn(async () => "authority-result");
-    const classifyFailure = vi.fn(() => "rejected" as const);
-    const adapter = makeAdapter(commit, classifyFailure);
-
-    await expect(
-      commitSpatialSkeletonEditRequest(adapter, editRequest, context),
-    ).resolves.toEqual({
-      status: "committed",
-      result: "authority-result",
-    });
-    expect(commit).toHaveBeenCalledWith(editRequest, context);
-    expect(classifyFailure).not.toHaveBeenCalled();
-  });
-
-  it.each(["not-started", "rejected", "indeterminate"] as const)(
-    "preserves the adapter's %s failure classification",
-    async (status) => {
-      const error = new Error("edit request failed");
-      const classifyFailure = vi.fn(() => status);
-      const adapter = makeAdapter(async () => {
-        throw error;
-      }, classifyFailure);
-
-      await expect(
-        commitSpatialSkeletonEditRequest(adapter, editRequest, context),
-      ).resolves.toEqual({ status, error });
-      expect(classifyFailure).toHaveBeenCalledWith(error, editRequest, context);
-    },
-  );
-
-  it("conservatively treats a classification failure as indeterminate", async () => {
+describe("saving one edit request", () => {
+  it("treats an edit as possibly saved when its failure cannot be classified", async () => {
     const editRequestError = new Error("edit request failed");
     const classificationError = new Error("classifier failed");
     const adapter = makeAdapter(

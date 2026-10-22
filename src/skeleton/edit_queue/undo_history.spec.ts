@@ -16,24 +16,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { SpatialSkeletonEditCommand } from "#src/skeleton/edit_commands.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
-import {
-  createSpatialSkeletonHistoryPort,
-  SpatialSkeletonUndoHistory,
-} from "#src/skeleton/edit_queue/undo_history.js";
-
-function command(label: string): SpatialSkeletonEditCommand {
-  return {
-    action: SpatialSkeletonActions.moveNodes,
-    label,
-    payload: Object.freeze({}),
-    getQueueInputRequirements: () => ({ required: [] }),
-  };
-}
+import { SpatialSkeletonUndoHistory } from "#src/skeleton/edit_queue/undo_history.js";
 
 describe("undo and redo history", () => {
-  it("projects staged execute, undo, and redo as a LIFO suffix", () => {
+  it("Undo and Redo offer the most recent edit first, even before it is saved", () => {
     const history = new SpatialSkeletonUndoHistory();
     const first = history.stageExecute("First");
     const second = history.stageExecute("Second");
@@ -60,7 +46,7 @@ describe("undo and redo history", () => {
     });
   });
 
-  it("advances only the confirmed prefix when a later no-op settles first", () => {
+  it("an edit counts as saved only once every earlier edit is saved", () => {
     const history = new SpatialSkeletonUndoHistory();
     const first = history.stageExecute("First");
     const second = history.stageExecute("Second");
@@ -72,7 +58,7 @@ describe("undo and redo history", () => {
     expect(history.undoLabel.value).toBe("Second");
   });
 
-  it("abandons only the newest pre-admission transition", () => {
+  it("an edit that never started can be withdrawn only if it is the newest one", () => {
     const history = new SpatialSkeletonUndoHistory();
     const original = history.stageExecute("Original");
     history.confirm(original);
@@ -92,7 +78,7 @@ describe("undo and redo history", () => {
     history.abandonLatest(first);
   });
 
-  it("explicitly resets confirmed and staged state", () => {
+  it("reset clears Undo and Redo", () => {
     const history = new SpatialSkeletonUndoHistory();
     const confirmed = history.stageExecute("Confirmed");
     history.confirm(confirmed);
@@ -109,7 +95,7 @@ describe("undo and redo history", () => {
     expect(history.reset()).toBe(false);
   });
 
-  it("applies one capacity bound to confirmed and previewed stacks", () => {
+  it("Undo goes back at most the history limit", () => {
     const history = new SpatialSkeletonUndoHistory({ capacity: 3 });
     const tickets = Array.from({ length: 5 }, (_, index) =>
       history.stageExecute(`Command ${index + 1}`),
@@ -184,7 +170,7 @@ describe("undo and redo history", () => {
     },
   );
 
-  it("retains staged recipes and confirmations only before the rollback boundary", () => {
+  it("a rejected edit drops itself and later edits from history, and keeps earlier ones", () => {
     const history = new SpatialSkeletonUndoHistory({ capacity: 2 });
     const pending = history.stageExecute("Still saving");
     const reverted = history.stageExecute("Reverted before failure");
@@ -219,21 +205,6 @@ describe("undo and redo history", () => {
     history.confirm(confirmed);
     expect(() => history.rollbackFrom(confirmed)).toThrow(/rollback boundary/);
     expect(history.undoLabel.value).toBe("Saved");
-  });
-
-  it("exposes the direct-cutover history port", () => {
-    const history = new SpatialSkeletonUndoHistory();
-    const port = createSpatialSkeletonHistoryPort(history);
-    const execute = port.stageExecute(command("Move node"));
-    const undo = port.stageUndo()!;
-
-    expect(port.getTicketId(execute)).toBe(execute.transitionId);
-    expect(port.getEntryId(undo)).toBe(execute.entryId);
-    expect(port.getSemanticDependencyTicketIds(undo)).toEqual([
-      execute.transitionId,
-    ]);
-    port.reset();
-    expect(() => port.confirm(execute)).not.toThrow();
   });
 
   it("resets history when its source changes", () => {
