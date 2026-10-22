@@ -39,6 +39,10 @@ export interface ArrayMetadata {
   userAttributes: Record<string, unknown>;
   dimensionSeparator: DimensionSeparator;
   chunkKeyEncoding: ChunkKeyEncoding;
+  // Array coordinate where chunk 0 starts, and coordinate of the first
+  // element; all zero except under the `regular_bounded` chunk grid.
+  chunkGridOrigin: number[];
+  lowerBound: number[];
   codecs: CodecChainSpec;
 }
 

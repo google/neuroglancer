@@ -54,6 +54,14 @@ Dimension names may be specified using an `_ARRAY_DIMENSIONS` attribute,
 
 ## Zarr v3
 
+Supported chunk grids:
+
+- regular
+- regular_bounded (a regular grid with an `origin` and a `lower_bound`, under which chunk keys
+  may be negative and the first chunk may be partly filled). A bare array is displayed in its own
+  coordinates, starting at `lower_bound`. Inside an OME-Zarr multiscale group each level's
+  `translation` refers to its first element, as OME-NGFF defines the array index space.
+
 Supported codecs:
 
 - crc32c (not validated)
