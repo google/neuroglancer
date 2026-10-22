@@ -41,152 +41,167 @@ function makeDeferredTask() {
 describe("PromiseConcurrencyLimiter", () => {
   test("starts tasks synchronously while under the limit", () => {
     const limiter = new PromiseConcurrencyLimiter(() => 2);
-    const a = makeDeferredTask();
-    const b = makeDeferredTask();
-    void limiter.run(a.task);
-    void limiter.run(b.task);
-    expect(a.started).toBe(true);
-    expect(b.started).toBe(true);
+    const firstTask = makeDeferredTask();
+    const secondTask = makeDeferredTask();
+    void limiter.run(firstTask.task);
+    void limiter.run(secondTask.task);
+    expect(firstTask.started).toBe(true);
+    expect(secondTask.started).toBe(true);
     expect(limiter.pendingCount).toBe(0);
   });
 
-  test("queues tasks beyond the limit and dequeues in FIFO order", async () => {
+  test("starts waiting tasks in the order they were queued as slots free", async () => {
     const limiter = new PromiseConcurrencyLimiter(() => 1);
-    const a = makeDeferredTask();
-    const b = makeDeferredTask();
-    const c = makeDeferredTask();
-    const aPromise = limiter.run(a.task);
-    void limiter.run(b.task);
-    void limiter.run(c.task);
-    expect(a.started).toBe(true);
-    expect(b.started).toBe(false);
-    expect(c.started).toBe(false);
+    const firstTask = makeDeferredTask();
+    const secondTask = makeDeferredTask();
+    const thirdTask = makeDeferredTask();
+    const firstTaskResult = limiter.run(firstTask.task);
+    void limiter.run(secondTask.task);
+    void limiter.run(thirdTask.task);
+    expect(firstTask.started).toBe(true);
+    expect(secondTask.started).toBe(false);
+    expect(thirdTask.started).toBe(false);
     expect(limiter.pendingCount).toBe(2);
-    a.resolve();
-    await aPromise;
-    expect(b.started).toBe(true);
-    expect(c.started).toBe(false);
+    firstTask.resolve();
+    await firstTaskResult;
+    expect(secondTask.started).toBe(true);
+    expect(thirdTask.started).toBe(false);
     expect(limiter.pendingCount).toBe(1);
   });
 
   test("a rejected task releases its slot", async () => {
     const limiter = new PromiseConcurrencyLimiter(() => 1);
-    const a = makeDeferredTask();
-    const b = makeDeferredTask();
-    const aPromise = limiter.run(a.task);
-    void limiter.run(b.task);
-    a.reject(new Error("failure"));
-    await expect(aPromise).rejects.toThrowError("failure");
-    expect(b.started).toBe(true);
+    const firstTask = makeDeferredTask();
+    const secondTask = makeDeferredTask();
+    const firstTaskResult = limiter.run(firstTask.task);
+    void limiter.run(secondTask.task);
+    firstTask.reject(new Error("failure"));
+    await expect(firstTaskResult).rejects.toThrowError("failure");
+    expect(secondTask.started).toBe(true);
   });
 
   test("a synchronously throwing task releases its slot", async () => {
     const limiter = new PromiseConcurrencyLimiter(() => 1);
-    const b = makeDeferredTask();
-    const aPromise = limiter.run(() => {
+    const waitingTask = makeDeferredTask();
+    const throwingTaskResult = limiter.run(() => {
       throw new Error("sync failure");
     });
-    void limiter.run(b.task);
-    await expect(aPromise).rejects.toThrowError("sync failure");
-    expect(b.started).toBe(true);
+    void limiter.run(waitingTask.task);
+    await expect(throwingTaskResult).rejects.toThrowError("sync failure");
+    expect(waitingTask.started).toBe(true);
   });
 
-  test("re-reads the limit at each dispatch", async () => {
+  test("a raised limit lets more waiting tasks start when a slot frees", async () => {
     let limit = 1;
     const limiter = new PromiseConcurrencyLimiter(() => limit);
-    const a = makeDeferredTask();
-    const b = makeDeferredTask();
-    const c = makeDeferredTask();
-    const aPromise = limiter.run(a.task);
-    void limiter.run(b.task);
-    void limiter.run(c.task);
-    expect(b.started).toBe(false);
+    const firstTask = makeDeferredTask();
+    const secondTask = makeDeferredTask();
+    const thirdTask = makeDeferredTask();
+    const firstTaskResult = limiter.run(firstTask.task);
+    void limiter.run(secondTask.task);
+    void limiter.run(thirdTask.task);
+    expect(secondTask.started).toBe(false);
     limit = 2;
-    a.resolve();
-    await aPromise;
-    expect(b.started).toBe(true);
-    expect(c.started).toBe(true);
+    firstTask.resolve();
+    await firstTaskResult;
+    expect(secondTask.started).toBe(true);
+    expect(thirdTask.started).toBe(true);
   });
 
   test("treats a limit below one as one", () => {
     const limiter = new PromiseConcurrencyLimiter(() => 0);
-    const a = makeDeferredTask();
-    const b = makeDeferredTask();
-    void limiter.run(a.task);
-    void limiter.run(b.task);
-    expect(a.started).toBe(true);
-    expect(b.started).toBe(false);
+    const firstTask = makeDeferredTask();
+    const secondTask = makeDeferredTask();
+    void limiter.run(firstTask.task);
+    void limiter.run(secondTask.task);
+    expect(firstTask.started).toBe(true);
+    expect(secondTask.started).toBe(false);
   });
 
   test("rejects immediately for an already aborted signal", async () => {
     const limiter = new PromiseConcurrencyLimiter(() => 1);
     const controller = new AbortController();
     controller.abort(new Error("already aborted"));
-    const a = makeDeferredTask();
+    const firstTask = makeDeferredTask();
     await expect(
-      limiter.run(a.task, { signal: controller.signal }),
+      limiter.run(firstTask.task, { signal: controller.signal }),
     ).rejects.toThrowError("already aborted");
-    expect(a.started).toBe(false);
+    expect(firstTask.started).toBe(false);
   });
 
   test("aborting a queued task rejects it without consuming a slot", async () => {
     const limiter = new PromiseConcurrencyLimiter(() => 1);
-    const a = makeDeferredTask();
-    const b = makeDeferredTask();
-    const c = makeDeferredTask();
+    const runningTask = makeDeferredTask();
+    const abortedTask = makeDeferredTask();
+    const waitingTask = makeDeferredTask();
     const controller = new AbortController();
-    const aPromise = limiter.run(a.task);
-    const bPromise = limiter.run(b.task, { signal: controller.signal });
-    void limiter.run(c.task);
+    const runningTaskResult = limiter.run(runningTask.task);
+    const abortedTaskResult = limiter.run(abortedTask.task, {
+      signal: controller.signal,
+    });
+    void limiter.run(waitingTask.task);
     controller.abort(new Error("queued abort"));
-    await expect(bPromise).rejects.toThrowError("queued abort");
-    expect(b.started).toBe(false);
+    await expect(abortedTaskResult).rejects.toThrowError("queued abort");
+    expect(abortedTask.started).toBe(false);
     expect(limiter.pendingCount).toBe(1);
-    a.resolve();
-    await aPromise;
-    expect(c.started).toBe(true);
+    runningTask.resolve();
+    await runningTaskResult;
+    expect(waitingTask.started).toBe(true);
   });
 
-  test("aborting after a task starts does not affect the limiter", async () => {
+  test("aborting a task after it starts neither rejects it nor frees its slot", async () => {
     const limiter = new PromiseConcurrencyLimiter(() => 1);
-    const a = makeDeferredTask();
-    const b = makeDeferredTask();
+    const runningTask = makeDeferredTask();
+    const abortedTask = makeDeferredTask();
+    const waitingTask = makeDeferredTask();
     const controller = new AbortController();
-    const aPromise = limiter.run(a.task, { signal: controller.signal });
-    void limiter.run(b.task);
-    a.resolve();
-    await aPromise;
-    controller.abort();
-    expect(b.started).toBe(true);
+    const runningTaskResult = limiter.run(runningTask.task);
+    const abortedTaskResult = limiter.run(abortedTask.task, {
+      signal: controller.signal,
+    });
+    void limiter.run(waitingTask.task);
+    runningTask.resolve();
+    await runningTaskResult;
+    expect(abortedTask.started).toBe(true);
+
+    controller.abort(new Error("late abort"));
+    await Promise.resolve();
+    expect(waitingTask.started).toBe(false);
+
+    abortedTask.resolve();
+    await expect(abortedTaskResult).resolves.toBeUndefined();
+    expect(waitingTask.started).toBe(true);
   });
 
   test("starts a prioritized task ahead of tasks queued before it", async () => {
     const limiter = new PromiseConcurrencyLimiter(() => 1);
-    const a = makeDeferredTask();
-    const b = makeDeferredTask();
-    const c = makeDeferredTask();
-    const aPromise = limiter.run(a.task);
-    void limiter.run(b.task);
-    void limiter.run(c.task, { isPrioritized: () => true });
-    a.resolve();
-    await aPromise;
-    expect(c.started).toBe(true);
-    expect(b.started).toBe(false);
+    const runningTask = makeDeferredTask();
+    const earlierQueuedTask = makeDeferredTask();
+    const prioritizedTask = makeDeferredTask();
+    const runningTaskResult = limiter.run(runningTask.task);
+    void limiter.run(earlierQueuedTask.task);
+    void limiter.run(prioritizedTask.task, { isPrioritized: () => true });
+    runningTask.resolve();
+    await runningTaskResult;
+    expect(prioritizedTask.started).toBe(true);
+    expect(earlierQueuedTask.started).toBe(false);
   });
 
   test("starts a task prioritized after it was queued ahead of the others", async () => {
     const limiter = new PromiseConcurrencyLimiter(() => 1);
-    const a = makeDeferredTask();
-    const b = makeDeferredTask();
-    const c = makeDeferredTask();
-    let cPrioritized = false;
-    const aPromise = limiter.run(a.task);
-    void limiter.run(b.task, { isPrioritized: () => false });
-    void limiter.run(c.task, { isPrioritized: () => cPrioritized });
-    cPrioritized = true;
-    a.resolve();
-    await aPromise;
-    expect(c.started).toBe(true);
-    expect(b.started).toBe(false);
+    const runningTask = makeDeferredTask();
+    const earlierQueuedTask = makeDeferredTask();
+    const prioritizedTask = makeDeferredTask();
+    let prioritizedTaskIsUrgent = false;
+    const runningTaskResult = limiter.run(runningTask.task);
+    void limiter.run(earlierQueuedTask.task, { isPrioritized: () => false });
+    void limiter.run(prioritizedTask.task, {
+      isPrioritized: () => prioritizedTaskIsUrgent,
+    });
+    prioritizedTaskIsUrgent = true;
+    runningTask.resolve();
+    await runningTaskResult;
+    expect(prioritizedTask.started).toBe(true);
+    expect(earlierQueuedTask.started).toBe(false);
   });
 });

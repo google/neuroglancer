@@ -43,7 +43,7 @@ import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { NullarySignal } from "#src/util/signal.js";
 
-describe("layer/segmentation/selection", () => {
+describe("segment selection", () => {
   it("extracts segment ids from a layer selection state", () => {
     expect(
       getSegmentIdFromLayerSelectionValue({

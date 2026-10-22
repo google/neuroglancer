@@ -126,7 +126,7 @@ describe("SpatialSkeletonMergeTargetPrefetch", () => {
     expect(state.getCachedSegmentNodes(7n)).toBeUndefined();
   });
 
-  it("keeps the merge target cached after its snapshot is replaced while hovered", async () => {
+  it("keeps the merge target cached after an edit changes it while hovered", async () => {
     const state = new SpatialSkeletonEditSession();
     const { skeletonLayer, getSkeleton, reads } = makeSkeletonLayer();
     const prefetch = new SpatialSkeletonMergeTargetPrefetch(state);

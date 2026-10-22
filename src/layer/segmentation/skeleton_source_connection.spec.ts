@@ -273,7 +273,7 @@ describe("SkeletonSourceConnection", () => {
     expect(commandHistory.canUndo.value).toBe(false);
   });
 
-  it("an adopted optimistic edit invalidates the shown Find Path result", () => {
+  it("an edit shown before it is saved clears the shown Find Path result", () => {
     const { connection, spatialSkeletonEditSession } = makeConnection();
     const findPathState = new SkeletonFindPathState();
     const lifetime = new RefCounted();

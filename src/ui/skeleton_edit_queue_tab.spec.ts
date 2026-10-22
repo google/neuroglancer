@@ -86,14 +86,14 @@ function lifecycle(
   };
 }
 
-describe("SpatialSkeletonEditQueueTab", () => {
+describe("skeleton edit Queue tab", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     document.body.replaceChildren();
   });
 
-  it("always registers the user-facing Queue tab", () => {
+  it("every skeleton layer offers a Queue tab", () => {
     const { layer } = makeQueueTabLayer(() => []);
     const hidden = { value: false, changed: makeSignal().changed };
 
@@ -152,7 +152,7 @@ describe("SpatialSkeletonEditQueueTab", () => {
     tab.dispose();
   });
 
-  it("owns one persistent Reload required notification", () => {
+  it("shows one lasting Reload required notification however often the queue changes", () => {
     const reloadRequired: { value: object | undefined } = { value: undefined };
     const { layer, editQueueVersion } = makeQueueTabLayer(
       () => [],
@@ -182,7 +182,7 @@ describe("SpatialSkeletonEditQueueTab", () => {
     );
   });
 
-  it("warns after the configured in-flight delay and clears the warning on settlement", () => {
+  it("warns when a save takes longer than the source's delay, and clears the warning once it is saved", () => {
     vi.useFakeTimers();
     let entries: readonly SpatialSkeletonEditQueueEntry[] = [
       {
@@ -238,7 +238,7 @@ describe("SpatialSkeletonEditQueueTab", () => {
     controller.dispose();
   });
 
-  it("shows lease-waiting work as queued without starting the transport warning", () => {
+  it("an edit waiting for an earlier save shows Queued and never warns that saving is slow", () => {
     vi.useFakeTimers();
     const entries: readonly SpatialSkeletonEditQueueEntry[] = [
       {
@@ -272,7 +272,7 @@ describe("SpatialSkeletonEditQueueTab", () => {
     controller.dispose();
   });
 
-  it("reports unbounded root failures once across reused operation ids", () => {
+  it("reports a rejected edit once, with how many later edits it cancelled, and again for a new queue's edit with the same number", () => {
     let entries: readonly SpatialSkeletonEditQueueEntry[] = [];
     const { layer } = makeQueueTabLayer(
       () => entries,
@@ -355,35 +355,6 @@ describe("SpatialSkeletonEditQueueTab", () => {
     controller.dispose();
   });
 
-  it("shows the reload-required message once", async () => {
-    const reloadRequired: { value: object | undefined } = { value: undefined };
-    const { layer, editQueueVersion } = makeQueueTabLayer(
-      () => [],
-      () => [],
-      () => reloadRequired.value,
-    );
-    const showErrorMessage = vi
-      .spyOn(StatusMessage, "showErrorMessage")
-      .mockReturnValue({ dispose: vi.fn() } as unknown as StatusMessage);
-    registerSpatialSkeletonEditQueueTab(layer, {
-      value: false,
-      changed: makeSignal().changed,
-    } as any);
-    reloadRequired.value = {
-      reason: "committed-local-publication-failed",
-      authority: "committed",
-    };
-    editQueueVersion.dispatch();
-    await Promise.resolve();
-    await Promise.resolve();
-    editQueueVersion.dispatch();
-    expect(showErrorMessage).toHaveBeenCalledOnce();
-    expect(showErrorMessage).toHaveBeenCalledWith(
-      expect.stringContaining("Reload the page"),
-      expect.anything(),
-    );
-  });
-
   it("renders queue rows and updates on queue version changes", () => {
     let entries: readonly SpatialSkeletonEditQueueEntry[] = [
       {
@@ -451,24 +422,7 @@ describe("SpatialSkeletonEditQueueTab", () => {
     tab.dispose();
   });
 
-  it("shows an admitted edit while its exact preview is preparing", () => {
-    const { layer } = makeQueueTabLayer(() => [
-      {
-        kind: "mergeSkeletons",
-        lifecycle: lifecycle({ preview: "preparing" }),
-        commandLabel: "Merge skeletons",
-      },
-    ]);
-
-    const tab = new SpatialSkeletonEditQueueTab(layer);
-
-    expect(tab.element.textContent).toContain("1 edit pending");
-    expect(tab.element.textContent).toContain("Merge skeletons");
-    expect(tab.element.textContent).toContain("Preparing");
-    tab.dispose();
-  });
-
-  it("renders Undo intent without internal operation details", () => {
+  it("an Undo row reads 'Undo <edit>' with its status", () => {
     const entries: readonly SpatialSkeletonEditQueueEntry[] = [
       {
         kind: "deleteNode",
@@ -503,7 +457,7 @@ describe("SpatialSkeletonEditQueueTab", () => {
     tab.dispose();
   });
 
-  it("renders datasource-neutral scheduler states", () => {
+  it("statuses for any source read Saving, Reload required or Not saved, with an explanation on hover", () => {
     const { layer } = makeQueueTabLayer(
       () => [
         {
@@ -549,7 +503,7 @@ describe("SpatialSkeletonEditQueueTab", () => {
     tab.dispose();
   });
 
-  it("derives pending labels from lifecycle axes in precedence order", () => {
+  it("a pending edit shows its most urgent status: Reload required, Preparing, Saving, Reconciling, then Queued", () => {
     const entries: readonly SpatialSkeletonEditQueueEntry[] = [
       {
         kind: "unknown",
@@ -587,6 +541,10 @@ describe("SpatialSkeletonEditQueueTab", () => {
         kind: "queued",
         lifecycle: lifecycle(),
       },
+      {
+        kind: "preparing",
+        lifecycle: lifecycle({ preview: "preparing" }),
+      },
     ];
     const { layer } = makeQueueTabLayer(() => entries);
     const tab = new SpatialSkeletonEditQueueTab(layer);
@@ -609,6 +567,7 @@ describe("SpatialSkeletonEditQueueTab", () => {
       "Saving",
       "Reconciling",
       "Queued",
+      "Preparing",
     ]);
     expect(rows.map((row) => row.dataset.primaryStatus)).toEqual([
       "reload-required",
@@ -617,6 +576,7 @@ describe("SpatialSkeletonEditQueueTab", () => {
       "saving",
       "reconciling",
       "queued",
+      "preparing",
     ]);
     tab.dispose();
   });

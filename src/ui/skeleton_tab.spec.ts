@@ -236,7 +236,7 @@ describe("spatial skeleton edit tab render state", () => {
 });
 
 describe("spatial skeleton edit tab virtual list items", () => {
-  it("flattens one selected segment and its displayed node rows", () => {
+  it("lists the selected skeleton's row followed by its node rows", () => {
     const graph = buildSkeletonNavigationGraph([
       makeNode(1n, undefined),
       makeNode(2n, 1n),
@@ -284,7 +284,7 @@ describe("spatial skeleton edit tab virtual list items", () => {
     expect(flattened.listIndexByNodeId.size).toBe(0);
   });
 
-  it("keeps more than 10,000 displayed rows in the virtual source items", () => {
+  it("lists more than 10,000 nodes without truncating", () => {
     const leafCount = 10001;
     const nodes = [makeNode(1n, undefined)];
     for (let i = 0; i < leafCount; ++i) {
@@ -429,7 +429,7 @@ describe("spatial skeleton edit tab preparation status", () => {
     expect(state?.statusText).not.toContain("20380");
   });
 
-  it("uses Undo wording and hides derived details until the split preview is exact", () => {
+  it("an Undo of a split says so and disables node controls until its preview is complete", () => {
     const state = getSpatialSkeletonDetailsPreparationState({
       preparations: [
         makePendingEdit({
@@ -449,7 +449,7 @@ describe("spatial skeleton edit tab preparation status", () => {
     );
   });
 
-  it("uses Redo wording while the exact preview is preparing", () => {
+  it("a Redo says so and disables node controls until its preview is complete", () => {
     const state = getSpatialSkeletonDetailsPreparationState({
       preparations: [
         makePendingEdit({
@@ -467,7 +467,7 @@ describe("spatial skeleton edit tab preparation status", () => {
     );
   });
 
-  it("keeps status attached to logical selection when a physical merge alias changes", () => {
+  it("keeps the Preparing status on the selected skeleton after a merge changes its ID", () => {
     const state = getSpatialSkeletonDetailsPreparationState({
       preparations: [
         makePendingEdit({

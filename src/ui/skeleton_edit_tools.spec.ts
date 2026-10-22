@@ -784,7 +784,7 @@ describe("skeleton edit tool merge", () => {
     harness.deactivate();
   });
 
-  it("starts a merge from the node's current skeleton when the pick carries a retired skeleton ID", () => {
+  it("starts a merge from the node's current skeleton when the picked skeleton ID was replaced by an earlier edit", () => {
     const node = makeNode(101n, 11n, [1, 2, 3]);
     const harness = makeEditToolHarness({ inspectedNodes: [node] });
     harness.hover({ ...node, segmentId: 6368542n });

@@ -140,7 +140,7 @@ describe("buildPendingEditMarkers", () => {
     });
   });
 
-  it("renders restore as a truthful single-node marker", () => {
+  it("marks a node being restored with one marker and no connector", () => {
     const cues = buildPendingEditMarkers(
       [
         {

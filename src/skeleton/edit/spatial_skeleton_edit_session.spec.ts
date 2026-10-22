@@ -18,17 +18,24 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   SkeletonEdgeDirection,
+  type EditableSkeletonSource,
   type SkeletonEdge,
   type SkeletonFragment,
   type SkeletonFragmentNode,
   type SkeletonNode,
 } from "#src/skeleton/api.js";
+import type { SpatialSkeletonLayerContext } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   editableSpatiallyIndexedSkeletonSourceSupportsAction,
-  getSpatialSkeletonEditCommandFactoryForAction,
+  ensureSpatialSkeletonEditQueue,
   SpatialSkeletonEditSession,
 } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
+import type {
+  SpatialSkeletonEditPlannerRegistration,
+  SpatialSkeletonEditPlannerProvider,
+} from "#src/skeleton/edit_queue/api.js";
+import { SpatialSkeletonDatasourceContractError } from "#src/skeleton/edit_queue/api.js";
 import type { CompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import {
   createCompleteSkeleton,
@@ -36,15 +43,11 @@ import {
 } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import { SpatialSkeletonInspectionRequiredError } from "#src/skeleton/edit_queue/edit_errors.js";
 import type { SpatialSkeletonPreparedPreviewCachePublication } from "#src/skeleton/edit_queue/preview.js";
-import type {
-  SpatialSkeletonEditExecution,
-  SpatialSkeletonSessionEditQueue,
-} from "#src/skeleton/edit_queue/types.js";
+import type { SpatialSkeletonEditExecution } from "#src/skeleton/edit_queue/types.js";
 import {
   SpatialSkeletonReloadRequiredError,
   unchangedSpatialSkeletonEditSettlement,
 } from "#src/skeleton/edit_queue/types.js";
-import { getSkeletonNodeConfidence } from "#src/skeleton/node_attributes.js";
 
 function makeWholeSkeletonReads(
   getSkeleton: (
@@ -112,23 +115,6 @@ function makeEditableSourceCommands() {
   };
 }
 
-function makeEditQueue(): SpatialSkeletonSessionEditQueue {
-  return {
-    canUndo: () => false,
-    canRedo: () => false,
-    dispose: async () => {},
-    hasUnconfirmedActions: () => false,
-    undoLatest: () => resolvedExecution(false),
-    redoLatest: () => resolvedExecution(false),
-    getSnapshot: () => [],
-    getRecentActivity: () => [],
-    getReloadRequired: () => undefined,
-    handleReloadRequiredLatched: () => {},
-    getProtectedPreviewSegmentIds: () => [],
-    ownsAuthoritativeReadSegment: () => false,
-  };
-}
-
 function getCachedSegmentRevisions(
   state: SpatialSkeletonEditSession,
   segmentIds: Iterable<bigint>,
@@ -141,7 +127,7 @@ function getCachedSegmentRevisions(
   );
 }
 
-function adoptPreparedPreviewSnapshots(
+function prepareEditPreview(
   state: SpatialSkeletonEditSession,
   snapshots: readonly (readonly [bigint, CompleteSkeleton | undefined])[],
   options: {
@@ -151,7 +137,7 @@ function adoptPreparedPreviewSnapshots(
   } = {},
 ) {
   const display = state.spatialSkeletonDisplay.value;
-  const prepared = state.prepareSpatialSkeletonPreviewCachePublication({
+  return state.prepareSpatialSkeletonPreviewCachePublication({
     snapshots,
     retiredSegmentIds: options.retiredSegmentIds,
     expectedRevisions:
@@ -166,6 +152,12 @@ function adoptPreparedPreviewSnapshots(
     pendingEditIntentIdsToRemove: [],
     notify: options.notify ?? true,
   });
+}
+
+function applyEditPreview(
+  state: SpatialSkeletonEditSession,
+  prepared: SpatialSkeletonPreparedPreviewCachePublication | undefined,
+) {
   if (prepared === undefined) return false;
   let adopted = false;
   state.runSpatialSkeletonDisplayTransaction(() => {
@@ -177,8 +169,16 @@ function adoptPreparedPreviewSnapshots(
   return true;
 }
 
+function adoptPreparedPreviewSnapshots(
+  state: SpatialSkeletonEditSession,
+  snapshots: readonly (readonly [bigint, CompleteSkeleton | undefined])[],
+  options: Parameters<typeof prepareEditPreview>[2] = {},
+) {
+  return applyEditPreview(state, prepareEditPreview(state, snapshots, options));
+}
+
 async function flushMicrotasks() {
-  for (let i = 0; i < 10; ++i) await Promise.resolve();
+  for (let index = 0; index < 10; ++index) await Promise.resolve();
 }
 
 function deferred<T>() {
@@ -228,2641 +228,51 @@ function makeFragmentedSkeletonLayer(
   } as any;
   return { layer, requestedFragmentKeys };
 }
-
-describe("skeleton edit session", () => {
-  it.each([false, true])(
-    "prepares confirmed retirement atomically when the snapshot is already absent: %s",
-    (alreadyAbsent) => {
-      const state = new SpatialSkeletonEditSession();
-      state.replaceCachedSegmentSnapshots([
-        [11n, [{ nodeId: 1n, segmentId: 11n, position: [1, 2, 3] }]],
-        [17n, [{ nodeId: 2n, segmentId: 17n, position: [4, 5, 6] }]],
-      ]);
-      if (alreadyAbsent)
-        state.replaceCachedSegmentSnapshots([[11n, undefined]]);
-      const revision = state.getCachedSegmentRevision(11n);
-      const previous = state.getCachedSegmentSnapshotHandle(11n);
-      const untouched = state.getCachedSegmentSnapshotHandle(17n);
-      const display = state.spatialSkeletonDisplay.value;
-      const notifications = vi.fn();
-      state.spatialSkeletonDisplay.changed.add(notifications);
-      const prepared = state.prepareSpatialSkeletonPreviewCachePublication({
-        snapshots: [[11n, undefined]],
-        expectedRevisions: getCachedSegmentRevisions(state, [11n]),
-        retiredSegmentIds: new Set([11n]),
-        activeStableOwners: [],
-        numericAliases: [],
-        provisionalNodeIds: [],
-        pendingEditIntentIdsToRemove: [],
-        notify: true,
-      })!;
-
-      expect(state.getCachedSegmentRevision(11n)).toBe(revision);
-      expect(state.getCachedSegmentSnapshotHandle(11n)).toBe(previous);
-      expect(state.spatialSkeletonDisplay.value).toBe(display);
-      expect(notifications).not.toHaveBeenCalled();
-      expect(prepared.cacheRevisions.get(11n)).toBeGreaterThan(revision);
-
-      state.runSpatialSkeletonDisplayTransaction(() => {
-        expect(
-          state.adoptPreparedSpatialSkeletonPreviewCachePublication(prepared),
-        ).toBe(true);
-        expect(state.getCachedSegmentRevision(11n)).toBe(
-          prepared.cacheRevisions.get(11n),
-        );
-        expect(state.getCachedNode(1n)).toBeUndefined();
-      });
-      state.finalizePreparedSpatialSkeletonPreviewCachePublication(prepared);
-      expect(state.getCachedSegmentSnapshotHandle(11n)).toBeUndefined();
-      expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([
-        11n,
-      ]);
-      expect(state.getCachedSegmentSnapshotHandle(17n)).toBe(untouched);
-      expect(state.getCachedSegmentRevision(17n)).toBe(
-        untouched!.cacheRevision,
-      );
-      expect(notifications).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it("distinguishes preview removal from eviction and clears it on restoration or runtime reset", () => {
-    const state = new SpatialSkeletonEditSession();
-    const snapshot = createCompleteSkeleton([
-      { nodeId: 1n, segmentId: 17n, position: [1, 2, 3] },
-    ]);
-    adoptPreparedPreviewSnapshots(state, [[17n, snapshot]]);
-    state.evictInactiveSegmentNodes([]);
-    expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([]);
-    // Even an already-absent cache entry must record explicit removal.
-    adoptPreparedPreviewSnapshots(state, [[17n, undefined]], {
-      notify: false,
-    });
-    expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([17n]);
-    state.evictInactiveSegmentNodes([]);
-    expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([17n]);
-    adoptPreparedPreviewSnapshots(state, [[17n, snapshot]]);
-    expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([]);
-    adoptPreparedPreviewSnapshots(state, [[17n, undefined]]);
-    state.replaceCachedSegmentSnapshots([[17n, snapshot.materialize()]]);
-    expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([]);
-    adoptPreparedPreviewSnapshots(state, [[17n, undefined]]);
-    state.clearRuntimeState();
-    expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([]);
-  });
-
-  it("confirmed retirement cancels a retained read while unrelated reads continue", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const retiredRead = deferred<SkeletonNode[]>();
-    const unrelatedRead = deferred<SkeletonNode[]>();
-    const signals = new Map<bigint, AbortSignal>();
-    const layer = {
-      fragmentSource: {
-        ...makeWholeSkeletonReads(
-          (id: bigint, options: { signal: AbortSignal }) => {
-            signals.set(id, options.signal);
-            // Deliberately ignore cancellation to exercise a late source result.
-            return (id === 17n ? retiredRead : unrelatedRead).promise;
-          },
-        ),
-      },
-    } as any;
-    const read = state.getFullSegmentNodes(layer, 17n, {
-      retainWhileInactive: true,
-    });
-    const other = state.getFullSegmentNodes(layer, 29n, {
-      retainWhileInactive: true,
-    });
-    const aborted = expect(read).rejects.toMatchObject({ name: "AbortError" });
-    await flushMicrotasks();
-    const revisions = getCachedSegmentRevisions(state, [17n, 29n]);
-    const prepared = state.prepareSpatialSkeletonPreviewCachePublication({
-      snapshots: [[17n, undefined]],
-      expectedRevisions: revisions,
-      retiredSegmentIds: new Set([17n]),
-      activeStableOwners: [],
-      numericAliases: [],
-      provisionalNodeIds: [],
-      pendingEditIntentIdsToRemove: [],
-      notify: true,
-    })!;
-    expect(signals.get(17n)?.aborted).toBe(false);
-    expect(state.getCachedSegmentRevision(17n)).toBe(revisions.get(17n));
-    state.runSpatialSkeletonDisplayTransaction(() => {
-      expect(
-        state.adoptPreparedSpatialSkeletonPreviewCachePublication(prepared),
-      ).toBe(true);
-    });
-    expect(signals.get(17n)?.aborted).toBe(false);
-    state.finalizePreparedSpatialSkeletonPreviewCachePublication(prepared);
-    await aborted;
-    expect(signals.get(17n)?.aborted).toBe(true);
-    expect(signals.get(29n)?.aborted).toBe(false);
-    expect(state.getCachedSegmentRevision(17n)).toBeGreaterThan(
-      revisions.get(17n)!,
-    );
-    expect(state.getCachedSegmentRevision(29n)).toBe(revisions.get(29n));
-
-    retiredRead.resolve([{ nodeId: 1n, segmentId: 17n, position: [1, 2, 3] }]);
-    await flushMicrotasks();
-    expect(state.getCachedNode(1n)).toBeUndefined();
-    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
-    unrelatedRead.resolve([
-      { nodeId: 2n, segmentId: 29n, position: [4, 5, 6] },
-    ]);
-    await expect(other).resolves.toMatchObject([{ nodeId: 2n }]);
-    expect(state.getCachedNode(2n)).toBeDefined();
-  });
-
-  it("rejects stale retirement preparation without deleting a newer snapshot", () => {
-    const state = new SpatialSkeletonEditSession();
-    const prepared = state.prepareSpatialSkeletonPreviewCachePublication({
-      snapshots: [[17n, undefined]],
-      expectedRevisions: getCachedSegmentRevisions(state, [17n]),
-      retiredSegmentIds: new Set([17n]),
-      activeStableOwners: [],
-      numericAliases: [],
-      provisionalNodeIds: [],
-      pendingEditIntentIdsToRemove: [],
-      notify: true,
-    })!;
-    state.replaceCachedSegmentSnapshots([
-      [17n, [{ nodeId: 1n, segmentId: 17n, position: [1, 2, 3] }]],
-    ]);
-    const current = state.getCachedSegmentSnapshotHandle(17n);
-    const revision = state.getCachedSegmentRevision(17n);
-    const display = state.spatialSkeletonDisplay.value;
-    expect(
-      state.adoptPreparedSpatialSkeletonPreviewCachePublication(prepared),
-    ).toBe(false);
-    expect(state.getCachedSegmentSnapshotHandle(17n)).toBe(current);
-    expect(state.getCachedSegmentRevision(17n)).toBe(revision);
-    expect(state.spatialSkeletonDisplay.value).toBe(display);
-  });
-
-  it("requires an explicit empty replacement for every retired segment", () => {
-    const state = new SpatialSkeletonEditSession();
-    const snapshot = createCompleteSkeleton([
-      { nodeId: 1n, segmentId: 17n, position: [1, 2, 3] },
-    ]);
-    const revision = state.getCachedSegmentRevision(17n);
-    const display = state.spatialSkeletonDisplay.value;
-    for (const snapshots of [[], [[17n, snapshot]]] as const) {
-      expect(() =>
-        state.prepareSpatialSkeletonPreviewCachePublication({
-          snapshots,
-          expectedRevisions: getCachedSegmentRevisions(state, [17n]),
-          retiredSegmentIds: new Set([17n]),
-          activeStableOwners: [],
-          numericAliases: [],
-          provisionalNodeIds: [],
-          pendingEditIntentIdsToRemove: [],
-          notify: true,
-        }),
-      ).toThrow(/Retired spatial skeleton segment 17 must be removed/);
-    }
-    expect(state.getCachedSegmentRevision(17n)).toBe(revision);
-    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
-    expect(state.spatialSkeletonDisplay.value).toBe(display);
-  });
-
-  it("uses one validated configurable optimistic-edit capacity", () => {
-    const defaultState = new SpatialSkeletonEditSession();
-    expect(defaultState.editQueueCapacity).toBe(64);
-    expect(defaultState.commandHistory.capacity).toBe(64);
-
-    const smallState = new SpatialSkeletonEditSession({
-      editQueueCapacity: 3,
-    });
-    expect(smallState.editQueueCapacity).toBe(3);
-    expect(smallState.commandHistory.capacity).toBe(3);
-
-    expect(
-      () => new SpatialSkeletonEditSession({ editQueueCapacity: 0 }),
-    ).toThrow(RangeError);
-  });
-
-  it("routes only active or history-owned reads through the preview", () => {
-    const state = new SpatialSkeletonEditSession();
-    const publishAuthoritativeRead = vi.fn(() => true);
-    (state as any).editPreview = { publishAuthoritativeRead };
-    (state as any).editQueue = {
-      ownsAuthoritativeReadSegment: (segmentId: bigint) => segmentId === 17n,
-    };
-
-    expect(
-      (state as any).publishAuthoritativeReadSnapshots(
-        new Map([
-          [
-            11n,
-            [
-              {
-                nodeId: 101n,
-                segmentId: 11n,
-                position: new Float32Array([1, 2, 3]),
-              },
-            ],
-          ],
-        ]),
-        { expectedRevisions: new Map([[11n, 0]]) },
-      ),
-    ).toBe(true);
-    expect(publishAuthoritativeRead).not.toHaveBeenCalled();
-    expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
-
-    expect(
-      (state as any).publishAuthoritativeReadSnapshots(
-        new Map([
-          [
-            17n,
-            [
-              {
-                nodeId: 202n,
-                segmentId: 17n,
-                position: new Float32Array([4, 5, 6]),
-              },
-            ],
-          ],
-        ]),
-        { expectedRevisions: new Map([[17n, 0]]) },
-      ),
-    ).toBe(true);
-    expect(publishAuthoritativeRead).toHaveBeenCalledTimes(1);
-    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
-  });
-
-  it("defers old datasource cleanup without blocking replacement engine installation", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const oldDisposal = deferred<void>();
-    const oldCleanup = vi.fn();
-    const oldQueue = {
-      ...makeEditQueue(),
-      dispose: vi.fn(() => oldDisposal.promise),
-    };
-    (state as any).editQueue = oldQueue;
-    (state as any).editSource = { name: "old" };
-    (state as any).datasourceCleanup = oldCleanup;
-
-    expect(state.releaseEditQueue()).toBe(true);
-    expect(oldQueue.dispose).toHaveBeenCalledTimes(1);
-    expect(oldCleanup).not.toHaveBeenCalled();
-    expect(state.releaseEditQueue()).toBe(false);
-
-    const replacementCleanup = vi.fn();
-    const replacementQueue = {
-      ...makeEditQueue(),
-      dispose: vi.fn(async () => {}),
-    };
-    (state as any).editQueue = replacementQueue;
-    (state as any).editSource = { name: "replacement" };
-    (state as any).datasourceCleanup = replacementCleanup;
-
-    oldDisposal.resolve();
-    await flushMicrotasks();
-    expect(oldCleanup).toHaveBeenCalledTimes(1);
-    expect((state as any).editQueue).toBe(replacementQueue);
-    expect(replacementCleanup).not.toHaveBeenCalled();
-
-    expect(state.releaseEditQueue()).toBe(true);
-    await flushMicrotasks();
-    expect(replacementCleanup).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps the first Reload required state after runtime state is cleared", async () => {
-    const state = new SpatialSkeletonEditSession();
-    state.editMode.value = true;
-    state.mergeMode.value = true;
-    state.splitMode.value = true;
-    state.setMergeAnchor(17n);
-    state.suppressSelectedNodeHighlight.value = true;
-    const versionBeforeReloadRequired = state.editQueueVersion.value;
-    const cause = new Error("ambiguous transport");
-
-    expect(
-      state.latchReloadRequired({
-        reason: "authority-indeterminate",
-        authority: "indeterminate",
-        intentId: 5,
-        cause,
-      }),
-    ).toBe(true);
-
-    const reloadRequired = state.getReloadRequired();
-    expect(reloadRequired).toEqual({
-      reason: "authority-indeterminate",
-      authority: "indeterminate",
-      intentId: 5,
-      cause,
-    });
-    expect(Object.isFrozen(reloadRequired)).toBe(true);
-    expect(state.editQueueVersion.value).toBe(versionBeforeReloadRequired + 1);
-    expect(state.editMode.value).toBe(false);
-    expect(state.mergeMode.value).toBe(false);
-    expect(state.splitMode.value).toBe(false);
-    expect(state.mergeAnchorNodeId.value).toBeUndefined();
-    expect(state.suppressSelectedNodeHighlight.value).toBe(false);
-    expect(state.hasUnconfirmedEdits()).toBe(true);
-
-    expect(
-      state.latchReloadRequired({
-        reason: "committed-local-publication-failed",
-        authority: "committed",
-        intentId: 9,
-      }),
-    ).toBe(false);
-    expect(state.getReloadRequired()).toBe(reloadRequired);
-
-    expect(state.canUndoEdit()).toBe(false);
-    expect(state.canRedoEdit()).toBe(false);
-    const undo = state.undoLatestEdit();
-    await expect(undo).rejects.toBeInstanceOf(
-      SpatialSkeletonReloadRequiredError,
-    );
-    await expect(undo.settled).resolves.toMatchObject({
-      outcome: "unchanged",
-      reason: "not-started",
-    });
-
-    state.clearRuntimeState();
-    expect(state.getReloadRequired()).toBe(reloadRequired);
-    expect(() => state.assertEditingAllowed()).toThrow(
-      SpatialSkeletonReloadRequiredError,
-    );
-  });
-
-  it("retires a segment and aborts an in-flight retained read", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const segmentId = 17n;
-    const node: SkeletonNode = {
-      nodeId: 5n,
-      segmentId,
-      position: new Float32Array([1, 2, 3]),
-    };
-    state.replaceCachedSegmentSnapshots([[segmentId, [node]]], {
-      notify: false,
-    });
-    state.replaceCachedSegmentSnapshots([[segmentId, undefined]], {
-      notify: false,
-    });
-    const beforeRevision = state.getCachedSegmentRevision(segmentId);
-    let requestSignal: AbortSignal | undefined;
-    let resolveLateRead!: (nodes: SkeletonNode[]) => void;
-    const getSkeleton = vi.fn(
-      (_segmentId: bigint, options?: { signal?: AbortSignal }) => {
-        requestSignal = options?.signal;
-        return new Promise<SkeletonNode[]>((resolve) => {
-          resolveLateRead = resolve;
-        });
-      },
-    );
-    const skeletonLayer = {
-      fragmentSource: {
-        ...makeWholeSkeletonReads(getSkeleton),
-      },
-    } as any;
-
-    const read = state.getFullSegmentNodes(skeletonLayer, segmentId, {
-      retainWhileInactive: true,
-    });
-    await flushMicrotasks();
-    expect(requestSignal?.aborted).toBe(false);
-
-    expect(
-      adoptPreparedPreviewSnapshots(state, [[segmentId, undefined]], {
-        notify: false,
-        retiredSegmentIds: new Set([segmentId]),
-      }),
-    ).toBe(true);
-
-    expect(requestSignal?.aborted).toBe(true);
-    await expect(read).rejects.toMatchObject({ name: "AbortError" });
-    expect(state.getCachedSegmentNodes(segmentId)).toBeUndefined();
-    expect(state.getCachedSegmentRevision(segmentId)).toBeGreaterThan(
-      beforeRevision,
-    );
-
-    // A source that ignores AbortSignal may still settle later; its detached
-    // result cannot repopulate the retired physical id.
-    resolveLateRead([node]);
-    await flushMicrotasks();
-    expect(state.getCachedSegmentNodes(segmentId)).toBeUndefined();
-  });
-
-  it("publishes ordered add, remove, and clear preparation changes", () => {
-    const state = new SpatialSkeletonEditSession();
-    let notifications = 0;
-    state.spatialSkeletonDisplay.changed.add(() => {
-      notifications += 1;
-    });
-    const capturedPosition = new Float32Array([1, 2, 3]);
-
-    expect(
-      state.addSpatialSkeletonPendingEdit({
-        intentId: 1,
-        sequence: 20,
-        direction: "execute",
-        kind: "merge",
-        lifecycle: "preparing",
-        segmentIds: [11n, 12n],
-        endpointNodeIds: [101n, 102n],
-        lastKnownPositions: [{ nodeId: 101n, position: capturedPosition }],
-      }),
-    ).toBe(true);
-    capturedPosition[0] = 99;
-    expect(
-      state.spatialSkeletonDisplay.value.pendingEdits[0].lastKnownPositions?.[0]
-        .position[0],
-    ).toBe(1);
-
-    expect(
-      state.addSpatialSkeletonPendingEdit({
-        intentId: 2,
-        sequence: 10,
-        direction: "redo",
-        kind: "delete",
-        lifecycle: "preparing",
-        segmentIds: [17n],
-        nodeId: 202n,
-      }),
-    ).toBe(true);
-    expect(
-      state.spatialSkeletonDisplay.value.pendingEdits.map(
-        ({ intentId }) => intentId,
-      ),
-    ).toEqual([2, 1]);
-    expect(state.removeSpatialSkeletonPendingEdit(1)).toBe(true);
-    expect(
-      state.spatialSkeletonDisplay.value.pendingEdits.map(
-        ({ intentId }) => intentId,
-      ),
-    ).toEqual([2]);
-    expect(state.clearSpatialSkeletonPendingEdits()).toBe(true);
-    expect(state.spatialSkeletonDisplay.value.pendingEdits).toEqual([]);
-    expect(notifications).toBe(4);
-  });
-
-  it("clears provisional intent cues with source runtime state", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.addSpatialSkeletonPendingEdit({
-      intentId: 1,
-      sequence: 1,
-      direction: "execute",
-      kind: "reroot",
-      lifecycle: "preparing",
-      segmentIds: [11n],
-      rootNodeId: 101n,
-    });
-
-    expect(state.clearRuntimeState()).toBe(true);
-    expect(state.spatialSkeletonDisplay.value.pendingEdits).toEqual([]);
-  });
-
-  it("accepts a restore cue for delete Undo", () => {
-    const state = new SpatialSkeletonEditSession();
-    expect(
-      state.addSpatialSkeletonPendingEdit({
-        intentId: 7,
-        sequence: 7,
-        direction: "undo",
-        kind: "restore",
-        lifecycle: "preparing",
-        segmentIds: [11n],
-        nodeId: 101n,
-        lastKnownPositions: [
-          { nodeId: 101n, position: new Float32Array([1, 2, 3]) },
-        ],
-      }),
-    ).toBe(true);
-    expect(state.spatialSkeletonDisplay.value.pendingEdits).toEqual([
-      expect.objectContaining({
-        intentId: 7,
-        kind: "restore",
-        nodeId: 101n,
-      }),
-    ]);
-  });
-
-  it("publishes exact topology and preparation removal atomically", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.addSpatialSkeletonPendingEdit({
-      intentId: 9,
-      sequence: 9,
-      direction: "execute",
-      kind: "split",
-      lifecycle: "preparing",
-      segmentIds: [11n],
-      cutNodeId: 101n,
-    });
-    const handle = createCompleteSkeleton([
-      {
-        nodeId: 101n,
-        segmentId: 11n,
-        position: new Float32Array([1, 2, 3]),
-      },
-    ]);
-    const observed: Array<{
-      revision: number;
-      pendingEdits: number;
-      exactTopology: unknown;
-    }> = [];
-    state.spatialSkeletonDisplay.changed.add(() => {
-      const display = state.spatialSkeletonDisplay.value;
-      observed.push({
-        revision: display.revision,
-        pendingEdits: display.pendingEdits.length,
-        exactTopology: state.getCachedSegmentSnapshotHandle(11n)?.handle,
-      });
-    });
-    let nodeNotifications = 0;
-    state.nodeDataVersion.changed.add(() => ++nodeNotifications);
-
-    const resultSegment = {
-      kind: "segment" as const,
-      stableId: "result",
-    };
-    const prepared = state.prepareSpatialSkeletonPreviewCachePublication({
-      snapshots: [[11n, handle]],
-      expectedRevisions: getCachedSegmentRevisions(state, [11n]),
-      activeStableOwners: [{ segmentId: 11n, stableHandle: resultSegment }],
-      numericAliases: [
-        { stableHandle: resultSegment, segmentId: 11n, authoritative: true },
-      ],
-      provisionalNodeIds: [],
-      pendingEditIntentIdsToRemove: [9],
-      notify: true,
-    })!;
-    state.runSpatialSkeletonDisplayTransaction(() => {
-      expect(
-        state.adoptPreparedSpatialSkeletonPreviewCachePublication(prepared),
-      ).toBe(true);
-    });
-    state.finalizePreparedSpatialSkeletonPreviewCachePublication(prepared);
-
-    expect(observed).toEqual([
-      {
-        revision: 2,
-        pendingEdits: 0,
-        exactTopology: handle,
-      },
-    ]);
-    expect(nodeNotifications).toBe(1);
-    expect(state.spatialSkeletonDisplay.value.activeStableOwners).toEqual([
-      expect.objectContaining({
-        segmentId: 11n,
-        stableHandle: { kind: "segment", stableId: "result" },
-      }),
-    ]);
-  });
-
-  it("looks up edit command factories from shared action metadata", () => {
-    const source = {
-      ...makeEditableSourceCommands(),
-      rerootCommand: makeCommandFactory(SpatialSkeletonActions.reroot),
-      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => ({ nodes: [], edges: [] }),
-    };
-
-    expect(
-      getSpatialSkeletonEditCommandFactoryForAction(
-        source as any,
-        SpatialSkeletonActions.moveNodes,
-      ),
-    ).toBe(source.moveNodesCommand);
-    expect(
-      getSpatialSkeletonEditCommandFactoryForAction(
-        source as any,
-        SpatialSkeletonActions.reroot,
-      ),
-    ).toBe(source.rerootCommand);
-    expect(
-      getSpatialSkeletonEditCommandFactoryForAction(
-        source as any,
-        SpatialSkeletonActions.inspect,
-      ),
-    ).toBeUndefined();
-  });
-
-  it("supports confidence editing for a source that does not list its confidence values", () => {
-    const source = {
-      ...makeEditableSourceCommands(),
-      editNodeConfidenceCommand: makeCommandFactory(
-        SpatialSkeletonActions.editNodeConfidence,
-      ),
-      getSkeletonManifest: async () => ({ fragmentKeys: [] }),
-      getSkeletonFragment: async () => ({ nodes: [], edges: [] }),
-    };
-
-    expect(
-      editableSpatiallyIndexedSkeletonSourceSupportsAction(
-        source as any,
-        SpatialSkeletonActions.addNodes,
-      ),
-    ).toBe(true);
-    expect(
-      editableSpatiallyIndexedSkeletonSourceSupportsAction(
-        source as any,
-        SpatialSkeletonActions.editNodeConfidence,
-      ),
-    ).toBe(true);
-  });
-
-  it("clears inspected cache state and pending node positions together", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.replaceCachedSegmentSnapshots(
-      [
-        [
-          11n,
-          [
-            {
-              nodeId: 5n,
-              segmentId: 11n,
-              position: new Float32Array([1, 2, 3]),
-            },
-          ],
-        ],
-      ],
-      { notify: false },
-    );
-    state.setPendingNodePosition(5n, [4, 5, 6]);
-    const nodeDataVersion = state.nodeDataVersion.value;
-    const pendingNodePositionVersion = state.pendingNodePositionVersion.value;
-
-    expect(state.clearRuntimeState()).toBe(true);
-    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
-    expect(state.getCachedNode(5n)).toBeUndefined();
-    expect(state.getPendingNodePosition(5n)).toBeUndefined();
-    expect(state.nodeDataVersion.value).toBe(nodeDataVersion + 1);
-    expect(state.pendingNodePositionVersion.value).toBe(
-      pendingNodePositionVersion + 1,
-    );
-  });
-
-  it("keeps only the active interaction position", () => {
-    const state = new SpatialSkeletonEditSession();
-    expect(state.setPendingNodePosition(5n, [1, 2, 3])).toBe(true);
-    expect(state.setPendingNodePosition(5n, [1, 2, 3])).toBe(false);
-    expect(Array.from(state.getPendingNodePosition(5n)!)).toEqual([1, 2, 3]);
-
-    // Pointer events keep reporting the originally picked id if that identity
-    // is remapped mid-drag, so updates preserve the active identity.
-    expect(state.setPendingNodePosition(6n, [4, 5, 6])).toBe(true);
-    expect(Array.from(state.getPendingNodePosition(5n)!)).toEqual([4, 5, 6]);
-    expect(state.getPendingNodePosition(6n)).toBeUndefined();
-    expect([...state.getPendingNodeIds()]).toEqual([5n]);
-    expect(state.clearPendingNodePositions()).toBe(true);
-    expect(state.setPendingNodePosition(6n, [7, 8, 9])).toBe(true);
-    expect(state.clearPendingNodePositions()).toBe(true);
-    expect([...state.getPendingNodeIds()]).toEqual([]);
-  });
-
-  it("remaps the active interaction position by node id", () => {
-    const state = new SpatialSkeletonEditSession();
-
-    state.setPendingNodePosition(1_000_000_000n, [9, 9, 9]);
-    const version = state.pendingNodePositionVersion.value;
-
-    expect(
-      state.remapPendingNodePositions(new Map([[1_000_000_000n, 20n]])),
-    ).toBe(true);
-    expect(state.pendingNodePositionVersion.value).toBe(version + 1);
-    expect(state.getPendingNodePosition(1_000_000_000n)).toBeUndefined();
-    expect(Array.from(state.getPendingNodePosition(20n)!)).toEqual([9, 9, 9]);
-    expect(state.setPendingNodePosition(1_000_000_000n, [10, 10, 10])).toBe(
-      true,
-    );
-    expect(state.getPendingNodePosition(1_000_000_000n)).toBeUndefined();
-    expect(Array.from(state.getPendingNodePosition(20n)!)).toEqual([
-      10, 10, 10,
-    ]);
-  });
-
-  it("atomically repartitions cached segments from immutable replacement input", () => {
-    const state = new SpatialSkeletonEditSession();
-    const originalNodes = [
-      {
-        nodeId: 1n,
-        segmentId: 11n,
-        position: new Float32Array([1, 1, 1]),
-        parentNodeId: undefined,
-      },
-      {
-        nodeId: 2n,
-        segmentId: 11n,
-        position: new Float32Array([2, 2, 2]),
-        parentNodeId: 1n,
-      },
-      {
-        nodeId: 3n,
-        segmentId: 11n,
-        position: new Float32Array([3, 3, 3]),
-        parentNodeId: 2n,
-      },
-    ];
-    state.replaceCachedSegmentSnapshots([[11n, originalNodes] as const], {
-      notify: false,
-    });
-
-    // Replacement clones keep the caller's immutable input independent.
-    (state.getCachedNode(2n)!.position as Float32Array)[0] = 99;
-    expect(originalNodes[1].position).toEqual(new Float32Array([2, 2, 2]));
-
-    const splitRoot = {
-      ...state.getCachedNode(2n)!,
-      segmentId: 999n,
-      position: new Float32Array([2, 2, 2]),
-      parentNodeId: undefined,
-    };
-    const notificationSnapshots: unknown[] = [];
-    state.nodeDataVersion.changed.add(() => {
-      notificationSnapshots.push({
-        originalNodeIds: state
-          .getCachedSegmentNodes(11n)
-          ?.map((node) => node.nodeId),
-        splitNodeIds: state
-          .getCachedSegmentNodes(17n)
-          ?.map((node) => node.nodeId),
-        splitRootSegmentId: state.getCachedNode(2n)?.segmentId,
-      });
-    });
-
-    expect(
-      state.replaceCachedSegmentSnapshots([
-        [11n, [state.getCachedNode(1n)!]] as const,
-        [
-          17n,
-          [
-            splitRoot,
-            {
-              ...state.getCachedNode(3n)!,
-              segmentId: 999n,
-            },
-          ],
-        ] as const,
-      ]),
-    ).toBe(true);
-
-    expect(notificationSnapshots).toEqual([
-      {
-        originalNodeIds: [1n],
-        splitNodeIds: [2n, 3n],
-        splitRootSegmentId: 17n,
-      },
-    ]);
-    expect(state.getCachedNode(3n)).toBe(state.getCachedSegmentNodes(17n)?.[1]);
-    expect(state.getCachedNode(2n)?.segmentId).toBe(17n);
-
-    // Replacement inputs are cloned and cannot mutate the live cache later.
-    splitRoot.position[0] = 123;
-    expect(state.getCachedNode(2n)?.position).toEqual(
-      new Float32Array([2, 2, 2]),
-    );
-
-    expect(
-      state.replaceCachedSegmentSnapshots([
-        [11n, originalNodes] as const,
-        [17n, undefined] as const,
-      ]),
-    ).toBe(true);
-    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
-    expect(state.getCachedNode(2n)?.segmentId).toBe(11n);
-    expect(state.getCachedNode(2n)?.position).toEqual(
-      new Float32Array([2, 2, 2]),
-    );
-  });
-
-  it("preflights inspected nodes from the current complete snapshot handle", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.replaceCachedSegmentSnapshots(
-      [
-        [
-          11n,
-          [
-            {
-              nodeId: 5n,
-              segmentId: 11n,
-              position: new Float32Array([1, 2, 3]),
-            },
-          ],
-        ],
-      ],
-      { notify: false },
-    );
-
-    const inspected = state.tryAcquireInputReference({
-      segmentId: 11n,
-      nodeId: 5n,
-    });
-    expect(inspected?.snapshot).toEqual(
-      state.getCachedSegmentSnapshotHandle(11n),
-    );
-    expect(inspected?.snapshot.handle.getNode(5n)?.segmentId).toBe(11n);
-    inspected?.release();
-    expect(
-      state.tryAcquireInputReference({
-        segmentId: 11n,
-        nodeId: 6n,
-      }),
-    ).toBeUndefined();
-    expect(
-      state.tryAcquireInputReference({
-        segmentId: 17n,
-        nodeId: 5n,
-      }),
-    ).toBeUndefined();
-    expect(() =>
-      state.tryAcquireInputReference({
-        segmentId: 11n,
-        nodeId: 0n,
-      }),
-    ).toThrowError("Invalid spatial skeleton node id: 0");
-    expect(() =>
-      state.tryAcquireInputReference({
-        segmentId: 0n,
-      }),
-    ).toThrowError("Invalid spatial skeleton segment id: 0");
-  });
-
-  it("keeps a snapshot available until every input reference is released", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.replaceCachedSegmentSnapshots(
-      [
-        [
-          11n,
-          [
-            {
-              nodeId: 5n,
-              segmentId: 11n,
-              position: new Float32Array([1, 2, 3]),
-            },
-          ],
-        ],
-        [
-          17n,
-          [
-            {
-              nodeId: 7n,
-              segmentId: 17n,
-              position: new Float32Array([4, 5, 6]),
-            },
-          ],
-        ],
-      ],
-      { notify: false },
-    );
-    const requirement = {
-      segmentId: 11n,
-      nodeId: 5n,
-    } as const;
-    const firstInput = state.tryAcquireInputReference(requirement)!;
-    const secondInput = state.acquireInputReference(
-      requirement,
-      SpatialSkeletonActions.moveNodes,
-    );
-
-    expect(firstInput.isCurrent()).toBe(true);
-    expect(secondInput.isCurrent()).toBe(true);
-    expect(state.evictInactiveSegmentNodes([])).toBe(true);
-    expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
-    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
-
-    firstInput.release();
-    firstInput.release();
-    expect(firstInput.isCurrent()).toBe(false);
-    expect(state.evictInactiveSegmentNodes([])).toBe(false);
-    expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
-
-    secondInput.release();
-    expect(state.evictInactiveSegmentNodes([])).toBe(true);
-    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
-  });
-
-  it("invalidates an input reference when its snapshot is replaced", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.replaceCachedSegmentSnapshots(
-      [
-        [
-          11n,
-          [
-            {
-              nodeId: 5n,
-              segmentId: 11n,
-              position: new Float32Array([1, 2, 3]),
-            },
-          ],
-        ],
-      ],
-      { notify: false },
-    );
-    const inputReference = state.acquireInputReference({
-      segmentId: 11n,
-      nodeId: 5n,
-    });
-
-    expect(
-      state.replaceCachedSegmentSnapshots([
-        [
-          11n,
-          [
-            {
-              nodeId: 5n,
-              segmentId: 11n,
-              position: new Float32Array([4, 5, 6]),
-            },
-          ],
-        ],
-      ]),
-    ).toBe(true);
-    expect(inputReference.isCurrent()).toBe(false);
-    expect(state.evictInactiveSegmentNodes([])).toBe(true);
-    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
-    inputReference.release();
-  });
-
-  it("reports typed snapshot requirement failures without starting a read", () => {
-    const state = new SpatialSkeletonEditSession();
-    const coldRequirement = {
-      segmentId: 11n,
-      nodeId: 5n,
-    } as const;
-
-    expect(() =>
-      state.acquireInputReference(
-        coldRequirement,
-        SpatialSkeletonActions.moveNodes,
-      ),
-    ).toThrowError(SpatialSkeletonInspectionRequiredError);
-    try {
-      state.acquireInputReference(
-        coldRequirement,
-        SpatialSkeletonActions.moveNodes,
-      );
-    } catch (error) {
-      expect(error).toMatchObject({
-        reason: "snapshot-unavailable",
-        requirement: coldRequirement,
-      });
-      expect((error as Error).message).toBe(
-        "Inspect skeleton 11 before node movement.",
-      );
-    }
-
-    state.replaceCachedSegmentSnapshots([[11n, []]], { notify: false });
-    try {
-      state.acquireInputReference(coldRequirement);
-    } catch (error) {
-      expect(error).toMatchObject({ reason: "node-unavailable" });
-      expect((error as Error).message).toContain(
-        "Node 5 is not present in inspected skeleton 11.",
-      );
-    }
-  });
-
-  it("adopts one trusted materialization and exposes its cache revision", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.replaceCachedSegmentSnapshots(
-      [
-        [
-          11n,
-          [
-            {
-              nodeId: 1n,
-              segmentId: 11n,
-              position: new Float32Array([1, 1, 1]),
-            },
-            {
-              nodeId: 2n,
-              segmentId: 11n,
-              position: new Float32Array([2, 2, 2]),
-              parentNodeId: 1n,
-            },
-          ],
-        ] as const,
-      ],
-      { notify: false },
-    );
-    const baseline = state.getCachedSegmentSnapshotHandle(11n)!;
-    const previewed = patchCompleteSkeleton(baseline.handle, [
-      {
-        kind: "update",
-        nodeId: 1n,
-        changes: { attributes: { confidence: [75] } },
-      },
-    ]);
-    const expectedRevisions = getCachedSegmentRevisions(state, [11n]);
-
-    expect(previewed.materializationCount).toBe(0);
-    expect(
-      adoptPreparedPreviewSnapshots(state, [[11n, previewed]], {
-        expectedRevisions,
-        notify: false,
-      }),
-    ).toBe(true);
-    const materialized = previewed.materialize();
-    expect(previewed.materializationCount).toBe(1);
-    expect(state.getCachedSegmentNodes(11n)).toBe(materialized);
-    expect(previewed.materialize()).toBe(materialized);
-    expect(previewed.materializationCount).toBe(1);
-
-    const adopted = state.getCachedSegmentSnapshotHandle(11n)!;
-    expect(adopted.handle).toBe(previewed);
-    expect(adopted.cacheRevision).toBe(state.getCachedSegmentRevision(11n));
-    expect(adopted.cacheRevision).toBeGreaterThan(baseline.cacheRevision);
-  });
-
-  it("prepares a session-owned preview artifact and adopts it without rematerializing", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.replaceCachedSegmentSnapshots(
-      [
-        [
-          11n,
-          [
-            {
-              nodeId: 1n,
-              segmentId: 11n,
-              position: new Float32Array([1, 1, 1]),
-            },
-          ],
-        ],
-      ],
-      { notify: false },
-    );
-    const baseline = state.getCachedSegmentSnapshotHandle(11n)!;
-    const previewed = patchCompleteSkeleton(baseline.handle, [
-      {
-        kind: "update",
-        nodeId: 1n,
-        changes: { position: [7, 8, 9] },
-      },
-    ]);
-    const prepared = state.prepareSpatialSkeletonPreviewCachePublication({
-      snapshots: [[11n, previewed]],
-      expectedRevisions: getCachedSegmentRevisions(state, [11n]),
-      activeStableOwners: [],
-      numericAliases: [],
-      provisionalNodeIds: [],
-      pendingEditIntentIdsToRemove: [],
-      notify: true,
-    })!;
-
-    expect(previewed.materializationCount).toBe(1);
-    expect(state.getCachedSegmentSnapshotHandle(11n)?.handle).toBe(
-      baseline.handle,
-    );
-    let adopted = false;
-    state.runSpatialSkeletonDisplayTransaction(() => {
-      adopted =
-        state.adoptPreparedSpatialSkeletonPreviewCachePublication(prepared);
-    });
-
-    expect(adopted).toBe(true);
-    expect(previewed.materializationCount).toBe(1);
-    expect(state.getCachedSegmentSnapshotHandle(11n)?.handle).toBe(previewed);
-    expect(state.getCachedNode(1n)?.position).toEqual([7, 8, 9]);
-    expect(() =>
-      state.adoptPreparedSpatialSkeletonPreviewCachePublication(prepared),
-    ).toThrow(/already adopted/);
-    expect(() =>
-      state.adoptPreparedSpatialSkeletonPreviewCachePublication(
-        {} as SpatialSkeletonPreparedPreviewCachePublication,
-      ),
-    ).toThrow(/belongs to another edit session/);
-  });
-
-  it("rejects a stale or duplicate-owner prepared publication before adoption", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.replaceCachedSegmentSnapshots(
-      [
-        [11n, [{ nodeId: 1n, segmentId: 11n, position: [1, 1, 1] }]],
-        [17n, [{ nodeId: 2n, segmentId: 17n, position: [2, 2, 2] }]],
-      ],
-      { notify: false },
-    );
-    const baseline = state.getCachedSegmentSnapshotHandle(11n)!;
-    const previewed = patchCompleteSkeleton(baseline.handle, [
-      {
-        kind: "update",
-        nodeId: 1n,
-        changes: { attributes: { confidence: [70] } },
-      },
-    ]);
-    const prepared = state.prepareSpatialSkeletonPreviewCachePublication({
-      snapshots: [[11n, previewed]],
-      expectedRevisions: getCachedSegmentRevisions(state, [11n]),
-      activeStableOwners: [],
-      numericAliases: [],
-      provisionalNodeIds: [],
-      pendingEditIntentIdsToRemove: [],
-      notify: true,
-    })!;
-    state.replaceCachedSegmentSnapshots([
-      [
-        11n,
-        [
-          {
-            nodeId: 1n,
-            segmentId: 11n,
-            position: new Float32Array([3, 3, 3]),
-          },
-        ],
-      ],
-    ]);
-    const beforeStaleAdoption = state.getCachedSegmentSnapshotHandle(11n)!;
-
-    expect(
-      state.adoptPreparedSpatialSkeletonPreviewCachePublication(prepared),
-    ).toBe(false);
-    expect(state.getCachedSegmentSnapshotHandle(11n)).toBe(beforeStaleAdoption);
-    expect(getSkeletonNodeConfidence(state.getCachedNode(1n)!)).toBeUndefined();
-
-    const duplicateOwner = createCompleteSkeleton([
-      { nodeId: 2n, segmentId: 11n, position: [9, 9, 9] },
-    ]);
-    const display = state.spatialSkeletonDisplay.value;
-    expect(() =>
-      state.prepareSpatialSkeletonPreviewCachePublication({
-        snapshots: [[11n, duplicateOwner]],
-        expectedRevisions: getCachedSegmentRevisions(state, [11n]),
-        activeStableOwners: [],
-        numericAliases: [],
-        provisionalNodeIds: [],
-        pendingEditIntentIdsToRemove: [],
-        notify: true,
-      }),
-    ).toThrow(/node 2 is present in both segment 17 and segment 11/);
-    expect(state.getCachedSegmentSnapshotHandle(11n)).toBe(beforeStaleAdoption);
-    expect(state.spatialSkeletonDisplay.value).toBe(display);
-  });
-
-  it("shares unchanged nodes through trusted patch adoption", () => {
-    const state = new SpatialSkeletonEditSession();
-    const baseline = createCompleteSkeleton([
-      {
-        nodeId: 1n,
-        segmentId: 11n,
-        position: new Float32Array([1, 1, 1]),
-      },
-      {
-        nodeId: 2n,
-        segmentId: 11n,
-        position: new Float32Array([2, 2, 2]),
-        parentNodeId: 1n,
-      },
-    ]);
-    expect(
-      adoptPreparedPreviewSnapshots(state, [[11n, baseline]], {
-        notify: false,
-      }),
-    ).toBe(true);
-    const previewed = patchCompleteSkeleton(baseline, [
-      {
-        kind: "update",
-        nodeId: 1n,
-        changes: { attributes: { radius: [4] } },
-      },
-    ]);
-
-    expect(
-      adoptPreparedPreviewSnapshots(state, [[11n, previewed]], {
-        notify: false,
-      }),
-    ).toBe(true);
-    expect(state.getCachedSegmentNodes(11n)?.[1]).toBe(baseline.getNode(2n));
-    expect(state.getCachedSegmentNodes(11n)?.[0]).not.toBe(
-      baseline.getNode(1n),
-    );
-  });
-
-  it("retains sixty-four lazy patch handles and materializes only the adopted revision", () => {
-    const state = new SpatialSkeletonEditSession();
-    const baseline = createCompleteSkeleton(
-      Array.from({ length: 128 }, (_, index) => ({
-        nodeId: BigInt(index + 1),
-        segmentId: 11n,
-        position: new Float32Array([index, index + 1, index + 2]),
-        parentNodeId: index === 0 ? undefined : BigInt(index),
-      })),
-    );
-    const revisions = [baseline];
-    for (let nodeId = 1; nodeId <= 64; ++nodeId) {
-      revisions.push(
-        patchCompleteSkeleton(revisions.at(-1)!, [
-          {
-            kind: "update",
-            nodeId: BigInt(nodeId),
-            changes: { attributes: { confidence: [nodeId] } },
-          },
-        ]),
-      );
-    }
-
-    expect(
-      revisions.slice(1).every((handle) => handle.materializationCount === 0),
-    ).toBe(true);
-    const previewed = revisions.at(-1)!;
-    expect(
-      adoptPreparedPreviewSnapshots(state, [[11n, previewed]], {
-        notify: false,
-      }),
-    ).toBe(true);
-    expect(previewed.materializationCount).toBe(1);
-    expect(
-      revisions
-        .slice(1, -1)
-        .every((handle) => handle.materializationCount === 0),
-    ).toBe(true);
-    expect(state.getCachedSegmentNodes(11n)).toBe(previewed.materialize());
-    expect(getSkeletonNodeConfidence(state.getCachedNode(64n)!)).toBe(64);
-    expect(state.getCachedNode(65n)).toBe(baseline.getNode(65n));
-  });
-
-  it("rejects stale trusted adoption before materializing and supports deletion", () => {
-    const state = new SpatialSkeletonEditSession();
-    const baseline = createCompleteSkeleton([
-      {
-        nodeId: 1n,
-        segmentId: 11n,
-        position: new Float32Array([1, 2, 3]),
-      },
-    ]);
-    adoptPreparedPreviewSnapshots(state, [[11n, baseline]], {
-      notify: false,
-    });
-    const expectedRevisions = getCachedSegmentRevisions(state, [11n]);
-    const stale = patchCompleteSkeleton(baseline, [
-      { kind: "update", nodeId: 1n, changes: { attributes: { radius: [8] } } },
-    ]);
-    expect(
-      state.replaceCachedSegmentSnapshots([
-        [
-          11n,
-          [
-            {
-              nodeId: 1n,
-              segmentId: 11n,
-              position: new Float32Array([4, 5, 6]),
-            },
-          ],
-        ],
-      ]),
-    ).toBe(true);
-
-    expect(
-      adoptPreparedPreviewSnapshots(state, [[11n, stale]], {
-        expectedRevisions,
-        notify: false,
-      }),
-    ).toBe(false);
-    expect(stale.materializationCount).toBe(0);
-
-    const deletionRevision = getCachedSegmentRevisions(state, [11n]);
-    expect(
-      adoptPreparedPreviewSnapshots(state, [[11n, undefined]], {
-        expectedRevisions: deletionRevision,
-        notify: false,
-      }),
-    ).toBe(true);
-    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
-    expect(state.getCachedSegmentSnapshotHandle(11n)).toBeUndefined();
-  });
-
-  it("distinguishes known-empty and uncached segment snapshots", () => {
-    const state = new SpatialSkeletonEditSession();
-
-    expect(state.getCachedSegmentNodes(21n)).toBeUndefined();
-    expect(
-      state.replaceCachedSegmentSnapshots([[21n, []] as const], {
-        notify: false,
-      }),
-    ).toBe(true);
-    expect(state.getCachedSegmentNodes(21n)).toEqual([]);
-
-    expect(
-      state.replaceCachedSegmentSnapshots([[21n, undefined]], {
-        notify: false,
-      }),
-    ).toBe(true);
-    expect(state.getCachedSegmentNodes(21n)).toBeUndefined();
-    expect(
-      state.replaceCachedSegmentSnapshots([[21n, undefined]], {
-        notify: false,
-      }),
-    ).toBe(false);
-  });
-
-  it("rejects an inconsistent atomic replacement before changing the cache", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.replaceCachedSegmentSnapshots(
-      [
-        [
-          11n,
-          [
-            {
-              nodeId: 1n,
-              segmentId: 11n,
-              position: new Float32Array([1, 1, 1]),
-            },
-          ],
-        ] as const,
-        [
-          13n,
-          [
-            {
-              nodeId: 2n,
-              segmentId: 13n,
-              position: new Float32Array([2, 2, 2]),
-            },
-          ],
-        ] as const,
-      ],
-      { notify: false },
-    );
-    const beforeSegment11 = state.getCachedSegmentNodes(11n);
-    const beforeSegment13 = state.getCachedSegmentNodes(13n);
-    const beforeHandle11 = state.getCachedSegmentSnapshotHandle(11n);
-    const beforeHandle13 = state.getCachedSegmentSnapshotHandle(13n);
-    const nodeDataVersion = state.nodeDataVersion.value;
-
-    expect(() =>
-      state.replaceCachedSegmentSnapshots([
-        [
-          11n,
-          [
-            {
-              nodeId: 3n,
-              segmentId: 11n,
-              position: new Float32Array([3, 3, 3]),
-            },
-          ],
-        ] as const,
-        [
-          13n,
-          [
-            {
-              nodeId: 3n,
-              segmentId: 13n,
-              position: new Float32Array([4, 4, 4]),
-            },
-          ],
-        ] as const,
-      ]),
-    ).toThrow("node 3 is present in both segment 11 and segment 13");
-
-    expect(state.getCachedSegmentNodes(11n)).toBe(beforeSegment11);
-    expect(state.getCachedSegmentNodes(13n)).toBe(beforeSegment13);
-    expect(state.getCachedSegmentSnapshotHandle(11n)).toBe(beforeHandle11);
-    expect(state.getCachedSegmentSnapshotHandle(13n)).toBe(beforeHandle13);
-    expect(state.getCachedNode(1n)?.segmentId).toBe(11n);
-    expect(state.getCachedNode(2n)?.segmentId).toBe(13n);
-    expect(state.getCachedNode(3n)).toBeUndefined();
-    expect(state.nodeDataVersion.value).toBe(nodeDataVersion);
-  });
-
-  it("updates the reverse index without iterating unaffected segment snapshots", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.replaceCachedSegmentSnapshots(
-      [
-        [
-          11n,
-          [
-            {
-              nodeId: 1n,
-              segmentId: 11n,
-              position: new Float32Array([1, 1, 1]),
-            },
-          ],
-        ] as const,
-        [
-          13n,
-          [
-            {
-              nodeId: 2n,
-              segmentId: 13n,
-              position: new Float32Array([2, 2, 2]),
-            },
-            {
-              nodeId: 3n,
-              segmentId: 13n,
-              position: new Float32Array([3, 3, 3]),
-              parentNodeId: 2n,
-            },
-          ],
-        ] as const,
-      ],
-      { notify: false },
-    );
-    const unaffectedNodes = state.getCachedSegmentNodes(13n)!;
-    const unaffectedNode = state.getCachedNode(2n);
-    const iterateUnaffected = vi.fn((): IterableIterator<SkeletonNode> => {
-      throw new Error("unaffected segment was iterated");
-    });
-    Object.defineProperty(unaffectedNodes, Symbol.iterator, {
-      configurable: true,
-      value: iterateUnaffected,
-    });
-
-    expect(
-      state.replaceCachedSegmentSnapshots([
-        [
-          11n,
-          [
-            {
-              nodeId: 1n,
-              segmentId: 11n,
-              position: new Float32Array([4, 5, 6]),
-            },
-          ],
-        ],
-      ]),
-    ).toBe(true);
-
-    expect(iterateUnaffected).not.toHaveBeenCalled();
-    expect(state.getCachedNode(2n)).toBe(unaffectedNode);
-    expect(state.getCachedNode(3n)?.segmentId).toBe(13n);
-    expect(state.getCachedNode(1n)?.position).toEqual(
-      new Float32Array([4, 5, 6]),
-    );
-  });
-
-  it("rejects a reverse-index collision with an unaffected segment atomically", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.replaceCachedSegmentSnapshots(
-      [
-        [
-          11n,
-          [
-            {
-              nodeId: 1n,
-              segmentId: 11n,
-              position: new Float32Array([1, 1, 1]),
-            },
-          ],
-        ] as const,
-        [
-          13n,
-          [
-            {
-              nodeId: 2n,
-              segmentId: 13n,
-              position: new Float32Array([2, 2, 2]),
-            },
-          ],
-        ] as const,
-      ],
-      { notify: false },
-    );
-    const segment11Nodes = state.getCachedSegmentNodes(11n);
-    const segment13Nodes = state.getCachedSegmentNodes(13n);
-    const node1 = state.getCachedNode(1n);
-    const node2 = state.getCachedNode(2n);
-    const segment11Revision = state.getCachedSegmentRevision(11n);
-    const segment13Revision = state.getCachedSegmentRevision(13n);
-    const nodeDataVersion = state.nodeDataVersion.value;
-
-    expect(() =>
-      state.replaceCachedSegmentSnapshots([
-        [
-          11n,
-          [
-            {
-              nodeId: 2n,
-              segmentId: 11n,
-              position: new Float32Array([9, 9, 9]),
-            },
-          ],
-        ] as const,
-      ]),
-    ).toThrow("node 2 is present in both segment 13 and segment 11");
-
-    expect(state.getCachedSegmentNodes(11n)).toBe(segment11Nodes);
-    expect(state.getCachedSegmentNodes(13n)).toBe(segment13Nodes);
-    expect(state.getCachedNode(1n)).toBe(node1);
-    expect(state.getCachedNode(2n)).toBe(node2);
-    expect(state.getCachedSegmentRevision(11n)).toBe(segment11Revision);
-    expect(state.getCachedSegmentRevision(13n)).toBe(segment13Revision);
-    expect(state.nodeDataVersion.value).toBe(nodeDataVersion);
-  });
-
-  it("rejects and does not cache a non-cooperative fetch evicted while pending", async () => {
-    const state = new SpatialSkeletonEditSession();
-    let resolveFetch:
-      | ((
-          value: Array<{
-            nodeId: bigint;
-            parentNodeId?: bigint;
-            position: Float32Array;
-            segmentId: bigint;
-          }>,
-        ) => void)
-      | undefined;
-    const getSkeleton = vi.fn(
-      () =>
-        new Promise<
-          Array<{
-            nodeId: bigint;
-            parentNodeId?: bigint;
-            position: Float32Array;
-            segmentId: bigint;
-          }>
-        >((resolve) => {
-          resolveFetch = resolve as typeof resolveFetch;
-        }),
-    );
-    const skeletonLayer = {
-      fragmentSource: {
-        ...makeWholeSkeletonReads(getSkeleton),
-      },
-    } as any;
-
-    const pending = state
-      .getFullSegmentNodes(skeletonLayer, 11n)
-      .catch((error) => error);
-
-    state.evictInactiveSegmentNodes([]);
-    resolveFetch?.([
-      {
-        nodeId: 5n,
-        parentNodeId: undefined,
-        position: new Float32Array([1, 2, 3]),
-        segmentId: 11n,
-      },
-    ]);
-
-    await expect(pending).resolves.toMatchObject({ name: "AbortError" });
-    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
-    expect(state.getCachedNode(5n)).toBeUndefined();
-  });
-
-  it("tracks monotonic segment revisions across atomic replacement and clearing", () => {
-    const state = new SpatialSkeletonEditSession();
-    const initialRevision = state.getCachedSegmentRevision(11n);
-
-    state.replaceCachedSegmentSnapshots(
-      [
-        [
-          11n,
-          [
-            {
-              nodeId: 5n,
-              segmentId: 11n,
-              position: new Float32Array([1, 2, 3]),
-            },
-          ],
-        ] as const,
-      ],
-      { notify: false },
-    );
-    const replacedRevision = state.getCachedSegmentRevision(11n);
-    expect(replacedRevision).toBeGreaterThan(initialRevision);
-
-    expect(
-      state.replaceCachedSegmentSnapshots(
-        [
-          [
-            11n,
-            [
-              {
-                nodeId: 5n,
-                segmentId: 11n,
-                position: new Float32Array([4, 5, 6]),
-              },
-            ],
-          ],
-        ],
-        { notify: false },
-      ),
-    ).toBe(true);
-    const secondReplacementRevision = state.getCachedSegmentRevision(11n);
-    expect(secondReplacementRevision).toBeGreaterThan(replacedRevision);
-
-    expect(state.clearRuntimeState()).toBe(true);
-    expect(state.getCachedSegmentRevision(11n)).toBeGreaterThan(
-      secondReplacementRevision,
-    );
-  });
-
-  it("rejects an atomic publication when a captured segment revision changed", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.replaceCachedSegmentSnapshots(
-      [
-        [
-          11n,
-          [
-            {
-              nodeId: 5n,
-              segmentId: 11n,
-              position: new Float32Array([1, 2, 3]),
-            },
-          ],
-        ] as const,
-      ],
-      { notify: false },
-    );
-    const expectedRevisions = getCachedSegmentRevisions(state, [11n]);
-    expect(
-      state.replaceCachedSegmentSnapshots([
-        [
-          11n,
-          [
-            {
-              nodeId: 5n,
-              segmentId: 11n,
-              position: new Float32Array([4, 5, 6]),
-            },
-          ],
-        ],
-      ]),
-    ).toBe(true);
-    const previewRevision = state.getCachedSegmentRevision(11n);
-
-    expect(
-      state.replaceCachedSegmentSnapshots(
-        [
-          [
-            11n,
-            [
-              {
-                nodeId: 5n,
-                segmentId: 11n,
-                position: new Float32Array([7, 8, 9]),
-              },
-            ],
-          ] as const,
-        ],
-        { expectedRevisions },
-      ),
-    ).toBe(false);
-    expect(state.getCachedNode(5n)?.position).toEqual(
-      new Float32Array([4, 5, 6]),
-    );
-    expect(state.getCachedSegmentRevision(11n)).toBe(previewRevision);
-  });
-
-  it("does not publish a retained read over a newer atomic replacement", async () => {
-    const state = new SpatialSkeletonEditSession();
-    let receivedSignal: AbortSignal | undefined;
-    let resolveFetch: ((nodes: SkeletonNode[]) => void) | undefined;
-    const getSkeleton = vi.fn(
-      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-        new Promise<SkeletonNode[]>((resolve, reject) => {
-          receivedSignal = options?.signal;
-          resolveFetch = resolve;
-          options?.signal?.addEventListener(
-            "abort",
-            () => reject(options.signal?.reason),
-            { once: true },
-          );
-        }),
-    );
-    const skeletonLayer = {
-      fragmentSource: {
-        ...makeWholeSkeletonReads(getSkeleton),
-      },
-    } as any;
-    const pending = state.getFullSegmentNodes(skeletonLayer, 11n, {
-      retainWhileInactive: true,
-    });
-    await flushMicrotasks();
-
-    state.replaceCachedSegmentSnapshots(
-      [
-        [
-          11n,
-          [
-            {
-              nodeId: 5n,
-              segmentId: 11n,
-              position: new Float32Array([4, 5, 6]),
-            },
-          ],
-        ] as const,
-      ],
-      { notify: false },
-    );
-    expect(receivedSignal?.aborted).toBe(false);
-    expect(getSkeleton).toHaveBeenCalledTimes(1);
-
-    resolveFetch?.([
-      {
-        nodeId: 5n,
-        segmentId: 11n,
-        position: new Float32Array([7, 8, 9]),
-      },
-    ]);
-    await expect(pending).resolves.toEqual([
-      {
-        nodeId: 5n,
-        segmentId: 11n,
-        position: new Float32Array([7, 8, 9]),
-        parentNodeId: undefined,
-        description: undefined,
-      },
-    ]);
-    expect(state.getCachedNode(5n)?.position).toEqual(
-      new Float32Array([4, 5, 6]),
-    );
-  });
-
-  it("aborts a command-owned full-segment read when its sole owner releases it", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const owner = {};
-    let receivedSignal: AbortSignal | undefined;
-    const getSkeleton = vi.fn(
-      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-        new Promise<never>(() => {
-          receivedSignal = options?.signal;
-          // Deliberately ignore AbortSignal. The manager's owner-release race
-          // must still settle without cooperation from the source.
-        }),
-    );
-    const skeletonLayer = {
-      fragmentSource: {
-        ...makeWholeSkeletonReads(getSkeleton),
-      },
-    } as any;
-    const outcome = state
-      .getFullSegmentNodes(skeletonLayer, 11n, {
-        requestOwner: owner,
-        retainWhileInactive: true,
-      })
-      .then(
-        () => undefined,
-        (error: unknown) => error,
-      );
-    await flushMicrotasks();
-
-    expect(receivedSignal?.aborted).toBe(false);
-    expect(state.releaseFullSegmentNodeFetchOwner(owner)).toBe(true);
-    expect(receivedSignal?.aborted).toBe(true);
-    await expect(outcome).resolves.toMatchObject({ name: "AbortError" });
-    expect(getSkeleton).toHaveBeenCalledTimes(1);
-    expect(state.releaseFullSegmentNodeFetchOwner(owner)).toBe(false);
-  });
-
-  it("keeps a shared full-segment read alive until its final owner releases it", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const firstOwner = {};
-    const secondOwner = {};
-    let receivedSignal: AbortSignal | undefined;
-    const getSkeleton = vi.fn(
-      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-        new Promise<never>((_resolve, reject) => {
-          receivedSignal = options?.signal;
-          options?.signal?.addEventListener(
-            "abort",
-            () => reject(options.signal?.reason),
-            { once: true },
-          );
-        }),
-    );
-    const skeletonLayer = {
-      fragmentSource: {
-        ...makeWholeSkeletonReads(getSkeleton),
-      },
-    } as any;
-    const firstOutcome = state
-      .getFullSegmentNodes(skeletonLayer, 11n, {
-        requestOwner: firstOwner,
-      })
-      .catch((error) => error);
-    const secondOutcome = state
-      .getFullSegmentNodes(skeletonLayer, 11n, {
-        requestOwner: secondOwner,
-      })
-      .catch((error) => error);
-    await flushMicrotasks();
-
-    expect(getSkeleton).toHaveBeenCalledTimes(1);
-    expect(state.releaseFullSegmentNodeFetchOwner(firstOwner)).toBe(true);
-    expect(receivedSignal?.aborted).toBe(false);
-    expect(state.releaseFullSegmentNodeFetchOwner(secondOwner)).toBe(true);
-    expect(receivedSignal?.aborted).toBe(true);
-    await expect(firstOutcome).resolves.toMatchObject({ name: "AbortError" });
-    await expect(secondOutcome).resolves.toMatchObject({ name: "AbortError" });
-  });
-
-  it("does not abort a shared visual read when its command owner releases it", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const owner = {};
-    let receivedSignal: AbortSignal | undefined;
-    let resolveFetch: ((nodes: SkeletonNode[]) => void) | undefined;
-    const getSkeleton = vi.fn(
-      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-        new Promise<SkeletonNode[]>((resolve, reject) => {
-          receivedSignal = options?.signal;
-          resolveFetch = resolve;
-          options?.signal?.addEventListener(
-            "abort",
-            () => reject(options.signal?.reason),
-            { once: true },
-          );
-        }),
-    );
-    const skeletonLayer = {
-      fragmentSource: {
-        ...makeWholeSkeletonReads(getSkeleton),
-      },
-    } as any;
-    const commandFetch = state.getFullSegmentNodes(skeletonLayer, 11n, {
-      requestOwner: owner,
-      retainWhileInactive: true,
-    });
-    const visualFetch = state.getFullSegmentNodes(skeletonLayer, 11n);
-    await flushMicrotasks();
-
-    expect(getSkeleton).toHaveBeenCalledTimes(1);
-    expect(state.releaseFullSegmentNodeFetchOwner(owner)).toBe(true);
-    expect(receivedSignal?.aborted).toBe(false);
-    resolveFetch?.([
-      {
-        nodeId: 5n,
-        segmentId: 11n,
-        position: new Float32Array([1, 2, 3]),
-      },
-    ]);
-
-    await expect(commandFetch).resolves.toHaveLength(1);
-    await expect(visualFetch).resolves.toHaveLength(1);
-    expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
-  });
-
-  it("times out an underlying full-segment source request", async () => {
-    vi.useFakeTimers();
-    try {
-      const state = new SpatialSkeletonEditSession();
-      let receivedSignal: AbortSignal | undefined;
-      const getSkeleton = vi.fn(
-        (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-          new Promise<never>(() => {
-            receivedSignal = options?.signal;
-            // Deliberately ignore AbortSignal. The deadline itself must reject
-            // the public request and release the limiter slot.
-          }),
-      );
-      const pending = state
-        .getFullSegmentNodes(
-          {
-            fragmentSource: {
-              ...makeWholeSkeletonReads(getSkeleton),
-            },
-          } as any,
-          11n,
-        )
-        .then(
-          () => undefined,
-          (error: unknown) => error,
-        );
-      await flushMicrotasks();
-
-      expect(receivedSignal?.aborted).toBe(false);
-      await vi.advanceTimersByTimeAsync(120_000);
-      expect(receivedSignal?.aborted).toBe(true);
-      await expect(pending).resolves.toMatchObject({ name: "TimeoutError" });
-      expect(getSkeleton).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("performs one full-segment request per call and permits a later request after failure", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const getSkeleton = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("temporary read failure"))
-      .mockResolvedValueOnce([]);
-    const skeletonLayer = {
-      fragmentSource: {
-        ...makeWholeSkeletonReads(getSkeleton),
-      },
-    } as any;
-
-    await expect(
-      state.getFullSegmentNodes(skeletonLayer, 11n, {
-        retainWhileInactive: true,
-      }),
-    ).rejects.toThrow("temporary read failure");
-    expect(getSkeleton).toHaveBeenCalledTimes(1);
-
-    await expect(
-      state.getFullSegmentNodes(skeletonLayer, 11n, {
-        retainWhileInactive: true,
-      }),
-    ).resolves.toEqual([]);
-    expect(getSkeleton).toHaveBeenCalledTimes(2);
-  });
-
-  it("permits a new full-segment request after a timeout", async () => {
-    vi.useFakeTimers();
-    try {
-      const state = new SpatialSkeletonEditSession();
-      const getSkeleton = vi.fn(
-        (_segmentId: bigint, _options?: { signal?: AbortSignal }) => {
-          if (getSkeleton.mock.calls.length === 2) return Promise.resolve([]);
-          return new Promise<never>(() => {});
-        },
-      );
-      const pending = state.getFullSegmentNodes(
-        {
-          fragmentSource: {
-            ...makeWholeSkeletonReads(getSkeleton),
-          },
-        } as any,
-        11n,
-        { retainWhileInactive: true },
-      );
-      const timedOut = pending.catch((error: unknown) => error);
-
-      await vi.advanceTimersByTimeAsync(120_000);
-      await expect(timedOut).resolves.toMatchObject({ name: "TimeoutError" });
-      await expect(
-        state.getFullSegmentNodes(
-          {
-            fragmentSource: {
-              ...makeWholeSkeletonReads(getSkeleton),
-            },
-          } as any,
-          11n,
-          { retainWhileInactive: true },
-        ),
-      ).resolves.toEqual([]);
-      expect(getSkeleton).toHaveBeenCalledTimes(2);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("aborts command-owned hydration after a source reset", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const getSkeleton = vi.fn(
-      (_segmentId: bigint, _options?: { signal?: AbortSignal }) =>
-        new Promise<never>(() => {}),
-    );
-    const pending = state.getFullSegmentNodes(
-      {
-        fragmentSource: {
-          ...makeWholeSkeletonReads(getSkeleton),
-        },
-      } as any,
-      11n,
-      { retainWhileInactive: true },
-    );
-    await flushMicrotasks();
-
-    expect(state.clearRuntimeState()).toBe(true);
-    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-    expect(getSkeleton).toHaveBeenCalledTimes(1);
-  });
-
-  it("aborts pending full segment fetches when the cache is cleared", async () => {
-    const state = new SpatialSkeletonEditSession();
-    let receivedSignal: AbortSignal | undefined;
-    const getSkeleton = vi.fn(
-      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-        new Promise<never>((_resolve, reject) => {
-          receivedSignal = options?.signal;
-          options?.signal?.addEventListener(
-            "abort",
-            () => reject(options.signal?.reason),
-            { once: true },
-          );
-        }),
-    );
-
-    const pending = state.getFullSegmentNodes(
-      {
-        fragmentSource: {
-          ...makeWholeSkeletonReads(getSkeleton),
-        },
-      } as any,
-      11n,
-    );
-    await flushMicrotasks();
-
-    expect(receivedSignal?.aborted).toBe(false);
-    expect(state.clearRuntimeState()).toBe(true);
-    expect(receivedSignal?.aborted).toBe(true);
-    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
-    expect(state.getCachedNode(11n)).toBeUndefined();
-  });
-
-  it("aborts pending full segment fetches when a segment is evicted", async () => {
-    const state = new SpatialSkeletonEditSession();
-    let receivedSignal: AbortSignal | undefined;
-    const getSkeleton = vi.fn(
-      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-        new Promise<never>((_resolve, reject) => {
-          receivedSignal = options?.signal;
-          options?.signal?.addEventListener(
-            "abort",
-            () => reject(options.signal?.reason),
-            { once: true },
-          );
-        }),
-    );
-
-    const pending = state.getFullSegmentNodes(
-      {
-        fragmentSource: {
-          ...makeWholeSkeletonReads(getSkeleton),
-        },
-      } as any,
-      11n,
-    );
-    await flushMicrotasks();
-
-    expect(receivedSignal?.aborted).toBe(false);
-    expect(state.evictInactiveSegmentNodes([])).toBe(false);
-    expect(receivedSignal?.aborted).toBe(true);
-    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-    expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
-    expect(state.getCachedNode(11n)).toBeUndefined();
-  });
-
-  it("retains exact optimistic preview segments during visual eviction", () => {
-    const state = new SpatialSkeletonEditSession();
-    state.replaceCachedSegmentSnapshots([
-      [
-        11n,
-        [
-          {
-            nodeId: 5n,
-            segmentId: 11n,
-            position: new Float32Array([1, 2, 3]),
-          },
-        ],
-      ],
-      [
-        17n,
-        [
-          {
-            nodeId: 7n,
-            segmentId: 17n,
-            position: new Float32Array([4, 5, 6]),
-          },
-        ],
-      ],
-    ]);
-    (state as any).editQueue = {
-      canUndo: () => false,
-      canRedo: () => false,
-      hasUnconfirmedActions: () => true,
-      getProtectedPreviewSegmentIds: () => [11n],
-      undoLatest: () => resolvedExecution(false),
-      redoLatest: () => resolvedExecution(false),
-    };
-
-    expect(state.evictInactiveSegmentNodes([])).toBe(true);
-    expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
-    expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
-  });
-
-  it("retains a pending visual fetch when a command joins it", async () => {
-    const state = new SpatialSkeletonEditSession();
-    let receivedSignal: AbortSignal | undefined;
-    let resolveFetch: ((nodes: SkeletonNode[]) => void) | undefined;
-    const getSkeleton = vi.fn(
-      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-        new Promise<SkeletonNode[]>((resolve, reject) => {
-          receivedSignal = options?.signal;
-          resolveFetch = resolve;
-          options?.signal?.addEventListener(
-            "abort",
-            () => reject(options.signal?.reason),
-            { once: true },
-          );
-        }),
-    );
-    const skeletonLayer = {
-      fragmentSource: {
-        ...makeWholeSkeletonReads(getSkeleton),
-      },
-    } as any;
-
-    const visualFetch = state.getFullSegmentNodes(skeletonLayer, 11n);
-    const commandFetch = state.getFullSegmentNodes(skeletonLayer, 11n, {
-      retainWhileInactive: true,
-    });
-    await flushMicrotasks();
-
-    expect(getSkeleton).toHaveBeenCalledTimes(1);
-    expect(state.evictInactiveSegmentNodes([])).toBe(false);
-    expect(receivedSignal?.aborted).toBe(false);
-
-    const fetchedNodes: SkeletonNode[] = [
-      {
-        nodeId: 5n,
-        segmentId: 11n,
-        position: new Float32Array([1, 2, 3]),
-      },
-    ];
-    resolveFetch?.(fetchedNodes);
-
-    await expect(visualFetch).resolves.toEqual(fetchedNodes);
-    await expect(commandFetch).resolves.toEqual(fetchedNodes);
-    expect(
-      state.getCachedSegmentNodes(11n)?.map((node) => node.nodeId),
-    ).toEqual([5n]);
-  });
-
-  it("aborts a pending fetch before atomically replacing its segment", async () => {
-    const state = new SpatialSkeletonEditSession();
-    let receivedSignal: AbortSignal | undefined;
-    const getSkeleton = vi.fn(
-      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-        new Promise<never>((_resolve, reject) => {
-          receivedSignal = options?.signal;
-          options?.signal?.addEventListener(
-            "abort",
-            () => reject(options.signal?.reason),
-            { once: true },
-          );
-        }),
-    );
-    const pending = state.getFullSegmentNodes(
-      {
-        fragmentSource: {
-          ...makeWholeSkeletonReads(getSkeleton),
-        },
-      } as any,
-      11n,
-    );
-    let notifications = 0;
-    state.nodeDataVersion.changed.add(() => {
-      notifications += 1;
-    });
-    await flushMicrotasks();
-
-    expect(receivedSignal?.aborted).toBe(false);
-    expect(
-      state.replaceCachedSegmentSnapshots([
-        [
-          11n,
-          [
-            {
-              nodeId: 5n,
-              segmentId: 11n,
-              position: new Float32Array([1, 2, 3]),
-            },
-          ],
-        ] as const,
-      ]),
-    ).toBe(true);
-
-    expect(receivedSignal?.aborted).toBe(true);
-    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-    expect(
-      state.getCachedSegmentNodes(11n)?.map((node) => node.nodeId),
-    ).toEqual([5n]);
-    expect(state.getCachedNode(5n)).toBe(state.getCachedSegmentNodes(11n)?.[0]);
-    expect(notifications).toBe(1);
-  });
-
-  it("notifies node data listeners after caching a fetched full segment", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const getSkeleton = vi.fn(async () => [
-      {
-        nodeId: 5n,
-        parentNodeId: undefined,
-        position: new Float32Array([1, 2, 3]),
-        segmentId: 11n,
-      },
-    ]);
-    const skeletonLayer = {
-      fragmentSource: {
-        ...makeWholeSkeletonReads(getSkeleton),
-      },
-    } as any;
-    let notifications = 0;
-    state.nodeDataVersion.changed.add(() => {
-      notifications += 1;
-    });
-
-    await expect(
-      state.getFullSegmentNodes(skeletonLayer, 11n),
-    ).resolves.toEqual([
-      {
-        nodeId: 5n,
-        segmentId: 11n,
-        position: new Float32Array([1, 2, 3]),
-        parentNodeId: undefined,
-        description: undefined,
-      },
-    ]);
-
-    expect(notifications).toBe(1);
-    expect(state.getCachedNode(5n)).toEqual({
-      nodeId: 5n,
-      segmentId: 11n,
-      position: new Float32Array([1, 2, 3]),
-      parentNodeId: undefined,
-      description: undefined,
-    });
-  });
-
-  it("caches inspected nodes from full skeleton inspection", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const getSkeleton = vi.fn(async () => [
-      {
-        nodeId: 5n,
-        parentNodeId: undefined,
-        position: new Float32Array([1, 2, 3]),
-        segmentId: 11n,
-      },
-    ]);
-
-    await expect(
-      state.getFullSegmentNodes(
-        {
-          fragmentSource: {
-            ...makeWholeSkeletonReads(getSkeleton),
-          },
-        } as any,
-        11n,
-      ),
-    ).resolves.toEqual([
-      {
-        nodeId: 5n,
-        segmentId: 11n,
-        position: new Float32Array([1, 2, 3]),
-        parentNodeId: undefined,
-        description: undefined,
-      },
-    ]);
-
-    expect(getSkeleton).toHaveBeenCalledTimes(1);
-    expect(state.getCachedNode(5n)).toEqual({
-      nodeId: 5n,
-      segmentId: 11n,
-      position: new Float32Array([1, 2, 3]),
-      parentNodeId: undefined,
-      description: undefined,
-    });
-  });
-
-  it("stores merge anchor state only when the node id is valid", () => {
-    const state = new SpatialSkeletonEditSession();
-
-    expect(state.setMergeAnchor(5n)).toBe(true);
-    expect(state.mergeAnchorNodeId.value).toBe(5n);
-
-    expect(state.setMergeAnchor(0n)).toBe(true);
-    expect(state.mergeAnchorNodeId.value).toBeUndefined();
-  });
-
-  function makeLimiterTestLayer(itemLimit?: number) {
-    const resolvers: Array<
-      (
-        value: Array<{
+function makeLimiterTestLayer(itemLimit?: number) {
+  const resolvers: Array<
+    (
+      value: Array<{
+        nodeId: bigint;
+        parentNodeId?: bigint;
+        position: Float32Array;
+        segmentId: bigint;
+      }>,
+    ) => void
+  > = [];
+  const getSkeleton = vi.fn(
+    (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
+      new Promise<
+        Array<{
           nodeId: bigint;
           parentNodeId?: bigint;
           position: Float32Array;
           segmentId: bigint;
-        }>,
-      ) => void
-    > = [];
-    const getSkeleton = vi.fn(
-      (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
-        new Promise<
-          Array<{
-            nodeId: bigint;
-            parentNodeId?: bigint;
-            position: Float32Array;
-            segmentId: bigint;
-          }>
-        >((resolve, reject) => {
-          resolvers.push(resolve);
-          options?.signal?.addEventListener(
-            "abort",
-            () => reject(options.signal?.reason),
-            { once: true },
-          );
-        }),
-    );
-    const skeletonLayer = {
-      fragmentSource: {
-        ...makeWholeSkeletonReads(getSkeleton),
-      },
-      ...(itemLimit === undefined
-        ? {}
-        : {
-            chunkManager: {
-              chunkQueueManager: {
-                capacities: { download: { itemLimit: { value: itemLimit } } },
-              },
+        }>
+      >((resolve, reject) => {
+        resolvers.push(resolve);
+        options?.signal?.addEventListener(
+          "abort",
+          () => reject(options.signal?.reason),
+          { once: true },
+        );
+      }),
+  );
+  const skeletonLayer = {
+    fragmentSource: {
+      ...makeWholeSkeletonReads(getSkeleton),
+    },
+    ...(itemLimit === undefined
+      ? {}
+      : {
+          chunkManager: {
+            chunkQueueManager: {
+              capacities: { download: { itemLimit: { value: itemLimit } } },
             },
-          }),
-    } as any;
-    return { skeletonLayer, getSkeleton, resolvers };
-  }
-
-  it("caps concurrent full segment fetches at the download item limit", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const { skeletonLayer, getSkeleton, resolvers } = makeLimiterTestLayer(2);
-
-    const pending = [11n, 12n, 13n, 14n].map((segmentId) =>
-      state.getFullSegmentNodes(skeletonLayer, segmentId),
-    );
-    await flushMicrotasks();
-
-    expect(getSkeleton).toHaveBeenCalledTimes(2);
-    resolvers[0]([]);
-    await pending[0];
-    expect(getSkeleton).toHaveBeenCalledTimes(3);
-    resolvers[1]([]);
-    resolvers[2]([]);
-    await Promise.all([pending[1], pending[2]]);
-    expect(getSkeleton).toHaveBeenCalledTimes(4);
-    resolvers[3]([]);
-    await pending[3];
-  });
-
-  it("starts a skeleton read an edit awaits before queued display reads", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const { skeletonLayer, getSkeleton, resolvers } = makeLimiterTestLayer(1);
-
-    const first = state.getFullSegmentNodes(skeletonLayer, 11n);
-    void state.getFullSegmentNodes(skeletonLayer, 12n).catch(() => undefined);
-    void state.getFullSegmentNodes(skeletonLayer, 13n).catch(() => undefined);
-    void state
-      .getFullSegmentNodes(skeletonLayer, 13n, {
-        retainWhileInactive: true,
-        requestOwner: {},
-      })
-      .catch(() => undefined);
-    await flushMicrotasks();
-
-    expect(getSkeleton).toHaveBeenCalledTimes(1);
-    resolvers[0]([]);
-    await first;
-    expect(getSkeleton).toHaveBeenCalledTimes(2);
-    expect(getSkeleton.mock.calls[1][0]).toBe(13n);
-  });
-
-  it("starts queued display reads in order again once an edit stops awaiting one", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const { skeletonLayer, getSkeleton, resolvers } = makeLimiterTestLayer(1);
-    const requestOwner = {};
-
-    const first = state.getFullSegmentNodes(skeletonLayer, 11n);
-    void state.getFullSegmentNodes(skeletonLayer, 12n).catch(() => undefined);
-    void state.getFullSegmentNodes(skeletonLayer, 13n).catch(() => undefined);
-    void state
-      .getFullSegmentNodes(skeletonLayer, 13n, {
-        retainWhileInactive: true,
-        requestOwner,
-      })
-      .catch(() => undefined);
-    state.releaseFullSegmentNodeFetchOwner(requestOwner);
-    await flushMicrotasks();
-
-    resolvers[0]([]);
-    await first;
-    expect(getSkeleton).toHaveBeenCalledTimes(2);
-    expect(getSkeleton.mock.calls[1][0]).toBe(12n);
-  });
-
-  it("releases a limiter slot when a non-cooperative source times out", async () => {
-    vi.useFakeTimers();
-    try {
-      const state = new SpatialSkeletonEditSession();
-      const getSkeleton = vi.fn((segmentId: bigint) =>
-        segmentId === 11n ? new Promise<never>(() => {}) : Promise.resolve([]),
-      );
-      const skeletonLayer = {
-        fragmentSource: {
-          ...makeWholeSkeletonReads(getSkeleton),
-        },
-        chunkManager: {
-          chunkQueueManager: {
-            capacities: { download: { itemLimit: { value: 1 } } },
           },
-        },
-      } as any;
-      const firstOutcome = state
-        .getFullSegmentNodes(skeletonLayer, 11n)
-        .catch((error) => error);
-      const second = state.getFullSegmentNodes(skeletonLayer, 12n);
-      await flushMicrotasks();
-
-      expect(getSkeleton).toHaveBeenCalledTimes(1);
-      await vi.advanceTimersByTimeAsync(120_000);
-      await expect(firstOutcome).resolves.toMatchObject({
-        name: "TimeoutError",
-      });
-      await expect(second).resolves.toEqual([]);
-      expect(getSkeleton).toHaveBeenCalledTimes(2);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("caps concurrent full segment fetches when no chunk manager is available", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const { skeletonLayer, getSkeleton } = makeLimiterTestLayer();
-
-    for (let segmentId = 1; segmentId <= 10; ++segmentId) {
-      void state
-        .getFullSegmentNodes(skeletonLayer, BigInt(segmentId))
-        .catch(() => undefined);
-    }
-    await flushMicrotasks();
-
-    expect(getSkeleton).toHaveBeenCalledTimes(8);
-  });
-
-  it("never starts a queued full segment fetch that is evicted first", async () => {
-    const state = new SpatialSkeletonEditSession();
-    const { skeletonLayer, getSkeleton, resolvers } = makeLimiterTestLayer(1);
-
-    const first = state.getFullSegmentNodes(skeletonLayer, 11n);
-    const queued = state.getFullSegmentNodes(skeletonLayer, 12n);
-    await flushMicrotasks();
-    expect(getSkeleton).toHaveBeenCalledTimes(1);
-
-    expect(state.evictInactiveSegmentNodes([11n])).toBe(false);
-    await expect(queued).rejects.toMatchObject({ name: "AbortError" });
-
-    resolvers[0]([]);
-    await first;
-    expect(getSkeleton).toHaveBeenCalledTimes(1);
-  });
-
-  describe("full skeleton read from a manifest", () => {
-    it("returns the nodes of every fragment that the manifest lists", async () => {
-      const state = new SpatialSkeletonEditSession();
-      const { layer } = makeFragmentedSkeletonLayer({
-        "0.0.0": {
-          nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
-          edges: [makeEdge(2n, 1n)],
-        },
-        "0.0.1": { nodes: [makeFragmentNode(3n)], edges: [makeEdge(3n, 2n)] },
-      });
-
-      const nodes = await state.getFullSegmentNodes(layer, 7n);
-
-      expect(nodes.map((node) => node.nodeId)).toEqual([1n, 2n, 3n]);
-      expect(nodes[2].parentNodeId).toBe(2n);
-    });
-
-    it("fails the whole read when one fragment fails", async () => {
-      const state = new SpatialSkeletonEditSession();
-      const { layer } = makeFragmentedSkeletonLayer({
-        "0.0.0": { nodes: [makeFragmentNode(1n)], edges: [] },
-        "0.0.1": new Error("fragment missing"),
-      });
-
-      await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
-        "fragment missing",
-      );
-    });
-
-    it("does not request the next fragment after one fails", async () => {
-      const state = new SpatialSkeletonEditSession();
-      const { layer, requestedFragmentKeys } = makeFragmentedSkeletonLayer({
-        "0.0.0": new Error("fragment missing"),
-        "0.0.1": { nodes: [makeFragmentNode(2n)], edges: [] },
-      });
-
-      await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
-        "fragment missing",
-      );
-      expect(requestedFragmentKeys).toEqual(["0.0.0"]);
-    });
-
-    it("requests no fragment once the read is aborted", async () => {
-      const state = new SpatialSkeletonEditSession();
-      const manifestReady = deferred<void>();
-      const { layer, requestedFragmentKeys } = makeFragmentedSkeletonLayer(
-        { "0.0.0": { nodes: [makeFragmentNode(1n)], edges: [] } },
-        { manifestReady: manifestReady.promise },
-      );
-      const read = state.getFullSegmentNodes(layer, 7n);
-      const aborted = expect(read).rejects.toMatchObject({
-        name: "AbortError",
-      });
-      await flushMicrotasks();
-
-      state.clearRuntimeState();
-      manifestReady.resolve();
-      await aborted;
-      await flushMicrotasks();
-
-      expect(requestedFragmentKeys).toEqual([]);
-    });
-
-    it("rejects a skeleton that has one node in two fragments", async () => {
-      const state = new SpatialSkeletonEditSession();
-      const { layer } = makeFragmentedSkeletonLayer({
-        "0.0.0": {
-          nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
-          edges: [],
-        },
-        "0.0.1": {
-          nodes: [makeFragmentNode(2n), makeFragmentNode(3n)],
-          edges: [],
-        },
-      });
-
-      await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
-        "Skeleton 7 has node 2 in more than one fragment.",
-      );
-    });
-
-    it("joins a node to a parent that another fragment links to it", async () => {
-      const state = new SpatialSkeletonEditSession();
-      const { layer } = makeFragmentedSkeletonLayer({
-        "0.0.0": { nodes: [makeFragmentNode(3n)], edges: [] },
-        "0.0.1": {
-          nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
-          edges: [makeEdge(2n, 1n), makeEdge(3n, 2n)],
-        },
-      });
-
-      const nodes = await state.getFullSegmentNodes(layer, 7n);
-
-      expect(nodes.find((node) => node.nodeId === 3n)?.parentNodeId).toBe(2n);
-    });
-
-    it("takes the first node of each edge as the parent when the source lists edges parent to child", async () => {
-      const state = new SpatialSkeletonEditSession();
-      const { layer } = makeFragmentedSkeletonLayer(
-        {
-          skeleton: {
-            nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
-            edges: [makeEdge(1n, 2n)],
-          },
-        },
-        { edgeDirection: SkeletonEdgeDirection.PARENT_TO_CHILD },
-      );
-
-      const nodes = await state.getFullSegmentNodes(layer, 7n);
-
-      expect(nodes.map((node) => [node.nodeId, node.parentNodeId])).toEqual([
-        [1n, undefined],
-        [2n, 1n],
-      ]);
-    });
-
-    it("rejects a directed skeleton that gives one node two parents", async () => {
-      const state = new SpatialSkeletonEditSession();
-      const { layer } = makeFragmentedSkeletonLayer({
-        "0.0.0": {
-          nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
-          edges: [makeEdge(2n, 1n)],
-        },
-        "0.0.1": { nodes: [makeFragmentNode(3n)], edges: [makeEdge(2n, 3n)] },
-      });
-
-      await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
-        "Skeleton 7 gives node 2 two parents.",
-      );
-    });
-
-    it("rejects a directed edge to a node that no fragment has", async () => {
-      const state = new SpatialSkeletonEditSession();
-      const { layer } = makeFragmentedSkeletonLayer({
-        skeleton: { nodes: [makeFragmentNode(2n)], edges: [makeEdge(2n, 1n)] },
-      });
-
-      await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
-        "Skeleton 7 has an edge to node 1, which no fragment has.",
-      );
-    });
-
-    it("infers parents from the first node of each part when the source's edges have no direction", async () => {
-      const state = new SpatialSkeletonEditSession();
-      const { layer } = makeFragmentedSkeletonLayer(
-        {
-          "0.0.0": {
-            nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
-            edges: [makeEdge(2n, 3n)],
-          },
-          "0.0.1": {
-            nodes: [makeFragmentNode(3n), makeFragmentNode(4n)],
-            edges: [makeEdge(1n, 3n)],
-          },
-        },
-        { edgeDirection: SkeletonEdgeDirection.UNDIRECTED },
-      );
-
-      const nodes = await state.getFullSegmentNodes(layer, 7n);
-
-      expect(nodes.map((node) => [node.nodeId, node.parentNodeId])).toEqual([
-        [1n, undefined],
-        [2n, 3n],
-        [3n, 1n],
-        [4n, undefined],
-      ]);
-    });
-
-    it("returns no nodes for a skeleton the source does not have", async () => {
-      const state = new SpatialSkeletonEditSession();
-      const { layer } = makeFragmentedSkeletonLayer({});
-
-      expect(await state.getFullSegmentNodes(layer, 7n)).toEqual([]);
-    });
-  });
-});
-
+        }),
+  } as any;
+  return { skeletonLayer, getSkeleton, resolvers };
+}
 function publishSplitOutputAlias(
   state: SpatialSkeletonEditSession,
   options: { authoritative: boolean; activeOwner: boolean },
@@ -2887,25 +297,2360 @@ function publishSplitOutputAlias(
   state.finalizePreparedSpatialSkeletonPreviewCachePublication(prepared);
 }
 
-describe("SpatialSkeletonEditSession provisional skeletons", () => {
-  it("lists a skeleton as provisional until its creating edit is confirmed", () => {
-    const state = new SpatialSkeletonEditSession();
+function makeSource(editPlannerProvider?: unknown): EditableSkeletonSource {
+  return {
+    readonly: false,
+    editPlannerProvider,
+  } as unknown as EditableSkeletonSource;
+}
 
-    publishSplitOutputAlias(state, { authoritative: false, activeOwner: true });
-    expect([...state.provisionalSegmentIds]).toEqual([17n]);
+function makeRegistration(
+  cleanup = vi.fn(),
+): SpatialSkeletonEditPlannerRegistration {
+  return {
+    planner: {
+      describeIntent: () => ({ kind: "test", commandLabel: "Test" }),
+      planIntent: (_command, context) => ({
+        kind: "test",
+        commandLabel: "Test",
+        stableResources: [],
+        plan: { intentId: context.intentId },
+        preview: undefined as never,
+      }),
+      nextAttempt: () => undefined,
+      createReconciliation: () => ({}),
+    },
+    editRequestAdapter: {
+      editRequestScope: {},
+      commit: async () => ({}),
+      classifyFailure: () => "indeterminate",
+    },
+    cleanup,
+  };
+}
 
-    publishSplitOutputAlias(state, { authoritative: true, activeOwner: true });
-    expect([...state.provisionalSegmentIds]).toEqual([]);
+function makeEditQueueLayer(editPlannerProvider?: unknown) {
+  const state = new SpatialSkeletonEditSession();
+  const source = makeSource(editPlannerProvider);
+  const layer = {
+    spatialSkeletonEditSession: state,
+    getSpatiallyIndexedSkeletonLayer: () => undefined,
+  } as SpatialSkeletonLayerContext;
+  return { state, source, layer };
+}
+
+interface HeldEditRequest {
+  readonly operation: "edit";
+}
+
+interface HeldCommit {
+  readonly editRequest: HeldEditRequest;
+  resolve(result: { readonly ok: true }): void;
+  reject(error: unknown): void;
+}
+
+function makeHeldCommitProvider(cleanup = vi.fn()) {
+  const commits: HeldCommit[] = [];
+  const provider: SpatialSkeletonEditPlannerProvider = {
+    createPlanner: ({ identities }) => {
+      const segment = identities.getOrCreateSegmentHandle(11n);
+      const node = identities.getOrCreateNodeHandle(21n);
+      return {
+        planner: {
+          describeIntent: () => ({ kind: "test", commandLabel: "Test" }),
+          planIntent: () => ({
+            kind: "test",
+            commandLabel: "Controlled edit",
+            stableResources: [
+              { handle: segment, access: "write" },
+              { handle: node, access: "write" },
+            ],
+            plan: Object.freeze({}),
+            preview: {
+              delta: {
+                kind: "add",
+                segment,
+                node,
+                position: [1, 2, 3],
+              },
+            },
+          }),
+          nextAttempt: (_plan, context) => {
+            if (context.committedAttempts.length !== 0) return undefined;
+            const editRequest = { operation: "edit" } as const;
+            return {
+              materializeEditRequest: () => editRequest,
+            };
+          },
+          createReconciliation: () => ({}),
+        },
+        editRequestAdapter: {
+          editRequestScope: {},
+          commit: (editRequest) =>
+            new Promise<{ readonly ok: true }>((resolve, reject) => {
+              commits.push({ editRequest, resolve, reject });
+            }),
+          classifyFailure: (error) =>
+            (
+              error as Error & {
+                disposition?: "not-started" | "rejected" | "indeterminate";
+              }
+            ).disposition ?? "indeterminate",
+        },
+        cleanup,
+      };
+    },
+  };
+  return { provider, commits, cleanup };
+}
+
+function makeAddNodesCommand() {
+  return Object.freeze({
+    action: SpatialSkeletonActions.addNodes,
+    label: "Controlled edit",
+    payload: Object.freeze({}),
+    getQueueInputRequirements: () => ({ required: [] }),
   });
+}
 
-  it("does not list a provisional ID whose skeleton is no longer shown", () => {
-    const state = new SpatialSkeletonEditSession();
+describe("skeleton edit session", () => {
+  describe("edit queue for a source", () => {
+    it("edits to one source share one edit queue, set up once", () => {
+      const createPlanner = vi.fn<
+        SpatialSkeletonEditPlannerProvider["createPlanner"]
+      >(() => makeRegistration());
+      const { state, layer, source } = makeEditQueueLayer({ createPlanner });
 
-    publishSplitOutputAlias(state, {
-      authoritative: false,
-      activeOwner: false,
+      const first = ensureSpatialSkeletonEditQueue(layer, source);
+      const second = ensureSpatialSkeletonEditQueue(layer, source);
+
+      expect(second).toBe(first);
+      expect(createPlanner).toHaveBeenCalledOnce();
+      expect(createPlanner.mock.calls[0]![0]).toMatchObject({ source });
+      expect(createPlanner.mock.calls[0]![0]).not.toHaveProperty("layer");
+      expect(createPlanner.mock.calls[0]![0].identities).toBeDefined();
+      expect(createPlanner.mock.calls[0]![0].provisionalIds).toBeDefined();
+      state.dispose();
     });
 
-    expect([...state.provisionalSegmentIds]).toEqual([]);
+    it("a source whose edit setup fails leaves the current edit queue working", () => {
+      const cleanup = vi.fn();
+      const currentProvider = {
+        createPlanner: () => makeRegistration(cleanup),
+      };
+      const { state, layer, source } = makeEditQueueLayer(currentProvider);
+      const current = ensureSpatialSkeletonEditQueue(layer, source);
+      const replacementError = new Error("provider setup failed");
+      const replacement = makeSource({
+        createPlanner: () => {
+          throw replacementError;
+        },
+      });
+
+      expect(() => ensureSpatialSkeletonEditQueue(layer, replacement)).toThrow(
+        replacementError,
+      );
+      expect(ensureSpatialSkeletonEditQueue(layer, source)).toBe(current);
+      expect(cleanup).not.toHaveBeenCalled();
+      state.dispose();
+    });
+
+    it("closing the edit queue runs the source's cleanup once", async () => {
+      const cleanup = vi.fn();
+      const { state, layer, source } = makeEditQueueLayer({
+        createPlanner: () => makeRegistration(cleanup),
+      });
+      ensureSpatialSkeletonEditQueue(layer, source);
+
+      expect(state.releaseEditQueue()).toBe(true);
+      expect(state.releaseEditQueue()).toBe(false);
+      await flushMicrotasks();
+      expect(cleanup).toHaveBeenCalledOnce();
+      state.dispose();
+    });
+
+    it.each([
+      [
+        "saved",
+        {
+          answer: (commit: HeldCommit) => commit.resolve({ ok: true }),
+          reloadRequiredReason: "committed-local-publication-failed",
+        },
+      ],
+      [
+        "lost",
+        {
+          answer: (commit: HeldCommit) =>
+            commit.reject(new Error("connection lost")),
+          reloadRequiredReason: "authority-indeterminate",
+        },
+      ],
+      [
+        "rejected",
+        {
+          answer: (commit: HeldCommit) =>
+            commit.reject(
+              Object.assign(new Error("not saved"), {
+                disposition: "rejected" as const,
+              }),
+            ),
+          reloadRequiredReason: undefined,
+        },
+      ],
+    ])(
+      "the old source's cleanup waits until the edit it was saving is known to be saved, rejected, or lost: %s",
+      async (_outcome, { answer, reloadRequiredReason }) => {
+        const { provider, commits, cleanup } = makeHeldCommitProvider();
+        const { state, layer, source } = makeEditQueueLayer(provider);
+        const queue = ensureSpatialSkeletonEditQueue(layer, source);
+        await state.executeEdit(makeAddNodesCommand(), { segments: [] });
+        await flushMicrotasks();
+        expect(commits).toHaveLength(1);
+
+        expect(state.releaseEditQueue()).toBe(true);
+        await flushMicrotasks();
+        expect(cleanup).not.toHaveBeenCalled();
+
+        answer(commits[0]!);
+        await queue.dispose();
+        expect(cleanup).toHaveBeenCalledOnce();
+        expect(state.getReloadRequired()?.reason).toBe(reloadRequiredReason);
+        state.dispose();
+      },
+    );
+
+    it("switching sources starts a new edit queue at once while the old source's cleanup waits for its unsaved edit", async () => {
+      const { provider, commits, cleanup } = makeHeldCommitProvider();
+      const { state, layer, source } = makeEditQueueLayer(provider);
+      const oldQueue = ensureSpatialSkeletonEditQueue(layer, source);
+      const execution = state.executeEdit(makeAddNodesCommand(), {
+        segments: [],
+      });
+      await execution;
+      await flushMicrotasks();
+      expect(commits).toHaveLength(1);
+
+      const replacementCleanup = vi.fn();
+      const replacementSource = makeSource({
+        createPlanner: () => makeRegistration(replacementCleanup),
+      });
+      const replacementQueue = ensureSpatialSkeletonEditQueue(
+        layer,
+        replacementSource,
+      );
+      expect(replacementQueue).not.toBe(oldQueue);
+      expect(cleanup).not.toHaveBeenCalled();
+      expect(ensureSpatialSkeletonEditQueue(layer, replacementSource)).toBe(
+        replacementQueue,
+      );
+
+      commits[0]!.resolve({ ok: true });
+      await oldQueue.dispose();
+
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(ensureSpatialSkeletonEditQueue(layer, replacementSource)).toBe(
+        replacementQueue,
+      );
+      state.dispose();
+      await flushMicrotasks();
+      expect(replacementCleanup).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ["no planner", undefined],
+      ["planner without createPlanner", { supportsAction: () => true }],
+    ])(
+      "a writable source without an edit planner cannot start editing: %s",
+      (_description, editPlannerProvider) => {
+        const { state, layer, source } =
+          makeEditQueueLayer(editPlannerProvider);
+        expect(() => ensureSpatialSkeletonEditQueue(layer, source)).toThrow(
+          SpatialSkeletonDatasourceContractError,
+        );
+        state.dispose();
+      },
+    );
+
+    it("a source that supplies its own queue state is rejected", () => {
+      const registration = makeRegistration();
+      const { state, layer, source } = makeEditQueueLayer({
+        createPlanner: () => ({ ...registration, queue: {} }) as any,
+      });
+      expect(() => ensureSpatialSkeletonEditQueue(layer, source)).toThrow(
+        /engine-owned field "queue"/,
+      );
+      state.dispose();
+    });
+
+    it.each<[string, PropertyDescriptor]>([
+      ["missing", { value: undefined }],
+      ["null", { value: null }],
+      ["a number", { value: 17 }],
+      [
+        "a throwing getter",
+        {
+          get() {
+            throw new Error("scope setup failed");
+          },
+        },
+      ],
+    ])(
+      "a source whose edit request scope is %s is rejected as a datasource error",
+      (_description, editRequestScope) => {
+        const registration = makeRegistration();
+        const editRequestAdapter = Object.defineProperty(
+          {
+            commit: registration.editRequestAdapter.commit,
+            classifyFailure: registration.editRequestAdapter.classifyFailure,
+          },
+          "editRequestScope",
+          { ...editRequestScope, enumerable: true },
+        ) as SpatialSkeletonEditPlannerRegistration["editRequestAdapter"];
+        const { state, layer, source } = makeEditQueueLayer({
+          createPlanner: () => ({ ...registration, editRequestAdapter }),
+        });
+        expect(() => ensureSpatialSkeletonEditQueue(layer, source)).toThrow(
+          SpatialSkeletonDatasourceContractError,
+        );
+        state.dispose();
+      },
+    );
+
+    it("the edit queue and Undo history hold 64 edits by default, or a configured number of at least one", () => {
+      const defaultState = new SpatialSkeletonEditSession();
+      expect(defaultState.editQueueCapacity).toBe(64);
+      expect(defaultState.commandHistory.capacity).toBe(64);
+
+      const smallState = new SpatialSkeletonEditSession({
+        editQueueCapacity: 3,
+      });
+      expect(smallState.editQueueCapacity).toBe(3);
+      expect(smallState.commandHistory.capacity).toBe(3);
+
+      expect(
+        () => new SpatialSkeletonEditSession({ editQueueCapacity: 0 }),
+      ).toThrow(RangeError);
+    });
+  });
+
+  describe("Reload required", () => {
+    it("Reload required ends edit mode, refuses Undo and Redo, survives a source reset, and keeps its first cause", async () => {
+      const state = new SpatialSkeletonEditSession();
+      state.editMode.value = true;
+      state.mergeMode.value = true;
+      state.splitMode.value = true;
+      state.setMergeAnchor(17n);
+      state.suppressSelectedNodeHighlight.value = true;
+      const versionBeforeReloadRequired = state.editQueueVersion.value;
+      const cause = new Error("ambiguous transport");
+
+      expect(
+        state.latchReloadRequired({
+          reason: "authority-indeterminate",
+          authority: "indeterminate",
+          intentId: 5,
+          cause,
+        }),
+      ).toBe(true);
+
+      const reloadRequired = state.getReloadRequired();
+      expect(reloadRequired).toEqual({
+        reason: "authority-indeterminate",
+        authority: "indeterminate",
+        intentId: 5,
+        cause,
+      });
+      expect(Object.isFrozen(reloadRequired)).toBe(true);
+      expect(state.editQueueVersion.value).toBe(
+        versionBeforeReloadRequired + 1,
+      );
+      expect(state.editMode.value).toBe(false);
+      expect(state.mergeMode.value).toBe(false);
+      expect(state.splitMode.value).toBe(false);
+      expect(state.mergeAnchorNodeId.value).toBeUndefined();
+      expect(state.suppressSelectedNodeHighlight.value).toBe(false);
+      expect(state.hasUnconfirmedEdits()).toBe(true);
+
+      expect(
+        state.latchReloadRequired({
+          reason: "committed-local-publication-failed",
+          authority: "committed",
+          intentId: 9,
+        }),
+      ).toBe(false);
+      expect(state.getReloadRequired()).toBe(reloadRequired);
+
+      expect(state.canUndoEdit()).toBe(false);
+      expect(state.canRedoEdit()).toBe(false);
+      const undo = state.undoLatestEdit();
+      await expect(undo).rejects.toBeInstanceOf(
+        SpatialSkeletonReloadRequiredError,
+      );
+      await expect(undo.settled).resolves.toMatchObject({
+        outcome: "unchanged",
+        reason: "not-started",
+      });
+
+      state.clearRuntimeState();
+      expect(state.getReloadRequired()).toBe(reloadRequired);
+      expect(() => state.assertEditingAllowed()).toThrow(
+        SpatialSkeletonReloadRequiredError,
+      );
+    });
+  });
+
+  describe("edit previews", () => {
+    it.each([
+      ["a node edit on a cached skeleton", "node edit"],
+      ["deleting a cached skeleton for good", "delete cached"],
+      ["deleting for good a skeleton that is not cached", "delete uncached"],
+    ] as const)(
+      "an edit preview changes nothing until it is applied, then shows in one redraw and cannot be applied twice: %s",
+      (_description, edit) => {
+        const state = new SpatialSkeletonEditSession();
+        state.replaceCachedSegmentSnapshots([
+          [11n, [{ nodeId: 1n, segmentId: 11n, position: [1, 2, 3] }]],
+          [17n, [{ nodeId: 2n, segmentId: 17n, position: [4, 5, 6] }]],
+        ]);
+        if (edit === "delete uncached") {
+          state.replaceCachedSegmentSnapshots([[11n, undefined]]);
+        }
+        const previous = state.getCachedSegmentSnapshotHandle(11n);
+        const revision = state.getCachedSegmentRevision(11n);
+        const untouched = state.getCachedSegmentSnapshotHandle(17n)!;
+        const display = state.spatialSkeletonDisplay.value;
+        const previewed =
+          edit === "node edit"
+            ? patchCompleteSkeleton(previous!.handle, [
+                {
+                  kind: "update",
+                  nodeId: 1n,
+                  changes: { position: [7, 8, 9] },
+                },
+              ])
+            : undefined;
+        const notifications = vi.fn();
+        state.spatialSkeletonDisplay.changed.add(notifications);
+
+        const prepared = prepareEditPreview(state, [[11n, previewed]], {
+          retiredSegmentIds:
+            previewed === undefined ? new Set([11n]) : undefined,
+        })!;
+        expect(state.getCachedSegmentSnapshotHandle(11n)).toBe(previous);
+        expect(state.getCachedSegmentRevision(11n)).toBe(revision);
+        expect(state.spatialSkeletonDisplay.value).toBe(display);
+        expect(notifications).not.toHaveBeenCalled();
+        expect(prepared.cacheRevisions.get(11n)).toBeGreaterThan(revision);
+        if (previewed !== undefined) {
+          expect(previewed.materializationCount).toBe(1);
+        }
+
+        state.runSpatialSkeletonDisplayTransaction(() => {
+          expect(
+            state.adoptPreparedSpatialSkeletonPreviewCachePublication(prepared),
+          ).toBe(true);
+        });
+        expect(state.getCachedSegmentRevision(11n)).toBe(
+          prepared.cacheRevisions.get(11n),
+        );
+        if (previewed === undefined) {
+          expect(state.getCachedNode(1n)).toBeUndefined();
+        } else {
+          expect(state.getCachedSegmentSnapshotHandle(11n)?.handle).toBe(
+            previewed,
+          );
+          expect(state.getCachedSegmentNodes(11n)).toBe(
+            previewed.materialize(),
+          );
+          expect(previewed.materializationCount).toBe(1);
+          expect(state.getCachedNode(1n)?.position).toEqual([7, 8, 9]);
+        }
+
+        state.finalizePreparedSpatialSkeletonPreviewCachePublication(prepared);
+        expect(notifications).toHaveBeenCalledTimes(1);
+        if (previewed === undefined) {
+          expect(state.getCachedSegmentSnapshotHandle(11n)).toBeUndefined();
+          expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([
+            11n,
+          ]);
+        }
+        expect(state.getCachedSegmentSnapshotHandle(17n)).toBe(untouched);
+        expect(state.getCachedSegmentRevision(17n)).toBe(
+          untouched.cacheRevision,
+        );
+        expect(() =>
+          state.adoptPreparedSpatialSkeletonPreviewCachePublication(prepared),
+        ).toThrow(/already adopted/);
+        expect(() =>
+          state.adoptPreparedSpatialSkeletonPreviewCachePublication(
+            {} as SpatialSkeletonPreparedPreviewCachePublication,
+          ),
+        ).toThrow(/belongs to another edit session/);
+      },
+    );
+
+    it.each<
+      [
+        string,
+        {
+          readonly editedSegmentId: bigint;
+          readonly preview: "node edit" | "delete for good";
+          readonly changed: "before prepare" | "after prepare";
+          readonly change: (state: SpatialSkeletonEditSession) => void;
+        },
+      ]
+    >([
+      [
+        "skeleton changed before the preview was prepared",
+        {
+          editedSegmentId: 11n,
+          preview: "node edit",
+          changed: "before prepare",
+          change: (state) =>
+            state.replaceCachedSegmentSnapshots([
+              [11n, [{ nodeId: 1n, segmentId: 11n, position: [7, 8, 9] }]],
+            ]),
+        },
+      ],
+      [
+        "skeleton changed after the preview was prepared",
+        {
+          editedSegmentId: 11n,
+          preview: "node edit",
+          changed: "after prepare",
+          change: (state) =>
+            state.replaceCachedSegmentSnapshots([
+              [11n, [{ nodeId: 1n, segmentId: 11n, position: [7, 8, 9] }]],
+            ]),
+        },
+      ],
+      [
+        "skeleton loaded after its deletion was prepared",
+        {
+          editedSegmentId: 29n,
+          preview: "delete for good",
+          changed: "after prepare",
+          change: (state) =>
+            state.replaceCachedSegmentSnapshots([
+              [29n, [{ nodeId: 3n, segmentId: 29n, position: [7, 8, 9] }]],
+            ]),
+        },
+      ],
+      [
+        "source reset after the preview was prepared",
+        {
+          editedSegmentId: 11n,
+          preview: "node edit",
+          changed: "after prepare",
+          change: (state) => state.clearRuntimeState(),
+        },
+      ],
+      [
+        "a different skeleton changed between prepare and apply",
+        {
+          editedSegmentId: 11n,
+          preview: "node edit",
+          changed: "after prepare",
+          change: (state) =>
+            state.replaceCachedSegmentSnapshots([
+              [17n, [{ nodeId: 2n, segmentId: 17n, position: [7, 8, 9] }]],
+            ]),
+        },
+      ],
+    ])(
+      "an edit preview made from an outdated skeleton changes nothing: %s",
+      (_description, { editedSegmentId, preview, changed, change }) => {
+        const state = new SpatialSkeletonEditSession();
+        state.replaceCachedSegmentSnapshots([
+          [11n, [{ nodeId: 1n, segmentId: 11n, position: [1, 2, 3] }]],
+          [17n, [{ nodeId: 2n, segmentId: 17n, position: [4, 5, 6] }]],
+        ]);
+        const expectedRevisions = getCachedSegmentRevisions(state, [
+          editedSegmentId,
+        ]);
+        const previewed =
+          preview === "node edit"
+            ? patchCompleteSkeleton(
+                state.getCachedSegmentSnapshotHandle(editedSegmentId)!.handle,
+                [
+                  {
+                    kind: "update",
+                    nodeId: 1n,
+                    changes: { attributes: { confidence: [70] } },
+                  },
+                ],
+              )
+            : undefined;
+
+        if (changed === "before prepare") change(state);
+        const prepared = prepareEditPreview(
+          state,
+          [[editedSegmentId, previewed]],
+          {
+            expectedRevisions,
+            retiredSegmentIds:
+              previewed === undefined ? new Set([editedSegmentId]) : undefined,
+          },
+        );
+        if (changed === "after prepare") change(state);
+        const handle = state.getCachedSegmentSnapshotHandle(editedSegmentId);
+        const nodes = state.getCachedSegmentNodes(editedSegmentId);
+        const revision = state.getCachedSegmentRevision(editedSegmentId);
+        const display = state.spatialSkeletonDisplay.value;
+
+        expect(applyEditPreview(state, prepared)).toBe(false);
+        expect(state.getCachedSegmentSnapshotHandle(editedSegmentId)).toBe(
+          handle,
+        );
+        expect(state.getCachedSegmentNodes(editedSegmentId)).toBe(nodes);
+        expect(state.getCachedSegmentRevision(editedSegmentId)).toBe(revision);
+        expect(state.spatialSkeletonDisplay.value).toBe(display);
+        if (changed === "before prepare") {
+          expect(prepared).toBeUndefined();
+          expect(previewed!.materializationCount).toBe(0);
+        }
+      },
+    );
+
+    it.each<[string, (state: SpatialSkeletonEditSession) => void, string]>([
+      [
+        "edit preview claims a node of another cached skeleton",
+        (state) =>
+          prepareEditPreview(state, [
+            [
+              11n,
+              createCompleteSkeleton([
+                { nodeId: 2n, segmentId: 11n, position: [9, 9, 9] },
+              ]),
+            ],
+          ]),
+        "node 2 is present in both segment 17 and segment 11",
+      ],
+      [
+        "one replacement puts a node in two skeletons",
+        (state) =>
+          state.replaceCachedSegmentSnapshots([
+            [11n, [{ nodeId: 3n, segmentId: 11n, position: [3, 3, 3] }]],
+            [17n, [{ nodeId: 3n, segmentId: 17n, position: [4, 4, 4] }]],
+          ]),
+        "node 3 is present in both segment 11 and segment 17",
+      ],
+      [
+        "replacement claims a node of a skeleton it does not touch",
+        (state) =>
+          state.replaceCachedSegmentSnapshots([
+            [11n, [{ nodeId: 2n, segmentId: 11n, position: [9, 9, 9] }]],
+          ]),
+        "node 2 is present in both segment 17 and segment 11",
+      ],
+    ])(
+      "a change that would put one node in two skeletons is refused and changes nothing: %s",
+      (_description, change, message) => {
+        const state = new SpatialSkeletonEditSession();
+        state.replaceCachedSegmentSnapshots([
+          [11n, [{ nodeId: 1n, segmentId: 11n, position: [1, 1, 1] }]],
+          [17n, [{ nodeId: 2n, segmentId: 17n, position: [2, 2, 2] }]],
+        ]);
+        const handle11 = state.getCachedSegmentSnapshotHandle(11n);
+        const handle17 = state.getCachedSegmentSnapshotHandle(17n);
+        const node1 = state.getCachedNode(1n);
+        const node2 = state.getCachedNode(2n);
+        const revisions = getCachedSegmentRevisions(state, [11n, 17n]);
+        const nodeDataVersion = state.nodeDataVersion.value;
+        const display = state.spatialSkeletonDisplay.value;
+
+        expect(() => change(state)).toThrow(message);
+        expect(state.getCachedSegmentSnapshotHandle(11n)).toBe(handle11);
+        expect(state.getCachedSegmentSnapshotHandle(17n)).toBe(handle17);
+        expect(state.getCachedNode(1n)).toBe(node1);
+        expect(state.getCachedNode(2n)).toBe(node2);
+        expect(state.getCachedNode(3n)).toBeUndefined();
+        expect(getCachedSegmentRevisions(state, [11n, 17n])).toEqual(revisions);
+        expect(state.nodeDataVersion.value).toBe(nodeDataVersion);
+        expect(state.spatialSkeletonDisplay.value).toBe(display);
+      },
+    );
+
+    it("a skeleton an edit deletes stays hidden through eviction until it is restored, reloaded, or the source resets", () => {
+      const state = new SpatialSkeletonEditSession();
+      const snapshot = createCompleteSkeleton([
+        { nodeId: 1n, segmentId: 17n, position: [1, 2, 3] },
+      ]);
+      adoptPreparedPreviewSnapshots(state, [[17n, snapshot]]);
+      state.evictInactiveSegmentNodes([]);
+      expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([]);
+      // Even an already-absent cache entry must record explicit removal.
+      adoptPreparedPreviewSnapshots(state, [[17n, undefined]], {
+        notify: false,
+      });
+      expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([
+        17n,
+      ]);
+      state.evictInactiveSegmentNodes([]);
+      expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([
+        17n,
+      ]);
+      adoptPreparedPreviewSnapshots(state, [[17n, snapshot]]);
+      expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([]);
+      adoptPreparedPreviewSnapshots(state, [[17n, undefined]]);
+      state.replaceCachedSegmentSnapshots([[17n, snapshot.materialize()]]);
+      expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([]);
+      adoptPreparedPreviewSnapshots(state, [[17n, undefined]]);
+      state.clearRuntimeState();
+      expect(state.spatialSkeletonDisplay.value.removedSegmentIds).toEqual([]);
+    });
+
+    it("deleting a skeleton for good cancels its download once the edit is applied, while other downloads continue", async () => {
+      const state = new SpatialSkeletonEditSession();
+      const retiredRead = deferred<SkeletonNode[]>();
+      const unrelatedRead = deferred<SkeletonNode[]>();
+      const signals = new Map<bigint, AbortSignal>();
+      const layer = {
+        fragmentSource: {
+          ...makeWholeSkeletonReads(
+            (id: bigint, options: { signal: AbortSignal }) => {
+              signals.set(id, options.signal);
+              // Deliberately ignore cancellation to exercise a late source result.
+              return (id === 17n ? retiredRead : unrelatedRead).promise;
+            },
+          ),
+        },
+      } as any;
+      const read = state.getFullSegmentNodes(layer, 17n, {
+        retainWhileInactive: true,
+      });
+      const other = state.getFullSegmentNodes(layer, 29n, {
+        retainWhileInactive: true,
+      });
+      const aborted = expect(read).rejects.toMatchObject({
+        name: "AbortError",
+      });
+      await flushMicrotasks();
+      const revisions = getCachedSegmentRevisions(state, [17n, 29n]);
+      const prepared = state.prepareSpatialSkeletonPreviewCachePublication({
+        snapshots: [[17n, undefined]],
+        expectedRevisions: revisions,
+        retiredSegmentIds: new Set([17n]),
+        activeStableOwners: [],
+        numericAliases: [],
+        provisionalNodeIds: [],
+        pendingEditIntentIdsToRemove: [],
+        notify: true,
+      })!;
+      expect(signals.get(17n)?.aborted).toBe(false);
+      expect(state.getCachedSegmentRevision(17n)).toBe(revisions.get(17n));
+      state.runSpatialSkeletonDisplayTransaction(() => {
+        expect(
+          state.adoptPreparedSpatialSkeletonPreviewCachePublication(prepared),
+        ).toBe(true);
+      });
+      expect(signals.get(17n)?.aborted).toBe(false);
+      state.finalizePreparedSpatialSkeletonPreviewCachePublication(prepared);
+      await aborted;
+      expect(signals.get(17n)?.aborted).toBe(true);
+      expect(signals.get(29n)?.aborted).toBe(false);
+      expect(state.getCachedSegmentRevision(17n)).toBeGreaterThan(
+        revisions.get(17n)!,
+      );
+      expect(state.getCachedSegmentRevision(29n)).toBe(revisions.get(29n));
+
+      retiredRead.resolve([
+        { nodeId: 1n, segmentId: 17n, position: [1, 2, 3] },
+      ]);
+      await flushMicrotasks();
+      expect(state.getCachedNode(1n)).toBeUndefined();
+      expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
+      unrelatedRead.resolve([
+        { nodeId: 2n, segmentId: 29n, position: [4, 5, 6] },
+      ]);
+      await expect(other).resolves.toMatchObject([{ nodeId: 2n }]);
+      expect(state.getCachedNode(2n)).toBeDefined();
+    });
+
+    it("an edit that deletes a skeleton for good must remove it from the preview", () => {
+      const state = new SpatialSkeletonEditSession();
+      const snapshot = createCompleteSkeleton([
+        { nodeId: 1n, segmentId: 17n, position: [1, 2, 3] },
+      ]);
+      const revision = state.getCachedSegmentRevision(17n);
+      const display = state.spatialSkeletonDisplay.value;
+      for (const snapshots of [[], [[17n, snapshot]]] as const) {
+        expect(() =>
+          state.prepareSpatialSkeletonPreviewCachePublication({
+            snapshots,
+            expectedRevisions: getCachedSegmentRevisions(state, [17n]),
+            retiredSegmentIds: new Set([17n]),
+            activeStableOwners: [],
+            numericAliases: [],
+            provisionalNodeIds: [],
+            pendingEditIntentIdsToRemove: [],
+            notify: true,
+          }),
+        ).toThrow(/Retired spatial skeleton segment 17 must be removed/);
+      }
+      expect(state.getCachedSegmentRevision(17n)).toBe(revision);
+      expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
+      expect(state.spatialSkeletonDisplay.value).toBe(display);
+    });
+
+    it("a complete preview replaces its Preparing marker in a single redraw", () => {
+      const state = new SpatialSkeletonEditSession();
+      state.addSpatialSkeletonPendingEdit({
+        intentId: 9,
+        sequence: 9,
+        direction: "execute",
+        kind: "split",
+        lifecycle: "preparing",
+        segmentIds: [11n],
+        cutNodeId: 101n,
+      });
+      const handle = createCompleteSkeleton([
+        {
+          nodeId: 101n,
+          segmentId: 11n,
+          position: new Float32Array([1, 2, 3]),
+        },
+      ]);
+      const observed: Array<{
+        revision: number;
+        pendingEdits: number;
+        exactTopology: unknown;
+      }> = [];
+      state.spatialSkeletonDisplay.changed.add(() => {
+        const display = state.spatialSkeletonDisplay.value;
+        observed.push({
+          revision: display.revision,
+          pendingEdits: display.pendingEdits.length,
+          exactTopology: state.getCachedSegmentSnapshotHandle(11n)?.handle,
+        });
+      });
+      let nodeNotifications = 0;
+      state.nodeDataVersion.changed.add(() => ++nodeNotifications);
+
+      const resultSegment = {
+        kind: "segment" as const,
+        stableId: "result",
+      };
+      const prepared = state.prepareSpatialSkeletonPreviewCachePublication({
+        snapshots: [[11n, handle]],
+        expectedRevisions: getCachedSegmentRevisions(state, [11n]),
+        activeStableOwners: [{ segmentId: 11n, stableHandle: resultSegment }],
+        numericAliases: [
+          { stableHandle: resultSegment, segmentId: 11n, authoritative: true },
+        ],
+        provisionalNodeIds: [],
+        pendingEditIntentIdsToRemove: [9],
+        notify: true,
+      })!;
+      state.runSpatialSkeletonDisplayTransaction(() => {
+        expect(
+          state.adoptPreparedSpatialSkeletonPreviewCachePublication(prepared),
+        ).toBe(true);
+      });
+      state.finalizePreparedSpatialSkeletonPreviewCachePublication(prepared);
+
+      expect(observed).toEqual([
+        {
+          revision: 2,
+          pendingEdits: 0,
+          exactTopology: handle,
+        },
+      ]);
+      expect(nodeNotifications).toBe(1);
+      expect(state.spatialSkeletonDisplay.value.activeStableOwners).toEqual([
+        expect.objectContaining({
+          segmentId: 11n,
+          stableHandle: { kind: "segment", stableId: "result" },
+        }),
+      ]);
+    });
+
+    describe("provisional skeletons", () => {
+      it("lists a skeleton as provisional until its creating edit is confirmed", () => {
+        const state = new SpatialSkeletonEditSession();
+
+        publishSplitOutputAlias(state, {
+          authoritative: false,
+          activeOwner: true,
+        });
+        expect([...state.provisionalSegmentIds]).toEqual([17n]);
+
+        publishSplitOutputAlias(state, {
+          authoritative: true,
+          activeOwner: true,
+        });
+        expect([...state.provisionalSegmentIds]).toEqual([]);
+      });
+
+      it("does not list a provisional ID whose skeleton is no longer shown", () => {
+        const state = new SpatialSkeletonEditSession();
+
+        publishSplitOutputAlias(state, {
+          authoritative: false,
+          activeOwner: false,
+        });
+
+        expect([...state.provisionalSegmentIds]).toEqual([]);
+      });
+    });
+  });
+
+  describe("queued-edit markers", () => {
+    it("queued-edit markers are listed in edit order and redraw on each add, remove and clear", () => {
+      const state = new SpatialSkeletonEditSession();
+      let notifications = 0;
+      state.spatialSkeletonDisplay.changed.add(() => {
+        notifications += 1;
+      });
+      const capturedPosition = new Float32Array([1, 2, 3]);
+
+      expect(
+        state.addSpatialSkeletonPendingEdit({
+          intentId: 1,
+          sequence: 20,
+          direction: "execute",
+          kind: "merge",
+          lifecycle: "preparing",
+          segmentIds: [11n, 12n],
+          endpointNodeIds: [101n, 102n],
+          lastKnownPositions: [{ nodeId: 101n, position: capturedPosition }],
+        }),
+      ).toBe(true);
+      capturedPosition[0] = 99;
+      expect(
+        state.spatialSkeletonDisplay.value.pendingEdits[0]
+          .lastKnownPositions?.[0].position[0],
+      ).toBe(1);
+
+      expect(
+        state.addSpatialSkeletonPendingEdit({
+          intentId: 2,
+          sequence: 10,
+          direction: "undo",
+          kind: "restore",
+          lifecycle: "preparing",
+          segmentIds: [17n],
+          nodeId: 202n,
+        }),
+      ).toBe(true);
+      expect(
+        state.spatialSkeletonDisplay.value.pendingEdits.map(
+          ({ intentId }) => intentId,
+        ),
+      ).toEqual([2, 1]);
+      expect(state.removeSpatialSkeletonPendingEdit(1)).toBe(true);
+      expect(
+        state.spatialSkeletonDisplay.value.pendingEdits.map(
+          ({ intentId }) => intentId,
+        ),
+      ).toEqual([2]);
+      expect(state.clearSpatialSkeletonPendingEdits()).toBe(true);
+      expect(state.spatialSkeletonDisplay.value.pendingEdits).toEqual([]);
+      expect(notifications).toBe(4);
+    });
+  });
+
+  describe("cached skeletons", () => {
+    it("a split moves nodes to the new skeleton in one notification, and the caller's arrays cannot change the cache later", () => {
+      const state = new SpatialSkeletonEditSession();
+      const originalNodes = [
+        {
+          nodeId: 1n,
+          segmentId: 11n,
+          position: new Float32Array([1, 1, 1]),
+          parentNodeId: undefined,
+        },
+        {
+          nodeId: 2n,
+          segmentId: 11n,
+          position: new Float32Array([2, 2, 2]),
+          parentNodeId: 1n,
+        },
+        {
+          nodeId: 3n,
+          segmentId: 11n,
+          position: new Float32Array([3, 3, 3]),
+          parentNodeId: 2n,
+        },
+      ];
+      state.replaceCachedSegmentSnapshots([[11n, originalNodes] as const], {
+        notify: false,
+      });
+
+      // Replacement clones keep the caller's immutable input independent.
+      (state.getCachedNode(2n)!.position as Float32Array)[0] = 99;
+      expect(originalNodes[1].position).toEqual(new Float32Array([2, 2, 2]));
+
+      const splitRoot = {
+        ...state.getCachedNode(2n)!,
+        segmentId: 999n,
+        position: new Float32Array([2, 2, 2]),
+        parentNodeId: undefined,
+      };
+      const notificationSnapshots: unknown[] = [];
+      state.nodeDataVersion.changed.add(() => {
+        notificationSnapshots.push({
+          originalNodeIds: state
+            .getCachedSegmentNodes(11n)
+            ?.map((node) => node.nodeId),
+          splitNodeIds: state
+            .getCachedSegmentNodes(17n)
+            ?.map((node) => node.nodeId),
+          splitRootSegmentId: state.getCachedNode(2n)?.segmentId,
+        });
+      });
+
+      expect(
+        state.replaceCachedSegmentSnapshots([
+          [11n, [state.getCachedNode(1n)!]] as const,
+          [
+            17n,
+            [
+              splitRoot,
+              {
+                ...state.getCachedNode(3n)!,
+                segmentId: 999n,
+              },
+            ],
+          ] as const,
+        ]),
+      ).toBe(true);
+
+      expect(notificationSnapshots).toEqual([
+        {
+          originalNodeIds: [1n],
+          splitNodeIds: [2n, 3n],
+          splitRootSegmentId: 17n,
+        },
+      ]);
+      expect(state.getCachedNode(3n)).toBe(
+        state.getCachedSegmentNodes(17n)?.[1],
+      );
+      expect(state.getCachedNode(2n)?.segmentId).toBe(17n);
+
+      // Replacement inputs are cloned and cannot mutate the live cache later.
+      splitRoot.position[0] = 123;
+      expect(state.getCachedNode(2n)?.position).toEqual(
+        new Float32Array([2, 2, 2]),
+      );
+
+      expect(
+        state.replaceCachedSegmentSnapshots([
+          [11n, originalNodes] as const,
+          [17n, undefined] as const,
+        ]),
+      ).toBe(true);
+      expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
+      expect(state.getCachedNode(2n)?.segmentId).toBe(11n);
+      expect(state.getCachedNode(2n)?.position).toEqual(
+        new Float32Array([2, 2, 2]),
+      );
+    });
+
+    it("a skeleton known to have no nodes differs from one that is not loaded", () => {
+      const state = new SpatialSkeletonEditSession();
+
+      expect(state.getCachedSegmentNodes(21n)).toBeUndefined();
+      expect(
+        state.replaceCachedSegmentSnapshots([[21n, []] as const], {
+          notify: false,
+        }),
+      ).toBe(true);
+      expect(state.getCachedSegmentNodes(21n)).toEqual([]);
+
+      expect(
+        state.replaceCachedSegmentSnapshots([[21n, undefined]], {
+          notify: false,
+        }),
+      ).toBe(true);
+      expect(state.getCachedSegmentNodes(21n)).toBeUndefined();
+      expect(
+        state.replaceCachedSegmentSnapshots([[21n, undefined]], {
+          notify: false,
+        }),
+      ).toBe(false);
+    });
+
+    it("replacing one skeleton does not walk the nodes of other cached skeletons", () => {
+      const state = new SpatialSkeletonEditSession();
+      state.replaceCachedSegmentSnapshots(
+        [
+          [
+            11n,
+            [
+              {
+                nodeId: 1n,
+                segmentId: 11n,
+                position: new Float32Array([1, 1, 1]),
+              },
+            ],
+          ] as const,
+          [
+            13n,
+            [
+              {
+                nodeId: 2n,
+                segmentId: 13n,
+                position: new Float32Array([2, 2, 2]),
+              },
+              {
+                nodeId: 3n,
+                segmentId: 13n,
+                position: new Float32Array([3, 3, 3]),
+                parentNodeId: 2n,
+              },
+            ],
+          ] as const,
+        ],
+        { notify: false },
+      );
+      const unaffectedNodes = state.getCachedSegmentNodes(13n)!;
+      const unaffectedNode = state.getCachedNode(2n);
+      const iterateUnaffected = vi.fn((): IterableIterator<SkeletonNode> => {
+        throw new Error("unaffected segment was iterated");
+      });
+      Object.defineProperty(unaffectedNodes, Symbol.iterator, {
+        configurable: true,
+        value: iterateUnaffected,
+      });
+
+      expect(
+        state.replaceCachedSegmentSnapshots([
+          [
+            11n,
+            [
+              {
+                nodeId: 1n,
+                segmentId: 11n,
+                position: new Float32Array([4, 5, 6]),
+              },
+            ],
+          ],
+        ]),
+      ).toBe(true);
+
+      expect(iterateUnaffected).not.toHaveBeenCalled();
+      expect(state.getCachedNode(2n)).toBe(unaffectedNode);
+      expect(state.getCachedNode(3n)?.segmentId).toBe(13n);
+      expect(state.getCachedNode(1n)?.position).toEqual(
+        new Float32Array([4, 5, 6]),
+      );
+    });
+
+    it("a cache replacement based on an outdated skeleton is refused", () => {
+      const state = new SpatialSkeletonEditSession();
+      state.replaceCachedSegmentSnapshots(
+        [
+          [
+            11n,
+            [
+              {
+                nodeId: 5n,
+                segmentId: 11n,
+                position: new Float32Array([1, 2, 3]),
+              },
+            ],
+          ] as const,
+        ],
+        { notify: false },
+      );
+      const expectedRevisions = getCachedSegmentRevisions(state, [11n]);
+      expect(
+        state.replaceCachedSegmentSnapshots([
+          [
+            11n,
+            [
+              {
+                nodeId: 5n,
+                segmentId: 11n,
+                position: new Float32Array([4, 5, 6]),
+              },
+            ],
+          ],
+        ]),
+      ).toBe(true);
+      const previewRevision = state.getCachedSegmentRevision(11n);
+
+      expect(
+        state.replaceCachedSegmentSnapshots(
+          [
+            [
+              11n,
+              [
+                {
+                  nodeId: 5n,
+                  segmentId: 11n,
+                  position: new Float32Array([7, 8, 9]),
+                },
+              ],
+            ] as const,
+          ],
+          { expectedRevisions },
+        ),
+      ).toBe(false);
+      expect(state.getCachedNode(5n)?.position).toEqual(
+        new Float32Array([4, 5, 6]),
+      );
+      expect(state.getCachedSegmentRevision(11n)).toBe(previewRevision);
+    });
+
+    it("a download that finishes after a newer edit returns its nodes but does not overwrite the edit", async () => {
+      const state = new SpatialSkeletonEditSession();
+      let receivedSignal: AbortSignal | undefined;
+      let resolveFetch: ((nodes: SkeletonNode[]) => void) | undefined;
+      const getSkeleton = vi.fn(
+        (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
+          new Promise<SkeletonNode[]>((resolve, reject) => {
+            receivedSignal = options?.signal;
+            resolveFetch = resolve;
+            options?.signal?.addEventListener(
+              "abort",
+              () => reject(options.signal?.reason),
+              { once: true },
+            );
+          }),
+      );
+      const skeletonLayer = {
+        fragmentSource: {
+          ...makeWholeSkeletonReads(getSkeleton),
+        },
+      } as any;
+      const pending = state.getFullSegmentNodes(skeletonLayer, 11n, {
+        retainWhileInactive: true,
+      });
+      await flushMicrotasks();
+
+      state.replaceCachedSegmentSnapshots(
+        [
+          [
+            11n,
+            [
+              {
+                nodeId: 5n,
+                segmentId: 11n,
+                position: new Float32Array([4, 5, 6]),
+              },
+            ],
+          ] as const,
+        ],
+        { notify: false },
+      );
+      expect(receivedSignal?.aborted).toBe(false);
+      expect(getSkeleton).toHaveBeenCalledTimes(1);
+
+      resolveFetch?.([
+        {
+          nodeId: 5n,
+          segmentId: 11n,
+          position: new Float32Array([7, 8, 9]),
+        },
+      ]);
+      await expect(pending).resolves.toEqual([
+        {
+          nodeId: 5n,
+          segmentId: 11n,
+          position: new Float32Array([7, 8, 9]),
+          parentNodeId: undefined,
+          description: undefined,
+        },
+      ]);
+      expect(state.getCachedNode(5n)?.position).toEqual(
+        new Float32Array([4, 5, 6]),
+      );
+    });
+
+    it("a source reset forgets loaded skeletons, the dragged node's position and queued-edit markers", () => {
+      const state = new SpatialSkeletonEditSession();
+      state.replaceCachedSegmentSnapshots(
+        [
+          [
+            11n,
+            [
+              {
+                nodeId: 5n,
+                segmentId: 11n,
+                position: new Float32Array([1, 2, 3]),
+              },
+            ],
+          ],
+        ],
+        { notify: false },
+      );
+      state.setPendingNodePosition(5n, [4, 5, 6]);
+      state.addSpatialSkeletonPendingEdit({
+        intentId: 1,
+        sequence: 1,
+        direction: "execute",
+        kind: "reroot",
+        lifecycle: "preparing",
+        segmentIds: [11n],
+        rootNodeId: 101n,
+      });
+      const nodeDataVersion = state.nodeDataVersion.value;
+      const pendingNodePositionVersion = state.pendingNodePositionVersion.value;
+
+      expect(state.clearRuntimeState()).toBe(true);
+      expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
+      expect(state.getCachedNode(5n)).toBeUndefined();
+      expect(state.getPendingNodePosition(5n)).toBeUndefined();
+      expect(state.spatialSkeletonDisplay.value.pendingEdits).toEqual([]);
+      expect(state.nodeDataVersion.value).toBe(nodeDataVersion + 1);
+      expect(state.pendingNodePositionVersion.value).toBe(
+        pendingNodePositionVersion + 1,
+      );
+    });
+
+    it("evicting inactive skeletons keeps the ones an unsaved edit is showing", () => {
+      const state = new SpatialSkeletonEditSession();
+      state.replaceCachedSegmentSnapshots([
+        [
+          11n,
+          [
+            {
+              nodeId: 5n,
+              segmentId: 11n,
+              position: new Float32Array([1, 2, 3]),
+            },
+          ],
+        ],
+        [
+          17n,
+          [
+            {
+              nodeId: 7n,
+              segmentId: 17n,
+              position: new Float32Array([4, 5, 6]),
+            },
+          ],
+        ],
+      ]);
+      (state as any).editQueue = {
+        canUndo: () => false,
+        canRedo: () => false,
+        hasUnconfirmedActions: () => true,
+        getProtectedPreviewSegmentIds: () => [11n],
+        undoLatest: () => resolvedExecution(false),
+        redoLatest: () => resolvedExecution(false),
+      };
+
+      expect(state.evictInactiveSegmentNodes([])).toBe(true);
+      expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
+      expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
+    });
+
+    it("a download of a skeleton that a pending edit owns updates the edit preview instead of the cache", () => {
+      const state = new SpatialSkeletonEditSession();
+      const publishAuthoritativeRead = vi.fn(() => true);
+      (state as any).editPreview = { publishAuthoritativeRead };
+      (state as any).editQueue = {
+        ownsAuthoritativeReadSegment: (segmentId: bigint) => segmentId === 17n,
+      };
+
+      expect(
+        (state as any).publishAuthoritativeReadSnapshots(
+          new Map([
+            [
+              11n,
+              [
+                {
+                  nodeId: 101n,
+                  segmentId: 11n,
+                  position: new Float32Array([1, 2, 3]),
+                },
+              ],
+            ],
+          ]),
+          { expectedRevisions: new Map([[11n, 0]]) },
+        ),
+      ).toBe(true);
+      expect(publishAuthoritativeRead).not.toHaveBeenCalled();
+      expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
+
+      expect(
+        (state as any).publishAuthoritativeReadSnapshots(
+          new Map([
+            [
+              17n,
+              [
+                {
+                  nodeId: 202n,
+                  segmentId: 17n,
+                  position: new Float32Array([4, 5, 6]),
+                },
+              ],
+            ],
+          ]),
+          { expectedRevisions: new Map([[17n, 0]]) },
+        ),
+      ).toBe(true);
+      expect(publishAuthoritativeRead).toHaveBeenCalledTimes(1);
+      expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
+    });
+  });
+
+  describe("inputs for an edit", () => {
+    it("an edit reads its node from the current inspected skeleton and finds nothing for a missing node or skeleton", () => {
+      const state = new SpatialSkeletonEditSession();
+      state.replaceCachedSegmentSnapshots(
+        [
+          [
+            11n,
+            [
+              {
+                nodeId: 5n,
+                segmentId: 11n,
+                position: new Float32Array([1, 2, 3]),
+              },
+            ],
+          ],
+        ],
+        { notify: false },
+      );
+
+      const inspected = state.tryAcquireInputReference({
+        segmentId: 11n,
+        nodeId: 5n,
+      });
+      expect(inspected?.snapshot).toEqual(
+        state.getCachedSegmentSnapshotHandle(11n),
+      );
+      expect(inspected?.snapshot.handle.getNode(5n)?.segmentId).toBe(11n);
+      inspected?.release();
+      expect(
+        state.tryAcquireInputReference({
+          segmentId: 11n,
+          nodeId: 6n,
+        }),
+      ).toBeUndefined();
+      expect(
+        state.tryAcquireInputReference({
+          segmentId: 17n,
+          nodeId: 5n,
+        }),
+      ).toBeUndefined();
+      expect(() =>
+        state.tryAcquireInputReference({
+          segmentId: 11n,
+          nodeId: 0n,
+        }),
+      ).toThrowError("Invalid spatial skeleton node id: 0");
+      expect(() =>
+        state.tryAcquireInputReference({
+          segmentId: 0n,
+        }),
+      ).toThrowError("Invalid spatial skeleton segment id: 0");
+    });
+
+    it("keeps a snapshot available until every input reference is released", () => {
+      const state = new SpatialSkeletonEditSession();
+      state.replaceCachedSegmentSnapshots(
+        [
+          [
+            11n,
+            [
+              {
+                nodeId: 5n,
+                segmentId: 11n,
+                position: new Float32Array([1, 2, 3]),
+              },
+            ],
+          ],
+          [
+            17n,
+            [
+              {
+                nodeId: 7n,
+                segmentId: 17n,
+                position: new Float32Array([4, 5, 6]),
+              },
+            ],
+          ],
+        ],
+        { notify: false },
+      );
+      const requirement = {
+        segmentId: 11n,
+        nodeId: 5n,
+      } as const;
+      const firstInput = state.tryAcquireInputReference(requirement)!;
+      const secondInput = state.acquireInputReference(
+        requirement,
+        SpatialSkeletonActions.moveNodes,
+      );
+
+      expect(firstInput.isCurrent()).toBe(true);
+      expect(secondInput.isCurrent()).toBe(true);
+      expect(state.evictInactiveSegmentNodes([])).toBe(true);
+      expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
+      expect(state.getCachedSegmentNodes(17n)).toBeUndefined();
+
+      firstInput.release();
+      firstInput.release();
+      expect(firstInput.isCurrent()).toBe(false);
+      expect(state.evictInactiveSegmentNodes([])).toBe(false);
+      expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
+
+      secondInput.release();
+      expect(state.evictInactiveSegmentNodes([])).toBe(true);
+      expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
+    });
+
+    it("an edit's input goes out of date when its skeleton changes and stops keeping it cached", () => {
+      const state = new SpatialSkeletonEditSession();
+      state.replaceCachedSegmentSnapshots(
+        [
+          [
+            11n,
+            [
+              {
+                nodeId: 5n,
+                segmentId: 11n,
+                position: new Float32Array([1, 2, 3]),
+              },
+            ],
+          ],
+        ],
+        { notify: false },
+      );
+      const inputReference = state.acquireInputReference({
+        segmentId: 11n,
+        nodeId: 5n,
+      });
+
+      expect(
+        state.replaceCachedSegmentSnapshots([
+          [
+            11n,
+            [
+              {
+                nodeId: 5n,
+                segmentId: 11n,
+                position: new Float32Array([4, 5, 6]),
+              },
+            ],
+          ],
+        ]),
+      ).toBe(true);
+      expect(inputReference.isCurrent()).toBe(false);
+      expect(state.evictInactiveSegmentNodes([])).toBe(true);
+      expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
+      inputReference.release();
+    });
+
+    it("an edit on an uninspected skeleton or a missing node fails with a message naming what to inspect, without downloading", () => {
+      const state = new SpatialSkeletonEditSession();
+      const coldRequirement = {
+        segmentId: 11n,
+        nodeId: 5n,
+      } as const;
+
+      expect(() =>
+        state.acquireInputReference(
+          coldRequirement,
+          SpatialSkeletonActions.moveNodes,
+        ),
+      ).toThrowError(SpatialSkeletonInspectionRequiredError);
+      try {
+        state.acquireInputReference(
+          coldRequirement,
+          SpatialSkeletonActions.moveNodes,
+        );
+      } catch (error) {
+        expect(error).toMatchObject({
+          reason: "snapshot-unavailable",
+          requirement: coldRequirement,
+        });
+        expect((error as Error).message).toBe(
+          "Inspect skeleton 11 before node movement.",
+        );
+      }
+
+      state.replaceCachedSegmentSnapshots([[11n, []]], { notify: false });
+      try {
+        state.acquireInputReference(coldRequirement);
+      } catch (error) {
+        expect(error).toMatchObject({ reason: "node-unavailable" });
+        expect((error as Error).message).toContain(
+          "Node 5 is not present in inspected skeleton 11.",
+        );
+      }
+    });
+  });
+
+  describe("dragged node position", () => {
+    it("only the dragged node has a pending position, under the ID picked when the drag began", () => {
+      const state = new SpatialSkeletonEditSession();
+      expect(state.setPendingNodePosition(5n, [1, 2, 3])).toBe(true);
+      expect(state.setPendingNodePosition(5n, [1, 2, 3])).toBe(false);
+      expect(Array.from(state.getPendingNodePosition(5n)!)).toEqual([1, 2, 3]);
+
+      // Pointer events keep reporting the originally picked id if that identity
+      // is remapped mid-drag, so updates preserve the active identity.
+      expect(state.setPendingNodePosition(6n, [4, 5, 6])).toBe(true);
+      expect(Array.from(state.getPendingNodePosition(5n)!)).toEqual([4, 5, 6]);
+      expect(state.getPendingNodePosition(6n)).toBeUndefined();
+      expect([...state.getPendingNodeIds()]).toEqual([5n]);
+      expect(state.clearPendingNodePositions()).toBe(true);
+      expect(state.setPendingNodePosition(6n, [7, 8, 9])).toBe(true);
+      expect(state.clearPendingNodePositions()).toBe(true);
+      expect([...state.getPendingNodeIds()]).toEqual([]);
+    });
+
+    it("the dragged node keeps its position when the server renumbers it", () => {
+      const state = new SpatialSkeletonEditSession();
+
+      state.setPendingNodePosition(1_000_000_000n, [9, 9, 9]);
+      const version = state.pendingNodePositionVersion.value;
+
+      expect(
+        state.remapPendingNodePositions(new Map([[1_000_000_000n, 20n]])),
+      ).toBe(true);
+      expect(state.pendingNodePositionVersion.value).toBe(version + 1);
+      expect(state.getPendingNodePosition(1_000_000_000n)).toBeUndefined();
+      expect(Array.from(state.getPendingNodePosition(20n)!)).toEqual([9, 9, 9]);
+      expect(state.setPendingNodePosition(1_000_000_000n, [10, 10, 10])).toBe(
+        true,
+      );
+      expect(state.getPendingNodePosition(1_000_000_000n)).toBeUndefined();
+      expect(Array.from(state.getPendingNodePosition(20n)!)).toEqual([
+        10, 10, 10,
+      ]);
+    });
+  });
+
+  describe("source capabilities", () => {
+    it("supports confidence editing for a source that does not list its confidence values", () => {
+      const source = {
+        ...makeEditableSourceCommands(),
+        editNodeConfidenceCommand: makeCommandFactory(
+          SpatialSkeletonActions.editNodeConfidence,
+        ),
+        getSkeletonManifest: async () => ({ fragmentKeys: [] }),
+        getSkeletonFragment: async () => ({ nodes: [], edges: [] }),
+      };
+
+      expect(
+        editableSpatiallyIndexedSkeletonSourceSupportsAction(
+          source as any,
+          SpatialSkeletonActions.addNodes,
+        ),
+      ).toBe(true);
+      expect(
+        editableSpatiallyIndexedSkeletonSourceSupportsAction(
+          source as any,
+          SpatialSkeletonActions.editNodeConfidence,
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe("skeleton downloads", () => {
+    it("evicting a skeleton cancels its pending download, and a late answer is not cached", async () => {
+      const state = new SpatialSkeletonEditSession();
+      let receivedSignal: AbortSignal | undefined;
+      let resolveFetch: ((nodes: SkeletonNode[]) => void) | undefined;
+      const getSkeleton = vi.fn(
+        (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
+          new Promise<SkeletonNode[]>((resolve) => {
+            receivedSignal = options?.signal;
+            resolveFetch = resolve;
+          }),
+      );
+      const pending = state
+        .getFullSegmentNodes(
+          {
+            fragmentSource: {
+              ...makeWholeSkeletonReads(getSkeleton),
+            },
+          } as any,
+          11n,
+        )
+        .catch((error) => error);
+      await flushMicrotasks();
+
+      expect(receivedSignal?.aborted).toBe(false);
+      expect(state.evictInactiveSegmentNodes([])).toBe(false);
+      expect(receivedSignal?.aborted).toBe(true);
+      resolveFetch?.([
+        {
+          nodeId: 5n,
+          segmentId: 11n,
+          position: new Float32Array([1, 2, 3]),
+        },
+      ]);
+      await expect(pending).resolves.toMatchObject({ name: "AbortError" });
+      await flushMicrotasks();
+      expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
+      expect(state.getCachedNode(5n)).toBeUndefined();
+    });
+
+    it("an edit that stops waiting for a skeleton download cancels it, even if the source ignores cancellation", async () => {
+      const state = new SpatialSkeletonEditSession();
+      const owner = {};
+      let receivedSignal: AbortSignal | undefined;
+      const getSkeleton = vi.fn(
+        (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
+          new Promise<never>(() => {
+            receivedSignal = options?.signal;
+            // Deliberately ignore AbortSignal. The manager's owner-release race
+            // must still settle without cooperation from the source.
+          }),
+      );
+      const skeletonLayer = {
+        fragmentSource: {
+          ...makeWholeSkeletonReads(getSkeleton),
+        },
+      } as any;
+      const outcome = state
+        .getFullSegmentNodes(skeletonLayer, 11n, {
+          requestOwner: owner,
+          retainWhileInactive: true,
+        })
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      await flushMicrotasks();
+
+      expect(receivedSignal?.aborted).toBe(false);
+      expect(state.releaseFullSegmentNodeFetchOwner(owner)).toBe(true);
+      expect(receivedSignal?.aborted).toBe(true);
+      await expect(outcome).resolves.toMatchObject({ name: "AbortError" });
+      expect(getSkeleton).toHaveBeenCalledTimes(1);
+      expect(state.releaseFullSegmentNodeFetchOwner(owner)).toBe(false);
+    });
+
+    it("a download two edits wait for continues until both stop waiting", async () => {
+      const state = new SpatialSkeletonEditSession();
+      const firstOwner = {};
+      const secondOwner = {};
+      let receivedSignal: AbortSignal | undefined;
+      const getSkeleton = vi.fn(
+        (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
+          new Promise<never>((_resolve, reject) => {
+            receivedSignal = options?.signal;
+            options?.signal?.addEventListener(
+              "abort",
+              () => reject(options.signal?.reason),
+              { once: true },
+            );
+          }),
+      );
+      const skeletonLayer = {
+        fragmentSource: {
+          ...makeWholeSkeletonReads(getSkeleton),
+        },
+      } as any;
+      const firstOutcome = state
+        .getFullSegmentNodes(skeletonLayer, 11n, {
+          requestOwner: firstOwner,
+        })
+        .catch((error) => error);
+      const secondOutcome = state
+        .getFullSegmentNodes(skeletonLayer, 11n, {
+          requestOwner: secondOwner,
+        })
+        .catch((error) => error);
+      await flushMicrotasks();
+
+      expect(getSkeleton).toHaveBeenCalledTimes(1);
+      expect(state.releaseFullSegmentNodeFetchOwner(firstOwner)).toBe(true);
+      expect(receivedSignal?.aborted).toBe(false);
+      expect(state.releaseFullSegmentNodeFetchOwner(secondOwner)).toBe(true);
+      expect(receivedSignal?.aborted).toBe(true);
+      await expect(firstOutcome).resolves.toMatchObject({ name: "AbortError" });
+      await expect(secondOutcome).resolves.toMatchObject({
+        name: "AbortError",
+      });
+    });
+
+    it("a download the display also needs continues after the edit stops waiting and is cached", async () => {
+      const state = new SpatialSkeletonEditSession();
+      const owner = {};
+      let receivedSignal: AbortSignal | undefined;
+      let resolveFetch: ((nodes: SkeletonNode[]) => void) | undefined;
+      const getSkeleton = vi.fn(
+        (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
+          new Promise<SkeletonNode[]>((resolve, reject) => {
+            receivedSignal = options?.signal;
+            resolveFetch = resolve;
+            options?.signal?.addEventListener(
+              "abort",
+              () => reject(options.signal?.reason),
+              { once: true },
+            );
+          }),
+      );
+      const skeletonLayer = {
+        fragmentSource: {
+          ...makeWholeSkeletonReads(getSkeleton),
+        },
+      } as any;
+      const commandFetch = state.getFullSegmentNodes(skeletonLayer, 11n, {
+        requestOwner: owner,
+        retainWhileInactive: true,
+      });
+      const visualFetch = state.getFullSegmentNodes(skeletonLayer, 11n);
+      await flushMicrotasks();
+
+      expect(getSkeleton).toHaveBeenCalledTimes(1);
+      expect(state.releaseFullSegmentNodeFetchOwner(owner)).toBe(true);
+      expect(receivedSignal?.aborted).toBe(false);
+      resolveFetch?.([
+        {
+          nodeId: 5n,
+          segmentId: 11n,
+          position: new Float32Array([1, 2, 3]),
+        },
+      ]);
+
+      await expect(commandFetch).resolves.toHaveLength(1);
+      await expect(visualFetch).resolves.toHaveLength(1);
+      expect(state.getCachedSegmentNodes(11n)).toHaveLength(1);
+    });
+
+    it.each([
+      [
+        "an error",
+        {
+          failFirstRequest: () =>
+            Promise.reject(new Error("temporary read failure")),
+          expectedError: { message: "temporary read failure" },
+        },
+      ],
+      [
+        "a timeout",
+        {
+          failFirstRequest: () => new Promise<never>(() => {}),
+          expectedError: { name: "TimeoutError" },
+        },
+      ],
+    ])(
+      "a failed skeleton download can be retried: after %s",
+      async (_failure, { failFirstRequest, expectedError }) => {
+        vi.useFakeTimers();
+        try {
+          const state = new SpatialSkeletonEditSession();
+          const getSkeleton = vi.fn((_segmentId: bigint) =>
+            getSkeleton.mock.calls.length === 1
+              ? failFirstRequest()
+              : Promise.resolve([]),
+          );
+          const skeletonLayer = {
+            fragmentSource: {
+              ...makeWholeSkeletonReads(getSkeleton),
+            },
+          } as any;
+          const failed = state
+            .getFullSegmentNodes(skeletonLayer, 11n, {
+              retainWhileInactive: true,
+            })
+            .catch((error: unknown) => error);
+
+          await vi.advanceTimersByTimeAsync(120_000);
+          await expect(failed).resolves.toMatchObject(expectedError);
+          expect(getSkeleton).toHaveBeenCalledTimes(1);
+
+          await expect(
+            state.getFullSegmentNodes(skeletonLayer, 11n, {
+              retainWhileInactive: true,
+            }),
+          ).resolves.toEqual([]);
+          expect(getSkeleton).toHaveBeenCalledTimes(2);
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it.each([
+      ["for display", {}],
+      ["for an edit", { retainWhileInactive: true }],
+    ])(
+      "a source reset cancels pending skeleton downloads: %s",
+      async (_description, downloadOptions) => {
+        const state = new SpatialSkeletonEditSession();
+        let receivedSignal: AbortSignal | undefined;
+        const getSkeleton = vi.fn(
+          (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
+            new Promise<never>((_resolve, reject) => {
+              receivedSignal = options?.signal;
+              options?.signal?.addEventListener(
+                "abort",
+                () => reject(options.signal?.reason),
+                { once: true },
+              );
+            }),
+        );
+
+        const pending = state.getFullSegmentNodes(
+          {
+            fragmentSource: {
+              ...makeWholeSkeletonReads(getSkeleton),
+            },
+          } as any,
+          11n,
+          downloadOptions,
+        );
+        await flushMicrotasks();
+
+        expect(receivedSignal?.aborted).toBe(false);
+        expect(state.clearRuntimeState()).toBe(true);
+        expect(receivedSignal?.aborted).toBe(true);
+        await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+        expect(state.getCachedSegmentNodes(11n)).toBeUndefined();
+        expect(state.getCachedNode(11n)).toBeUndefined();
+      },
+    );
+
+    it("a display download that an edit joins survives eviction and serves both", async () => {
+      const state = new SpatialSkeletonEditSession();
+      let receivedSignal: AbortSignal | undefined;
+      let resolveFetch: ((nodes: SkeletonNode[]) => void) | undefined;
+      const getSkeleton = vi.fn(
+        (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
+          new Promise<SkeletonNode[]>((resolve, reject) => {
+            receivedSignal = options?.signal;
+            resolveFetch = resolve;
+            options?.signal?.addEventListener(
+              "abort",
+              () => reject(options.signal?.reason),
+              { once: true },
+            );
+          }),
+      );
+      const skeletonLayer = {
+        fragmentSource: {
+          ...makeWholeSkeletonReads(getSkeleton),
+        },
+      } as any;
+
+      const visualFetch = state.getFullSegmentNodes(skeletonLayer, 11n);
+      const commandFetch = state.getFullSegmentNodes(skeletonLayer, 11n, {
+        retainWhileInactive: true,
+      });
+      await flushMicrotasks();
+
+      expect(getSkeleton).toHaveBeenCalledTimes(1);
+      expect(state.evictInactiveSegmentNodes([])).toBe(false);
+      expect(receivedSignal?.aborted).toBe(false);
+
+      const fetchedNodes: SkeletonNode[] = [
+        {
+          nodeId: 5n,
+          segmentId: 11n,
+          position: new Float32Array([1, 2, 3]),
+        },
+      ];
+      resolveFetch?.(fetchedNodes);
+
+      await expect(visualFetch).resolves.toEqual(fetchedNodes);
+      await expect(commandFetch).resolves.toEqual(fetchedNodes);
+      expect(
+        state.getCachedSegmentNodes(11n)?.map((node) => node.nodeId),
+      ).toEqual([5n]);
+    });
+
+    it("replacing a skeleton cancels its pending download and notifies once", async () => {
+      const state = new SpatialSkeletonEditSession();
+      let receivedSignal: AbortSignal | undefined;
+      const getSkeleton = vi.fn(
+        (_segmentId: bigint, options?: { signal?: AbortSignal }) =>
+          new Promise<never>((_resolve, reject) => {
+            receivedSignal = options?.signal;
+            options?.signal?.addEventListener(
+              "abort",
+              () => reject(options.signal?.reason),
+              { once: true },
+            );
+          }),
+      );
+      const pending = state.getFullSegmentNodes(
+        {
+          fragmentSource: {
+            ...makeWholeSkeletonReads(getSkeleton),
+          },
+        } as any,
+        11n,
+      );
+      let notifications = 0;
+      state.nodeDataVersion.changed.add(() => {
+        notifications += 1;
+      });
+      await flushMicrotasks();
+
+      expect(receivedSignal?.aborted).toBe(false);
+      expect(
+        state.replaceCachedSegmentSnapshots([
+          [
+            11n,
+            [
+              {
+                nodeId: 5n,
+                segmentId: 11n,
+                position: new Float32Array([1, 2, 3]),
+              },
+            ],
+          ] as const,
+        ]),
+      ).toBe(true);
+
+      expect(receivedSignal?.aborted).toBe(true);
+      await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+      expect(
+        state.getCachedSegmentNodes(11n)?.map((node) => node.nodeId),
+      ).toEqual([5n]);
+      expect(state.getCachedNode(5n)).toBe(
+        state.getCachedSegmentNodes(11n)?.[0],
+      );
+      expect(notifications).toBe(1);
+    });
+
+    it("a finished download caches the skeleton's nodes and notifies once", async () => {
+      const state = new SpatialSkeletonEditSession();
+      const getSkeleton = vi.fn(async () => [
+        {
+          nodeId: 5n,
+          parentNodeId: undefined,
+          position: new Float32Array([1, 2, 3]),
+          segmentId: 11n,
+        },
+      ]);
+      const skeletonLayer = {
+        fragmentSource: {
+          ...makeWholeSkeletonReads(getSkeleton),
+        },
+      } as any;
+      let notifications = 0;
+      state.nodeDataVersion.changed.add(() => {
+        notifications += 1;
+      });
+
+      await expect(
+        state.getFullSegmentNodes(skeletonLayer, 11n),
+      ).resolves.toEqual([
+        {
+          nodeId: 5n,
+          segmentId: 11n,
+          position: new Float32Array([1, 2, 3]),
+          parentNodeId: undefined,
+          description: undefined,
+        },
+      ]);
+
+      expect(notifications).toBe(1);
+      expect(state.getCachedNode(5n)).toEqual({
+        nodeId: 5n,
+        segmentId: 11n,
+        position: new Float32Array([1, 2, 3]),
+        parentNodeId: undefined,
+        description: undefined,
+      });
+    });
+
+    it.each([
+      [2, "when the download limit is 2", 2],
+      [8, "without a chunk manager", undefined],
+    ])(
+      "runs at most %i skeleton downloads at once %s",
+      async (limit, _condition, itemLimit) => {
+        const state = new SpatialSkeletonEditSession();
+        const { skeletonLayer, getSkeleton, resolvers } =
+          makeLimiterTestLayer(itemLimit);
+
+        const pending = Array.from({ length: limit + 2 }, (_, index) =>
+          state.getFullSegmentNodes(skeletonLayer, BigInt(index + 1)),
+        );
+        await flushMicrotasks();
+
+        expect(getSkeleton).toHaveBeenCalledTimes(limit);
+        resolvers[0]([]);
+        await pending[0];
+        expect(getSkeleton).toHaveBeenCalledTimes(limit + 1);
+      },
+    );
+
+    it("starts a skeleton read an edit awaits before queued display reads", async () => {
+      const state = new SpatialSkeletonEditSession();
+      const { skeletonLayer, getSkeleton, resolvers } = makeLimiterTestLayer(1);
+
+      const first = state.getFullSegmentNodes(skeletonLayer, 11n);
+      void state.getFullSegmentNodes(skeletonLayer, 12n).catch(() => undefined);
+      void state.getFullSegmentNodes(skeletonLayer, 13n).catch(() => undefined);
+      void state
+        .getFullSegmentNodes(skeletonLayer, 13n, {
+          retainWhileInactive: true,
+          requestOwner: {},
+        })
+        .catch(() => undefined);
+      await flushMicrotasks();
+
+      expect(getSkeleton).toHaveBeenCalledTimes(1);
+      resolvers[0]([]);
+      await first;
+      expect(getSkeleton).toHaveBeenCalledTimes(2);
+      expect(getSkeleton.mock.calls[1][0]).toBe(13n);
+    });
+
+    it("starts queued display reads in order again once an edit stops awaiting one", async () => {
+      const state = new SpatialSkeletonEditSession();
+      const { skeletonLayer, getSkeleton, resolvers } = makeLimiterTestLayer(1);
+      const requestOwner = {};
+
+      const first = state.getFullSegmentNodes(skeletonLayer, 11n);
+      void state.getFullSegmentNodes(skeletonLayer, 12n).catch(() => undefined);
+      void state.getFullSegmentNodes(skeletonLayer, 13n).catch(() => undefined);
+      void state
+        .getFullSegmentNodes(skeletonLayer, 13n, {
+          retainWhileInactive: true,
+          requestOwner,
+        })
+        .catch(() => undefined);
+      state.releaseFullSegmentNodeFetchOwner(requestOwner);
+      await flushMicrotasks();
+
+      resolvers[0]([]);
+      await first;
+      expect(getSkeleton).toHaveBeenCalledTimes(2);
+      expect(getSkeleton.mock.calls[1][0]).toBe(12n);
+    });
+
+    it("a download that never answers fails after two minutes, is cancelled, and lets the next download start", async () => {
+      vi.useFakeTimers();
+      try {
+        const state = new SpatialSkeletonEditSession();
+        let timedOutSignal: AbortSignal | undefined;
+        const getSkeleton = vi.fn(
+          (segmentId: bigint, options: { signal: AbortSignal }) => {
+            if (segmentId !== 11n) return Promise.resolve([]);
+            timedOutSignal = options.signal;
+            return new Promise<never>(() => {});
+          },
+        );
+        const skeletonLayer = {
+          fragmentSource: {
+            ...makeWholeSkeletonReads(getSkeleton),
+          },
+          chunkManager: {
+            chunkQueueManager: {
+              capacities: { download: { itemLimit: { value: 1 } } },
+            },
+          },
+        } as any;
+        const firstOutcome = state
+          .getFullSegmentNodes(skeletonLayer, 11n)
+          .catch((error) => error);
+        const second = state.getFullSegmentNodes(skeletonLayer, 12n);
+        await flushMicrotasks();
+
+        expect(getSkeleton).toHaveBeenCalledTimes(1);
+        expect(timedOutSignal?.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect(timedOutSignal?.aborted).toBe(true);
+        await expect(firstOutcome).resolves.toMatchObject({
+          name: "TimeoutError",
+        });
+        await expect(second).resolves.toEqual([]);
+        expect(getSkeleton).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("a queued download whose skeleton is evicted never starts", async () => {
+      const state = new SpatialSkeletonEditSession();
+      const { skeletonLayer, getSkeleton, resolvers } = makeLimiterTestLayer(1);
+
+      const first = state.getFullSegmentNodes(skeletonLayer, 11n);
+      const queued = state.getFullSegmentNodes(skeletonLayer, 12n);
+      await flushMicrotasks();
+      expect(getSkeleton).toHaveBeenCalledTimes(1);
+
+      expect(state.evictInactiveSegmentNodes([11n])).toBe(false);
+      await expect(queued).rejects.toMatchObject({ name: "AbortError" });
+
+      resolvers[0]([]);
+      await first;
+      expect(getSkeleton).toHaveBeenCalledTimes(1);
+    });
+
+    describe("full skeleton read from a manifest", () => {
+      it("returns the nodes of every fragment that the manifest lists", async () => {
+        const state = new SpatialSkeletonEditSession();
+        const { layer } = makeFragmentedSkeletonLayer({
+          "0.0.0": {
+            nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
+            edges: [makeEdge(2n, 1n)],
+          },
+          "0.0.1": { nodes: [makeFragmentNode(3n)], edges: [makeEdge(3n, 2n)] },
+        });
+
+        const nodes = await state.getFullSegmentNodes(layer, 7n);
+
+        expect(nodes.map((node) => node.nodeId)).toEqual([1n, 2n, 3n]);
+        expect(nodes[2].parentNodeId).toBe(2n);
+      });
+
+      it("fails the whole read when one fragment fails", async () => {
+        const state = new SpatialSkeletonEditSession();
+        const { layer } = makeFragmentedSkeletonLayer({
+          "0.0.0": { nodes: [makeFragmentNode(1n)], edges: [] },
+          "0.0.1": new Error("fragment missing"),
+        });
+
+        await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
+          "fragment missing",
+        );
+      });
+
+      it("does not request the next fragment after one fails", async () => {
+        const state = new SpatialSkeletonEditSession();
+        const { layer, requestedFragmentKeys } = makeFragmentedSkeletonLayer({
+          "0.0.0": new Error("fragment missing"),
+          "0.0.1": { nodes: [makeFragmentNode(2n)], edges: [] },
+        });
+
+        await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
+          "fragment missing",
+        );
+        expect(requestedFragmentKeys).toEqual(["0.0.0"]);
+      });
+
+      it("requests no fragment once the read is aborted", async () => {
+        const state = new SpatialSkeletonEditSession();
+        const manifestReady = deferred<void>();
+        const { layer, requestedFragmentKeys } = makeFragmentedSkeletonLayer(
+          { "0.0.0": { nodes: [makeFragmentNode(1n)], edges: [] } },
+          { manifestReady: manifestReady.promise },
+        );
+        const read = state.getFullSegmentNodes(layer, 7n);
+        const aborted = expect(read).rejects.toMatchObject({
+          name: "AbortError",
+        });
+        await flushMicrotasks();
+
+        state.clearRuntimeState();
+        manifestReady.resolve();
+        await aborted;
+        await flushMicrotasks();
+
+        expect(requestedFragmentKeys).toEqual([]);
+      });
+
+      it("rejects a skeleton that has one node in two fragments", async () => {
+        const state = new SpatialSkeletonEditSession();
+        const { layer } = makeFragmentedSkeletonLayer({
+          "0.0.0": {
+            nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
+            edges: [],
+          },
+          "0.0.1": {
+            nodes: [makeFragmentNode(2n), makeFragmentNode(3n)],
+            edges: [],
+          },
+        });
+
+        await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
+          "Skeleton 7 has node 2 in more than one fragment.",
+        );
+      });
+
+      it("joins a node to a parent that another fragment links to it", async () => {
+        const state = new SpatialSkeletonEditSession();
+        const { layer } = makeFragmentedSkeletonLayer({
+          "0.0.0": { nodes: [makeFragmentNode(3n)], edges: [] },
+          "0.0.1": {
+            nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
+            edges: [makeEdge(2n, 1n), makeEdge(3n, 2n)],
+          },
+        });
+
+        const nodes = await state.getFullSegmentNodes(layer, 7n);
+
+        expect(nodes.find((node) => node.nodeId === 3n)?.parentNodeId).toBe(2n);
+      });
+
+      it("takes the first node of each edge as the parent when the source lists edges parent to child", async () => {
+        const state = new SpatialSkeletonEditSession();
+        const { layer } = makeFragmentedSkeletonLayer(
+          {
+            skeleton: {
+              nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
+              edges: [makeEdge(1n, 2n)],
+            },
+          },
+          { edgeDirection: SkeletonEdgeDirection.PARENT_TO_CHILD },
+        );
+
+        const nodes = await state.getFullSegmentNodes(layer, 7n);
+
+        expect(nodes.map((node) => [node.nodeId, node.parentNodeId])).toEqual([
+          [1n, undefined],
+          [2n, 1n],
+        ]);
+      });
+
+      it("rejects a directed skeleton that gives one node two parents", async () => {
+        const state = new SpatialSkeletonEditSession();
+        const { layer } = makeFragmentedSkeletonLayer({
+          "0.0.0": {
+            nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
+            edges: [makeEdge(2n, 1n)],
+          },
+          "0.0.1": { nodes: [makeFragmentNode(3n)], edges: [makeEdge(2n, 3n)] },
+        });
+
+        await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
+          "Skeleton 7 gives node 2 two parents.",
+        );
+      });
+
+      it("rejects a directed edge to a node that no fragment has", async () => {
+        const state = new SpatialSkeletonEditSession();
+        const { layer } = makeFragmentedSkeletonLayer({
+          skeleton: {
+            nodes: [makeFragmentNode(2n)],
+            edges: [makeEdge(2n, 1n)],
+          },
+        });
+
+        await expect(state.getFullSegmentNodes(layer, 7n)).rejects.toThrow(
+          "Skeleton 7 has an edge to node 1, which no fragment has.",
+        );
+      });
+
+      it("infers parents from the first node of each part when the source's edges have no direction", async () => {
+        const state = new SpatialSkeletonEditSession();
+        const { layer } = makeFragmentedSkeletonLayer(
+          {
+            "0.0.0": {
+              nodes: [makeFragmentNode(1n), makeFragmentNode(2n)],
+              edges: [makeEdge(2n, 3n)],
+            },
+            "0.0.1": {
+              nodes: [makeFragmentNode(3n), makeFragmentNode(4n)],
+              edges: [makeEdge(1n, 3n)],
+            },
+          },
+          { edgeDirection: SkeletonEdgeDirection.UNDIRECTED },
+        );
+
+        const nodes = await state.getFullSegmentNodes(layer, 7n);
+
+        expect(nodes.map((node) => [node.nodeId, node.parentNodeId])).toEqual([
+          [1n, undefined],
+          [2n, 3n],
+          [3n, 1n],
+          [4n, undefined],
+        ]);
+      });
+
+      it("returns no nodes for a skeleton the source does not have", async () => {
+        const state = new SpatialSkeletonEditSession();
+        const { layer } = makeFragmentedSkeletonLayer({});
+
+        expect(await state.getFullSegmentNodes(layer, 7n)).toEqual([]);
+      });
+    });
   });
 });
