@@ -21,7 +21,7 @@ import {
   parseCatmaidUrl,
 } from "#src/datasource/catmaid/base.js";
 
-describe("CATMAID frontend spatial index LOD mapping", () => {
+describe("CATMAID level of detail for each spatial index level", () => {
   it("maps a single spatial index level to full CATMAID LOD", () => {
     expect(getCatmaidLodForSpatialIndexLevel(0, 1)).toBe(1);
   });

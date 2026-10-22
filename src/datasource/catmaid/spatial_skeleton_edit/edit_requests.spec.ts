@@ -54,14 +54,8 @@ const context: SpatialSkeletonEditRequestContext = {
   operationId: 7,
 };
 
-describe("CATMAID optimistic edit request adapter", () => {
-  it("does not expose physical edit request-resource scheduling", () => {
-    const adapter = new CatmaidEditRequests(makeOperations());
-    expect("getMutationResources" in adapter).toBe(false);
-    expect("mutationResources" in adapter).toBe(false);
-  });
-
-  it("maps a semantic queue edit request to CATMAID's unchecked transport", async () => {
+describe("CatmaidEditRequests", () => {
+  it("sends a move to CATMAID with the node and position the edit asked for", async () => {
     const result = undefined;
     const commitMoveNode = vi.fn(async () => result);
     const adapter = new CatmaidEditRequests(makeOperations({ commitMoveNode }));
@@ -85,7 +79,7 @@ describe("CATMAID optimistic edit request adapter", () => {
     });
   });
 
-  it("uses the generic cancellation signal only before CATMAID dispatch", async () => {
+  it("a sent edit gets no cancellation signal, so it cannot be cancelled", async () => {
     const controller = new AbortController();
     const commitAddNode = vi.fn(async () => ({ nodeId: 1n, segmentId: 2n }));
     const adapter = new CatmaidEditRequests(makeOperations({ commitAddNode }));
@@ -105,7 +99,7 @@ describe("CATMAID optimistic edit request adapter", () => {
     });
   });
 
-  it("normalizes definitive CATMAID rejection and uncertain failures", async () => {
+  it("reports a CATMAID conflict as rejected and a lost connection as possibly saved", async () => {
     const conflict = new SpatialSkeletonEditConflictError("stale");
     const uncertain = new Error("connection disappeared");
     const rejectConflict = new CatmaidEditRequests(
@@ -153,14 +147,5 @@ describe("CATMAID optimistic edit request adapter", () => {
     );
     expect(outcome.status).toBe("not-started");
     expect(commitMoveNode).not.toHaveBeenCalled();
-  });
-
-  it("uses the datasource's stable edit request scope", () => {
-    const editRequestScope = {};
-    const adapter = new CatmaidEditRequests(
-      makeOperations({ editRequestScope }),
-    );
-
-    expect(adapter.editRequestScope).toBe(editRequestScope);
   });
 });

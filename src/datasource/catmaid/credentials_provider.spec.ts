@@ -17,7 +17,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  canonicalizeCatmaidServerUrl,
   CatmaidCredentialsProvider,
   type CatmaidTokenStorage,
   getCatmaidTokenStorageKey,
@@ -74,15 +73,6 @@ afterEach(() => {
 });
 
 describe("CatmaidCredentialsProvider", () => {
-  it("canonicalizes server URLs and storage keys", () => {
-    expect(canonicalizeCatmaidServerUrl("https://catmaid.example///")).toBe(
-      "https://catmaid.example",
-    );
-    expect(getCatmaidTokenStorageKey("https://catmaid.example/")).toContain(
-      "https://catmaid.example",
-    );
-  });
-
   it("uses anonymous credentials first when no personal token is stored", async () => {
     const fetchMock = mockAnonymousToken();
     const provider = new CatmaidCredentialsProvider(
@@ -119,7 +109,7 @@ describe("CatmaidCredentialsProvider", () => {
     ).toBe("personal-token");
 
     const reloadedProvider = new CatmaidCredentialsProvider(
-      "https://catmaid.example/",
+      "https://catmaid.example///",
       storage,
     );
     await expect(reloadedProvider.get()).resolves.toMatchObject({

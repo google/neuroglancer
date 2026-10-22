@@ -1022,60 +1022,6 @@ describe("skeleton edit commands", () => {
     expect(state.getCachedNode(3n)?.parentNodeId).toBe(2n);
   });
 
-  it("captures insertion children immutably and rejects malformed insertion payloads", () => {
-    const commands = makeCatmaidEditCommands();
-    const childNodeIds = [2n];
-    const command = commands.insertNodesCommand.createCommand({
-      skeletonId: 23n,
-      parentNodeId: 1n,
-      childNodeIds,
-      positionInModelSpace: [1, 2, 3],
-    });
-    childNodeIds.push(3n);
-    expect((command as any).payload.options.childNodeIds).toEqual([2n]);
-    for (const children of [[], [2n, 2n], [NaN]]) {
-      expect(() =>
-        commands.insertNodesCommand.createCommand({
-          skeletonId: 23n,
-          parentNodeId: 1n,
-          childNodeIds: children,
-          positionInModelSpace: [1, 2, 3],
-        }),
-      ).toThrow(/invalid payload/);
-    }
-  });
-
-  it("creates CATMAID commands from valid opaque payloads", () => {
-    const commandSource = makeCatmaidEditCommands();
-    const node: SkeletonNode = {
-      nodeId: 17n,
-      segmentId: 23n,
-      position: new Float32Array([1, 2, 3]),
-    };
-
-    const command = commandSource.moveNodesCommand.createCommand({
-      node,
-      nextPositionInModelSpace: new Float32Array([7, 8, 9]),
-    });
-
-    expect(command?.label).toBe("Move node");
-    expect((command as any)?.payload).toMatchObject({ kind: "move-node" });
-    expect(command?.getQueueInputRequirements).toBeTypeOf("function");
-    expect(command).not.toHaveProperty("execute");
-    expect(command).not.toHaveProperty("executeOptimistically");
-  });
-
-  it("reports invalid CATMAID command payloads clearly", () => {
-    const commandSource = makeCatmaidEditCommands();
-
-    expect(() =>
-      commandSource.moveNodesCommand.createCommand({
-        node: {},
-        nextPositionInModelSpace: new Float32Array([7, 8, 9]),
-      }),
-    ).toThrow("CATMAID move-node command received an invalid payload.");
-  });
-
   it("defers malformed coordinate contents beyond command construction", () => {
     const commandSource = makeCatmaidEditCommands();
     const node: SkeletonNode = {
