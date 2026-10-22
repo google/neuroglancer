@@ -189,6 +189,7 @@ export const VIEWER_UI_CONTROL_CONFIG_OPTIONS = [
   ...VIEWER_TOP_ROW_CONFIG_OPTIONS,
   "showLayerPanel",
   "showLayerHoverValues",
+  "showPanelControls",
 ] as const;
 
 export const VIEWER_UI_CONFIG_OPTIONS = [
