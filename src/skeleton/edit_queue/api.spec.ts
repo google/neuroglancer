@@ -21,7 +21,6 @@ import {
   type SpatialSkeletonMutationContext,
   type SpatialSkeletonOptimisticMutationAdapter,
 } from "#src/skeleton/edit_queue/api.js";
-import { isSpatialSkeletonOptimisticEditingProvider } from "#src/skeleton/edit_queue/api.js";
 
 interface TestMutation {
   readonly nodeId: bigint;
@@ -99,21 +98,5 @@ describe("spatial skeleton optimistic mutation adapter", () => {
       error: mutationError,
       classificationError,
     });
-  });
-});
-
-describe("isSpatialSkeletonOptimisticEditingProvider", () => {
-  it("accepts only values exposing the driver provider operation", () => {
-    const provider = {
-      createDriver: () => ({}),
-    };
-
-    expect(isSpatialSkeletonOptimisticEditingProvider(provider)).toBe(true);
-    expect(
-      isSpatialSkeletonOptimisticEditingProvider({
-        getOrCreateQueue: () => ({}),
-      }),
-    ).toBe(false);
-    expect(isSpatialSkeletonOptimisticEditingProvider(null)).toBe(false);
   });
 });

@@ -31,6 +31,7 @@ import type {
 import {
   SpatialSkeletonActions,
   SpatialSkeletonHistoryActions,
+  getSpatialSkeletonActionSupportLabel,
 } from "#src/skeleton/edit_commands.js";
 import {
   getSpatialSkeletonActionErrorMessage,
@@ -164,8 +165,8 @@ function assertInputReferencesCurrent(
     if (reference.isCurrent()) continue;
     throw new SpatialSkeletonInspectionRequiredError(
       requirement,
-      action,
       "snapshot-changed",
+      action && getSpatialSkeletonActionSupportLabel(action),
     );
   }
 }
@@ -187,8 +188,8 @@ function assertQueueInputRequirementsUnchanged(
       if (index === -1) {
         throw new SpatialSkeletonInspectionRequiredError(
           requirement,
-          action,
           "requirements-changed",
+          action && getSpatialSkeletonActionSupportLabel(action),
         );
       }
       unmatched.splice(index, 1);
@@ -196,8 +197,8 @@ function assertQueueInputRequirementsUnchanged(
     if (unmatched.length !== 0) {
       throw new SpatialSkeletonInspectionRequiredError(
         unmatched[0],
-        action,
         "requirements-changed",
+        action && getSpatialSkeletonActionSupportLabel(action),
       );
     }
   }

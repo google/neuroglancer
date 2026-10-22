@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-import type { SpatialSkeletonAction } from "#src/skeleton/edit_commands.js";
-import { getSpatialSkeletonActionSupportLabel } from "#src/skeleton/edit_commands.js";
 import type { SpatialSkeletonQueueInputRequirement } from "#src/skeleton/edit_queue/queue_input.js";
 import { formatErrorMessage } from "#src/util/error.js";
 
@@ -36,13 +34,9 @@ export class SpatialSkeletonInspectionRequiredError extends Error {
 
   constructor(
     requirement: SpatialSkeletonQueueInputRequirement,
-    readonly action?: SpatialSkeletonAction,
     readonly reason: SpatialSkeletonInspectionRequiredReason = "snapshot-unavailable",
+    actionDescription = "editing it",
   ) {
-    const actionDescription =
-      action === undefined
-        ? "editing it"
-        : getSpatialSkeletonActionSupportLabel(action);
     let detail: string;
     if (reason === "node-unavailable" && requirement.nodeId !== undefined) {
       detail = `Node ${requirement.nodeId} is not present in inspected skeleton ${requirement.segmentId}. Re-inspect skeleton ${requirement.segmentId} before ${actionDescription}.`;

@@ -1220,7 +1220,6 @@ describe("skeleton edit session", () => {
       );
     } catch (error) {
       expect(error).toMatchObject({
-        action: SpatialSkeletonActions.moveNodes,
         reason: "snapshot-unavailable",
         requirement: coldRequirement,
       });

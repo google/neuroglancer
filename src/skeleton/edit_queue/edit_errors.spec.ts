@@ -16,7 +16,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
+import {
+  SpatialSkeletonActions,
+  getSpatialSkeletonActionSupportLabel,
+} from "#src/skeleton/edit_commands.js";
 import {
   getSpatialSkeletonActionErrorMessage,
   isSpatialSkeletonInspectionRequiredError,
@@ -30,7 +33,8 @@ describe("spatial skeleton edit errors", () => {
         segmentId: 11n,
         nodeId: 5n,
       },
-      SpatialSkeletonActions.moveNodes,
+      "snapshot-unavailable",
+      getSpatialSkeletonActionSupportLabel(SpatialSkeletonActions.moveNodes),
     );
 
     expect(isSpatialSkeletonInspectionRequiredError(error)).toBe(true);
@@ -47,7 +51,6 @@ describe("spatial skeleton edit errors", () => {
         segmentId: 11n,
         nodeId: 5n,
       },
-      undefined,
       "node-unavailable",
     );
 

@@ -29,6 +29,7 @@ import {
   type SpatialSkeletonOptimisticDriverRegistration,
   type SpatialSkeletonOptimisticEditingProvider,
 } from "#src/skeleton/edit_queue/api.js";
+import { isSpatialSkeletonOptimisticEditingProvider } from "#src/skeleton/edit_queue/api.js";
 
 function makeSource(optimisticEditing?: unknown): EditableSkeletonSource {
   return {
@@ -390,5 +391,21 @@ describe("spatial skeleton optimistic edit host", () => {
         makeSource({ supportsAction: () => true }),
       ),
     ).toBeUndefined();
+  });
+});
+
+describe("isSpatialSkeletonOptimisticEditingProvider", () => {
+  it("accepts only values exposing the driver provider operation", () => {
+    const provider = {
+      createDriver: () => ({}),
+    };
+
+    expect(isSpatialSkeletonOptimisticEditingProvider(provider)).toBe(true);
+    expect(
+      isSpatialSkeletonOptimisticEditingProvider({
+        getOrCreateQueue: () => ({}),
+      }),
+    ).toBe(false);
+    expect(isSpatialSkeletonOptimisticEditingProvider(null)).toBe(false);
   });
 });

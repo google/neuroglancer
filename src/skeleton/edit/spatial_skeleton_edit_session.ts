@@ -26,7 +26,10 @@ import type {
   SpatialSkeletonAction,
   SpatialSkeletonEditCommand,
 } from "#src/skeleton/edit_commands.js";
-import { getSpatialSkeletonEditCommandFactoryFromSource } from "#src/skeleton/edit_commands.js";
+import {
+  getSpatialSkeletonActionSupportLabel,
+  getSpatialSkeletonEditCommandFactoryFromSource,
+} from "#src/skeleton/edit_commands.js";
 import {
   assertSpatialSkeletonOptimisticDriverRegistration,
   isSpatialSkeletonOptimisticEditingProvider,
@@ -1701,8 +1704,8 @@ export class SpatialSkeletonState
         : "node-unavailable";
     throw new SpatialSkeletonInspectionRequiredError(
       requirement,
-      action,
       reason,
+      action && getSpatialSkeletonActionSupportLabel(action),
     );
   }
 

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import type { SpatialSkeletonEditCommand } from "#src/skeleton/edit_commands.js";
 import type { SpatialSkeletonOptimisticHistoryPort } from "#src/skeleton/edit_queue/api.js";
 import { DEFAULT_SPATIAL_SKELETON_OPTIMISTIC_EDIT_QUEUE_CAPACITY } from "#src/skeleton/edit_queue/types.js";
 import { WatchableValue } from "#src/trackable_value.js";
@@ -338,7 +337,7 @@ export class SpatialSkeletonCommandHistory extends RefCounted {
 export function createSpatialSkeletonOptimisticHistoryPort(
   history: SpatialSkeletonCommandHistory,
 ): SpatialSkeletonOptimisticHistoryPort<
-  SpatialSkeletonEditCommand,
+  { readonly label: string },
   SpatialSkeletonCommandHistoryTransitionTicket
 > {
   return {

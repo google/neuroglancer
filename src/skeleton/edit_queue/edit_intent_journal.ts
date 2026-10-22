@@ -24,6 +24,7 @@ import type {
   SpatialSkeletonOptimisticAuthorityReason,
   SpatialSkeletonOptimisticIntentLifecycle,
   SpatialSkeletonOptimisticReconciliationLifecycle,
+  SpatialSkeletonOptimisticPreviewLifecycle,
 } from "#src/skeleton/edit_queue/types.js";
 import {
   createInitialSpatialSkeletonOptimisticIntentLifecycle,
@@ -31,13 +32,6 @@ import {
 } from "#src/skeleton/edit_queue/types.js";
 
 export type SpatialSkeletonIntentKind = "execute" | "undo" | "redo";
-
-export type SpatialSkeletonIntentPreviewState =
-  | "reserved"
-  | "preparing"
-  | "exact"
-  | "promoted"
-  | "rolled-back";
 
 export type SpatialSkeletonIntentResourceAccess = "read" | "write";
 
@@ -164,8 +158,8 @@ export class SpatialSkeletonIntentInvariantError extends Error {
 
 const previewTransitions: Readonly<
   Record<
-    SpatialSkeletonIntentPreviewState,
-    ReadonlySet<SpatialSkeletonIntentPreviewState>
+    SpatialSkeletonOptimisticPreviewLifecycle,
+    ReadonlySet<SpatialSkeletonOptimisticPreviewLifecycle>
   >
 > = {
   reserved: new Set(["preparing", "exact", "rolled-back"]),
@@ -175,7 +169,9 @@ const previewTransitions: Readonly<
   "rolled-back": new Set(),
 };
 
-function isTerminalPreviewState(state: SpatialSkeletonIntentPreviewState) {
+function isTerminalPreviewState(
+  state: SpatialSkeletonOptimisticPreviewLifecycle,
+) {
   return state === "promoted" || state === "rolled-back";
 }
 
@@ -585,7 +581,10 @@ export class SpatialSkeletonIntentJournal<
     return result.sort((a, b) => a - b);
   }
 
-  setPreviewState(sequence: number, state: SpatialSkeletonIntentPreviewState) {
+  setPreviewState(
+    sequence: number,
+    state: SpatialSkeletonOptimisticPreviewLifecycle,
+  ) {
     const record = this.requireRecord(sequence);
     const current = record.lifecycle.preview;
     if (current === state) return false;
