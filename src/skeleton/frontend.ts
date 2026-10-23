@@ -93,7 +93,7 @@ import type {
   ShaderProgram,
   ShaderSamplerType,
 } from "#src/webgl/shader.js";
-import { getShaderType, glsl_string } from "#src/webgl/shader_lib.js";
+import { glsl_string } from "#src/webgl/shader_lib.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 import {
   addControlsToBuilder,
@@ -556,7 +556,6 @@ float getCrossSectionFade() {
 }
 `);
     builder.addFragmentCode(edgeColorPathsGlsl(path));
-    builder.addFragmentCode(glsl_string);
     this.finalizeShaderBuilder(
       builder,
       shaderBuilderState,
@@ -574,7 +573,6 @@ float getCrossSectionFade() {
     const geometry = this.defineNodeCircleBillboard(builder, skeletonParams);
     const path = skeletonParams.dynamicSegmentAppearance ? "dynamic" : "legacy";
     builder.addFragmentCode(nodeColorPathsGlsl(path));
-    builder.addFragmentCode(glsl_string);
     this.finalizeShaderBuilder(
       builder,
       shaderBuilderState,
@@ -774,7 +772,11 @@ highp vec3 vertexPosition = applyNodePositionOverride(vertexIndex, readAttribute
         WebGL2RenderingContext.UNSIGNED_INT,
       );
       gl.vertexAttribDivisor(aVertexIndex, 1);
-      initializeLineShader(edgeShader, projectionParameters, 1.0);
+      initializeLineShader(
+        edgeShader,
+        projectionParameters,
+        this.targetIsSliceView ? 1.0 : 0.0,
+      );
       drawLines(gl, 1, skeletonGpuGeometry.numIndices / 2);
       gl.vertexAttribDivisor(aVertexIndex, 0);
       gl.disableVertexAttribArray(aVertexIndex);
@@ -786,7 +788,7 @@ highp vec3 vertexPosition = applyNodePositionOverride(vertexIndex, readAttribute
     {
       nodeShader.bind();
       initializeCircleShader(nodeShader, projectionParameters, {
-        featherWidthInPixels: 1.0,
+        featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
       });
       drawCircles(nodeShader.gl, 1, skeletonGpuGeometry.numVertices);
     }
@@ -947,9 +949,6 @@ export class SkeletonLayer
     super();
 
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
-    this.registerDisposer(
-      displayState.hiddenObjectAlpha.changed.add(this.redrawNeeded.dispatch),
-    );
     this.displayState.shaderError.value = undefined;
     const { skeletonRenderingOptions: renderingOptions } = displayState;
     this.registerDisposer(
@@ -980,7 +979,8 @@ export class SkeletonLayer
         dataType: info.dataType,
         numComponents: info.numComponents,
         webglDataType: getWebglDataType(info.dataType),
-        glslDataType: getShaderType(info.dataType, info.numComponents),
+        glslDataType:
+          info.numComponents > 1 ? `vec${info.numComponents}` : "float",
       });
     }
   }
@@ -1245,10 +1245,6 @@ function getWebglDataType(dataType: DataType) {
   switch (dataType) {
     case DataType.FLOAT32:
       return WebGL2RenderingContext.FLOAT;
-    case DataType.INT32:
-      return WebGL2RenderingContext.INT;
-    case DataType.UINT32:
-      return WebGL2RenderingContext.UNSIGNED_INT;
     default:
       throw new Error(
         `Data type not supported by WebGL: ${DataType[dataType]}`,
