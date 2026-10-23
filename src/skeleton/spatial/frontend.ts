@@ -229,7 +229,7 @@ export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends Multiscal
     return 3;
   }
 
-  protected getLevelSpecs(): SpatiallyIndexedSkeletonChunkSpecification[] {
+  getLevelSpecs(): SpatiallyIndexedSkeletonChunkSpecification[] {
     return this.levelSpecs;
   }
 }

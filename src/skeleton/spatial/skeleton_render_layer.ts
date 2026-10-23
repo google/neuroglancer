@@ -320,7 +320,8 @@ export class SpatiallyIndexedSkeletonLayer
   readonly displayState: SpatiallyIndexedSkeletonLayerOptions["displayState"];
   readonly editSession: SpatialSkeletonEditSession;
   readonly provisionalSegmentIds: Uint64Set;
-  readonly sources: SpatiallyIndexedSkeletonSourceEntry[];
+  readonly multiscaleSource: MultiscaleSpatiallyIndexedSkeletonSource;
+  private readonly sources: SpatiallyIndexedSkeletonSourceEntry[];
   readonly source: SpatiallyIndexedSkeletonSource;
   readonly fragmentSource: SkeletonFragmentSource;
   readonly editableSource: EditableSkeletonSource | undefined;
@@ -391,6 +392,7 @@ export class SpatiallyIndexedSkeletonLayer
       nodeSelection,
       overlaySegments,
     } = options;
+    this.multiscaleSource = multiscaleSource;
     this.chunkManager = multiscaleSource.chunkManager;
     this.displayState = displayState;
     this.editSession = editSession;
@@ -405,6 +407,9 @@ export class SpatiallyIndexedSkeletonLayer
       disposeSpatiallyIndexedSkeletonSourceRuntimeState(
         this.getUniqueChunkSources(),
       );
+      for (const { chunkSource } of this.sources) {
+        chunkSource.dispose();
+      }
     });
     const sources = multiscaleSource.getSources(
       SPATIAL_SKELETON_SOURCE_OPTIONS,
@@ -1180,7 +1185,7 @@ function addSkeletonNodeOverlay(
   );
 }
 
-function attachSpatiallyIndexedSkeletonLayer(
+export function attachSpatiallyIndexedSkeletonLayer(
   base: SpatiallyIndexedSkeletonLayer,
   renderLayer: {
     transformedSources: TransformedSource[][];
@@ -1199,13 +1204,7 @@ function attachSpatiallyIndexedSkeletonLayer(
         const transformedSources = getVolumetricTransformedSources(
           displayDimensionRenderInfo,
           transform,
-          () => [
-            base.sources.map((sourceEntry) => ({
-              chunkSource: sourceEntry.chunkSource,
-              chunkToMultiscaleTransform:
-                sourceEntry.chunkToMultiscaleTransform,
-            })),
-          ],
+          (options) => base.multiscaleSource.getSources(options),
           attachment.messages,
           renderLayer,
         );

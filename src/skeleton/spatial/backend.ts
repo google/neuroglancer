@@ -76,6 +76,14 @@ function distanceToChunk(
   return Math.sqrt(distanceSq);
 }
 
+function disposeTransformedSources(allSources: readonly TransformedSource[][]) {
+  for (const scales of allSources) {
+    for (const tsource of scales) {
+      tsource.source.dispose();
+    }
+  }
+}
+
 registerRPC(
   SPATIALLY_INDEXED_SKELETON_RENDER_LAYER_UPDATE_SOURCES_RPC_ID,
   function (x) {
@@ -89,10 +97,12 @@ registerRPC(
       RenderedViewBackend,
       SpatiallyIndexedSkeletonRenderLayerAttachmentState
     >;
+    const previousSources = attachment.state!.transformedSources;
     attachment.state!.transformedSources = deserializeTransformedSources<
       SpatiallyIndexedSkeletonSourceBackend,
       any
     >(this, x.sources, layer);
+    disposeTransformedSources(previousSources);
     attachment.state!.displayDimensionRenderInfo = x.displayDimensionRenderInfo;
     layer.chunkManager.scheduleUpdateChunkPriorities();
   },
@@ -247,6 +257,9 @@ export class SpatiallyIndexedSkeletonRenderLayerBackend extends withChunkManager
         view.projectionParameters.value.displayDimensionRenderInfo,
       transformedSources: [],
     };
+    attachment.registerDisposer(() =>
+      disposeTransformedSources(attachment.state!.transformedSources),
+    );
   }
 
   private recomputeChunkPriorities() {

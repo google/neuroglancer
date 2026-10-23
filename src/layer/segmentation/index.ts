@@ -95,10 +95,7 @@ import {
 } from "#src/skeleton/frontend.js";
 import { SkeletonBrowseState } from "#src/skeleton/node_types.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
-import {
-  type MultiscaleSpatiallyIndexedSkeletonSource,
-  SPATIAL_SKELETON_SOURCE_OPTIONS,
-} from "#src/skeleton/spatial/frontend.js";
+import type { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
 import { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
 import {
   PerspectiveViewSpatiallyIndexedSkeletonLayer,
@@ -927,7 +924,7 @@ export class SegmentationUserLayer extends Base {
     },
     options: { attachFindPath: boolean },
   ): void {
-    if (source.getSources(SPATIAL_SKELETON_SOURCE_OPTIONS)[0].length === 0) {
+    if (source.getLevelSpecs().length === 0) {
       return;
     }
     // One base serves 2D and 3D panels so their edit state stays consistent.
