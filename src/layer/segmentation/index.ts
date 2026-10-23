@@ -1262,7 +1262,7 @@ export class SegmentationUserLayer extends Base {
       specification[json_keys.SKELETON_CROSS_SECTION_SPACING_JSON_KEY],
     );
     this.displayState.spatialSkeletonSpacingTarget3d.restoreState(
-      specification[json_keys.SKELETON_PERSPECTIVE_SPACING_JSON_KEY],
+      specification[json_keys.SKELETON_PROJECTION_SPACING_JSON_KEY],
     );
     this.displayState.baseSegmentColoring.restoreState(
       specification[json_keys.BASE_SEGMENT_COLORING_JSON_KEY],
@@ -1332,7 +1332,7 @@ export class SegmentationUserLayer extends Base {
       this.displayState.hiddenObjectAlpha.toJSON();
     x[json_keys.SKELETON_CROSS_SECTION_SPACING_JSON_KEY] =
       this.displayState.spatialSkeletonSpacingTarget2d.toJSON();
-    x[json_keys.SKELETON_PERSPECTIVE_SPACING_JSON_KEY] =
+    x[json_keys.SKELETON_PROJECTION_SPACING_JSON_KEY] =
       this.displayState.spatialSkeletonSpacingTarget3d.toJSON();
     x[json_keys.HOVER_HIGHLIGHT_JSON_KEY] =
       this.displayState.hoverHighlight.toJSON();

@@ -46,7 +46,7 @@ with viewer.txn() as s:
     layer.skeleton_browse.node_filter = neuroglancer.SkeletonNodeFilterType.LEAF
     layer.hidden_object_alpha = 0.8
     layer.skeleton_cross_section_spacing = 4.0
-    layer.skeleton_perspective_spacing = 4.0
+    layer.skeleton_projection_spacing = 4.0
     layer.visible_segments = [649]
 
     # Can pick a specific segment and node to select

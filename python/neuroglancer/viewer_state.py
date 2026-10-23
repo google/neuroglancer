@@ -1012,8 +1012,8 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     skeleton_cross_section_spacing = skeletonCrossSectionSpacing = wrapped_property(
         "skeletonCrossSectionSpacing", optional(float, 8)
     )
-    skeleton_perspective_spacing = skeletonPerspectiveSpacing = wrapped_property(
-        "skeletonPerspectiveSpacing", optional(float, 8)
+    skeleton_projection_spacing = skeletonProjectionSpacing = wrapped_property(
+        "skeletonProjectionSpacing", optional(float, 8)
     )
     segment_colors = segmentColors = wrapped_property(
         "segmentColors", typed_map(key_type=np.uint64, value_type=str)

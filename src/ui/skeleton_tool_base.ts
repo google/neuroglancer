@@ -33,8 +33,8 @@ import { LayerTool } from "#src/ui/tool.js";
 import type { ActionEvent } from "#src/util/event_action_map.js";
 import { dispatchEventAction } from "#src/util/event_action_map.js";
 
-export const SPATIAL_SKELETON_EDIT_MODE_TOOL_ID = "spatialSkeletonEditMode";
-export const SPATIAL_SKELETON_FIND_PATH_TOOL_ID = "spatialSkeletonFindPath";
+export const SPATIAL_SKELETON_EDIT_MODE_TOOL_ID = "skeletonEditMode";
+export const SPATIAL_SKELETON_FIND_PATH_TOOL_ID = "skeletonFindPath";
 
 function isRenderedDataPanel(panel: RenderedPanel): panel is RenderedDataPanel {
   return (

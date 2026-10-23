@@ -94,7 +94,7 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
   },
   {
     label: "Spacing (projection)",
-    toolJson: json_keys.SKELETON_PERSPECTIVE_SPACING_JSON_KEY,
+    toolJson: json_keys.SKELETON_PROJECTION_SPACING_JSON_KEY,
     isValid: (layer) => layer.hasSpatiallyIndexedSkeletonsLayer,
     title:
       "Select the node spacing for spatially indexed skeletons in projection views",

@@ -171,7 +171,7 @@ export class SkeletonEditPage {
       segments: segments.map(String),
       tab: "skeleton",
       skeletonBrowse: { nodeFilter: "none" },
-      toolBindings: { [key]: "spatialSkeletonEditMode" },
+      toolBindings: { [key]: "skeletonEditMode" },
     });
     const state = {
       dimensions: { x: [1e-9, "m"], y: [1e-9, "m"], z: [1e-9, "m"] },

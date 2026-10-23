@@ -37,7 +37,7 @@ const viewerState = {
       segments: ["10", "20"],
       tab: "skeleton",
       skeletonBrowse: { nodeFilter: "none" },
-      toolBindings: { E: "spatialSkeletonEditMode" },
+      toolBindings: { E: "skeletonEditMode" },
     },
   ],
   selectedLayer: { layer: "skeletons", visible: true },
