@@ -774,7 +774,11 @@ highp vec3 vertexPosition = applyNodePositionOverride(vertexIndex, readAttribute
         WebGL2RenderingContext.UNSIGNED_INT,
       );
       gl.vertexAttribDivisor(aVertexIndex, 1);
-      initializeLineShader(edgeShader, projectionParameters, 1.0);
+      initializeLineShader(
+        edgeShader,
+        projectionParameters,
+        this.targetIsSliceView ? 1.0 : 0.0,
+      );
       drawLines(gl, 1, skeletonGpuGeometry.numIndices / 2);
       gl.vertexAttribDivisor(aVertexIndex, 0);
       gl.disableVertexAttribArray(aVertexIndex);
@@ -786,7 +790,7 @@ highp vec3 vertexPosition = applyNodePositionOverride(vertexIndex, readAttribute
     {
       nodeShader.bind();
       initializeCircleShader(nodeShader, projectionParameters, {
-        featherWidthInPixels: 1.0,
+        featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
       });
       drawCircles(nodeShader.gl, 1, skeletonGpuGeometry.numVertices);
     }
