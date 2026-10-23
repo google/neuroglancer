@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-import type { DataType } from "#src/util/data_type.js";
-
 export enum CodecKind {
   arrayToArray = 0,
   arrayToBytes = 1,
@@ -45,7 +43,9 @@ export interface ShardingInfo {
 }
 
 export interface CodecArrayInfo {
-  dataType: DataType;
+  // Name in the source data type registry; the codec chain is transferred to the backend by
+  // structured clone, so this cannot be the registry entry itself.
+  sourceDataType: string;
   // Specifies the chunk shape, indexed by logical dimension.
   chunkShape: number[];
 }

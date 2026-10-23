@@ -25,6 +25,7 @@ export enum VolumeChunkEncoding {
 export class VolumeChunkSourceParameters {
   url: string;
   encoding: VolumeChunkEncoding;
+  sourceDataType: string;
 
   static RPC_ID = "n5/VolumeChunkSource";
 }
