@@ -198,6 +198,7 @@ export const VIEWER_UI_CONFIG_OPTIONS = [
   "showPanelBorders",
   "showAllDimensionPlotBounds",
   "pickRadius",
+  "transparentBackground",
 ] as const;
 
 export type ViewerUIConfiguration = {
@@ -215,6 +216,8 @@ export function makeViewerUIConfiguration(): ViewerUIConfiguration {
   for (const key of VIEWER_UI_CONFIG_OPTIONS) {
     if (key === "pickRadius") {
       (config as any)[key] = new TrackableValue(5, verifyNonnegativeInt);
+    } else if (key === "transparentBackground") {
+      (config as any)[key] = new TrackableBoolean(false);
     } else {
       (config as any)[key] = new TrackableBoolean(true);
     }
@@ -762,6 +765,16 @@ export class Viewer extends RefCounted implements ViewerState {
 
     this.makeUI();
     this.updateShowBorders();
+
+    const { transparentBackground } = this.uiConfiguration;
+    const updateTransparentBackground = () => {
+      display.transparentBackground = transparentBackground.value;
+      display.scheduleRedraw();
+    };
+    updateTransparentBackground();
+    this.registerDisposer(
+      transparentBackground.changed.add(updateTransparentBackground),
+    );
 
     this.registerActionListeners();
     this.registerEventActionBindings();

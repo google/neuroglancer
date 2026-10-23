@@ -344,6 +344,9 @@ class ConfigState(JsonObjectWrapper):
     show_all_dimension_plot_bounds = showAllDimensionPlotBounds = wrapped_property(
         "showAllDimensionPlotBounds", optional(bool, True)
     )
+    transparent_background = transparentBackground = wrapped_property(
+        "transparentBackground", optional(bool, False)
+    )
     pick_radius = pickRadius = wrapped_property("pickRadius", optional(int, 5))
     scale_bar_options = scaleBarOptions = wrapped_property(
         "scaleBarOptions", ScaleBarOptions
