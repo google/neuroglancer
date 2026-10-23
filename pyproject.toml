@@ -69,7 +69,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # These scripts run inside the CATMAID container and import Django after configuring it.
-"tests/skeleton_edit/docker/*.py" = ["E402"]
+"tests/skeleton_edit/harness/docker/*.py" = ["E402"]
 
 [tool.mypy]
 show_error_codes = true

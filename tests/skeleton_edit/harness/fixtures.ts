@@ -38,7 +38,7 @@ export const test = base.extend<
         await use(process.env.SKELETON_APP_URL);
         return;
       }
-      const root = path.join(import.meta.dirname, "..", "..");
+      const root = path.join(import.meta.dirname, "..", "..", "..");
       const proc = spawn(
         process.execPath,
         [

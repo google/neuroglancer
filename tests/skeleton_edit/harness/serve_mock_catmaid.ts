@@ -19,7 +19,7 @@ import path from "node:path";
 import { startCatmaidMockServer } from "./catmaid_mock_server.js";
 
 const viewerPort = 8080;
-const repositoryRoot = path.join(import.meta.dirname, "..", "..");
+const repositoryRoot = path.join(import.meta.dirname, "..", "..", "..");
 
 const mockServer = await startCatmaidMockServer();
 const viewerState = {

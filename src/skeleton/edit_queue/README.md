@@ -834,10 +834,11 @@ At minimum, cover:
   partial compound plans with zero compensation POSTs; and
 - Reload-required lease retention and replacement-queue behavior.
 
-The Docker suite retains the following regression checks under its existing
-case IDs:
+The Docker suite (`tests/skeleton_edit/*.e2e.ts`) keeps the following regression
+checks, named by test title:
 
-- **01:** turning editing off during a drag discards the preview and sends no
+- **"move: the edit shows at once, Undo and Redo work, and it stays after
+  reload"** (`node_editing.e2e.ts`): turning editing off during a drag discards the preview and sends no
   edit request, even if editing is reactivated before mouseup. Later pointer
   movement cannot revive that preview or add queue/history entries. A new
   gesture still saves normally, with Undo/Redo and reload checks. The same case
@@ -852,9 +853,10 @@ case IDs:
   acknowledgement: its existing debounce sends exactly one Radius edit request
   without a user blur. A before-request gate verifies preview/backend
   separation, followed by save and Undo of both changes.
-- **04:** empty, whitespace-only, and reserved-label descriptions agree with
+- **"description: …"** (`node_editing.e2e.ts`): empty, whitespace-only, and reserved-label descriptions agree with
   CATMAID after save and canonical Undo/Redo.
-- **06:** newly created nodes retain explicit property defaults through full
+- **"children and a move added while a new root is saving use CATMAID's IDs,
+  through full Undo and Redo"** (`node_editing.e2e.ts`): newly created nodes retain explicit property defaults through full
   Undo/Redo. Reroot and non-root Merge also restore their original root's 0%
   confidence through repeated Undo/Redo, held confidence writes, replacement
   skeleton IDs, and reload. Real graph comparisons do not substitute missing
@@ -870,20 +872,25 @@ case IDs:
   across replacements before reload. A held Move checks preview/backend
   separation; Undo/Redo checks the original coordinates, recreation with
   another node ID, and the final coordinates on reload.
-- **12:** a restored singleton has a real rendered chunk before Redo; that chunk
+- **"Undo of deleting a singleton restores it with its properties under a new
+  ID"** (`node_editing.e2e.ts`): a restored singleton has a real rendered chunk before Redo; that chunk
   disappears during the held deletion and remains absent after Saved.
-- **13–14:** each Split Undo holds the Merge request, captures a real read of
+- **"Split a chain: …" and "Split a branch: …"** (`structural_editing.e2e.ts`):
+  each Split Undo holds the Merge request, captures a real read of
   the downstream skeleton before CATMAID deletes it, and holds that response
   across confirmation. The deleted ID's revision advances, its retained read is
   canceled, and the restored topology remains correct after releasing the stale
   response. Both cycles still verify replacement IDs, Redo, and reload.
-- **15:** merging at an existing root preserves its non-default confidence
+- **"Merge at the target root separates again without reroot"**
+  (`structural_editing.e2e.ts`): merging at an existing root preserves its non-default confidence
   without an extra reroot. A real target-skeleton response captured during the
   pending Merge is held across confirmation and cannot restore the deleted ID.
-- **16:** repeated non-root Merge Undo restores both original roots, including
+- **"non-root Merge preserves branches and restores both original roots
+  repeatedly"** (`structural_editing.e2e.ts`): repeated non-root Merge Undo restores both original roots, including
   non-default root confidence. Separate gates hold split, reroot, and confidence
   restoration while the complete inverse is already visible.
-- **18:** standalone reroot Undo restores non-default root confidence and stays
+- **"reroot reverses the attachment path and carries edge confidence"**
+  (`structural_editing.e2e.ts`): standalone reroot Undo restores non-default root confidence and stays
   Saving until that confidence write completes.
 
 Useful commands:

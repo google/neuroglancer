@@ -20,13 +20,13 @@ import type { Viewer } from "#src/viewer.js";
 import {
   startCatmaidMockServer,
   type CatmaidMockServer,
-} from "./catmaid_mock_server.js";
-import { test } from "./fixtures.js";
+} from "./harness/catmaid_mock_server.js";
+import { test } from "./harness/fixtures.js";
 import {
   readGraph,
   readQueue,
   SkeletonEditPage,
-} from "./skeleton_edit_page.js";
+} from "./harness/skeleton_edit_page.js";
 
 async function withBackend(
   testInfo: TestInfo,
@@ -115,7 +115,7 @@ for (const trigger of ["description blur", "save acknowledgement"] as const) {
   });
 }
 
-test("Delete survives a Move acknowledgement during a press without a focused editor", async ({
+test("Delete survives CATMAID confirming a Move during a press without a focused editor", async ({
   page,
 }, testInfo) => {
   await withBackend(testInfo, async (backend) => {
@@ -161,7 +161,7 @@ test("Delete survives a Move acknowledgement during a press without a focused ed
   });
 });
 
-test("Confidence keeps keyboard focus through a Move acknowledgement", async ({
+test("Confidence keeps keyboard focus when CATMAID confirms a Move", async ({
   page,
 }, testInfo) => {
   await withBackend(testInfo, async (backend) => {
@@ -558,7 +558,7 @@ test("a rejected move cancels its child and preserves Undo of a saved descriptio
   });
 });
 
-test("a move previews immediately and queued Undo cancels its write until Redo", async ({
+test("a move shows at once, and Undo before the move is sent cancels it until Redo", async ({
   page,
 }, testInfo) => {
   await withBackend(testInfo, async (backend) => {
@@ -619,7 +619,7 @@ test("a move previews immediately and queued Undo cancels its write until Redo",
   });
 });
 
-test("Undo of a saving move previews its inverse and submits it after acknowledgement", async ({
+test("Undo of a saving move shows the old position at once and sends it after CATMAID confirms the move", async ({
   page,
 }, testInfo) => {
   await withBackend(testInfo, async (backend) => {
@@ -829,7 +829,7 @@ test("deleting a leaf restores its parent and position under a fresh ID on Undo"
   });
 });
 
-test("two layers preview independently while mutations share one FIFO", async ({
+test("two layers on the same CATMAID project show previews independently, while their saves go one at a time in order", async ({
   page,
 }, testInfo) => {
   await withBackend(testInfo, async (backend) => {
@@ -868,7 +868,7 @@ test("two layers preview independently while mutations share one FIFO", async ({
   });
 });
 
-test("a new root and pending child chain survive full Undo and Redo with fresh IDs", async ({
+test("children and a move added while a new root is saving use CATMAID's IDs, through full Undo and Redo", async ({
   page,
 }, testInfo) => {
   test.setTimeout(60_000);

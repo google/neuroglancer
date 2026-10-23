@@ -15,10 +15,10 @@
  */
 
 import { expect } from "@playwright/test";
-import { test, change, remap } from "./real_test.js";
-import { readQueue } from "./skeleton_edit_page.js";
+import { test, change, remap } from "./harness/real_test.js";
+import { readQueue } from "./harness/skeleton_edit_page.js";
 
-test("[E2E-19] Undo cancels an undispatched edit and Redo saves it once", async ({
+test("Undo cancels an edit that was not sent yet, and Redo saves it once", async ({
   real,
 }) => {
   const { ui, ids, original, transport } = real;
@@ -47,11 +47,8 @@ test("[E2E-19] Undo cancels an undispatched edit and Redo saves it once", async 
   await real.reload(second);
 });
 
-for (const [number, operation] of [
-  [20, "move"],
-  [21, "Split"],
-] as const) {
-  test(`[E2E-${number}] Undo while ${operation} is Saving previews the inverse before acknowledgement`, async ({
+for (const operation of ["move", "Split"] as const) {
+  test(`Undo while ${operation} is saving shows the earlier state at once and sends the inverse after CATMAID confirms`, async ({
     real,
   }, testInfo) => {
     const { ui, ids, original, transport } = real;
@@ -95,7 +92,7 @@ for (const [number, operation] of [
   });
 }
 
-test("[E2E-22] mixed history remains LIFO across replacement IDs and clears the redo branch", async ({
+test("Undo takes back the most recent edit first, even after the server renumbers nodes, and a new edit clears Redo", async ({
   real,
 }) => {
   const { ui, ids, original, transport } = real;

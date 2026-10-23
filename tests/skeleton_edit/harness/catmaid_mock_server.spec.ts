@@ -19,11 +19,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CatmaidClient } from "#src/datasource/catmaid/api.js";
 import { getSkeletonNodeConfidence } from "#src/skeleton/node_attributes.js";
-import type { CatmaidMockServer } from "#tests/skeleton_edit/catmaid_mock_server.js";
+import type { CatmaidMockServer } from "./catmaid_mock_server.js";
 import {
   makeCatmaidTestNodes,
   startCatmaidMockServer,
-} from "#tests/skeleton_edit/catmaid_mock_server.js";
+} from "./catmaid_mock_server.js";
 
 describe("stateful CATMAID browser test backend", () => {
   let server: CatmaidMockServer;
