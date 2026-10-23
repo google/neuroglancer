@@ -15,8 +15,11 @@
  */
 
 import { describe, it, expect } from "vitest";
+import type { ProjectionParameters } from "#src/projection_parameters.js";
+import type { TransformedSource } from "#src/sliceview/base.js";
 import {
   estimateSliceAreaPerChunk,
+  forEachVisibleVolumetricChunk,
   getNearIsotropicBlockSize,
 } from "#src/sliceview/base.js";
 import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
@@ -198,5 +201,63 @@ describe("estimateSliceAreaPerChunk", () => {
       ]) as mat4;
       expect(estimateSliceAreaPerChunk(chunkLayout, viewMatrix)).toEqual(3 * 5);
     }
+  });
+});
+
+describe("forEachVisibleVolumetricChunk", () => {
+  it("does not clamp zeroed display-dim positions to the chunk origin", () => {
+    // `xy` slice view of a rank-3 volume whose origin is *not* at (0, 0, 0)
+    const tsource = {
+      source: {
+        spec: {
+          rank: 3,
+          chunkDataSize: Uint32Array.of(1024, 1024, 1),
+          // Stack origin at voxel (64056, 33042, 20) -> nonzero chunk bounds.
+          lowerChunkBound: Float32Array.of(62, 32, 20),
+          upperChunkBound: Float32Array.of(64, 34, 21),
+        },
+      },
+      layerRank: 3,
+      // The following data is prepared as would be done by
+      // `getVolumetricTransformedSources`: display-dim rows (x, y) are zeroed and
+      // z maps identically from global z with no translation.
+      fixedLayerToChunkTransform: Float32Array.of(
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+      ),
+      // Display dims (x, y) get infinite clip bounds; only z is finite.
+      nonDisplayLowerClipBound: Float32Array.of(-Infinity, -Infinity, 20),
+      nonDisplayUpperClipBound: Float32Array.of(Infinity, Infinity, 21),
+      chunkLayout: new ChunkLayout(vec3.fromValues(1, 1, 1), mat4.create(), 3),
+      lowerChunkDisplayBound: vec3.fromValues(62, 32, 20),
+      upperChunkDisplayBound: vec3.fromValues(64, 34, 21),
+      chunkDisplayDimensionIndices: [0, 1, 2],
+      curPositionInChunks: new Float32Array(3),
+      // Sentinel so an early return (source excluded) can't masquerade as a pass.
+      fixedPositionWithinChunk: Uint32Array.of(999, 999, 999),
+    } as unknown as TransformedSource;
+
+    forEachVisibleVolumetricChunk(
+      {
+        // x/y are irrelevant (transform rows zeroed); z is at slice 20.
+        globalPosition: Float32Array.of(70000, 40000, 20),
+        viewProjectionMat: mat4.create(),
+      } as unknown as ProjectionParameters,
+      new Float32Array(0),
+      tsource,
+      () => {},
+    );
+
+    expect(Array.from(tsource.fixedPositionWithinChunk)).toEqual([0, 0, 0]);
   });
 });
