@@ -247,7 +247,7 @@ describe("SkeletonNodeSelection", () => {
   });
 
   it("selecting a node shows it in the Selection panel with its skeleton and position", () => {
-    const { selection, readLayerEntry } = makeSelectionHarness({
+    const { selection, selectionState, readLayerEntry } = makeSelectionHarness({
       loadedNodes: [
         { nodeId: 5n, segmentId: 1n, position: new Float32Array([4, 5, 6]) },
       ],
@@ -256,6 +256,8 @@ describe("SkeletonNodeSelection", () => {
     selection.select(5n, true);
 
     expect(readLayerEntry()).toMatchObject({ nodeId: 5n, value: 1n });
+    expect(selectionState.pin.value).toBe(true);
+    expect(selectionState.value?.position).toEqual(new Float32Array([4, 5, 6]));
     expect(selection.selected.value).toEqual({
       nodeId: 5n,
       segmentId: 1n,

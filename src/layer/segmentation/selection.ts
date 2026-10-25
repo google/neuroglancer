@@ -429,13 +429,20 @@ export class SkeletonNodeSelection extends RefCounted {
   ) {
     const { layer } = this.options;
     const { selectionState } = layer.manager.root;
-    if (pin !== false || selectionState.pin.value) {
-      selectionState.captureSingleLayerState(layer, capture, pin);
-      return;
-    }
+    if (pin === false && selectionState.pin.value) return;
     const state = {} as UserLayerSelectionState;
     layer.initializeSelectionState(state);
     if (!capture(state)) return;
+    if (pin !== false) {
+      selectionState.location.visible = true;
+      if (pin === true) {
+        selectionState.pin.value = true;
+      } else if (pin === "toggle") {
+        selectionState.pin.value = !selectionState.pin.value;
+      } else {
+        selectionState.pin.value = false;
+      }
+    }
     selectionState.value = {
       layers: [{ layer, state }],
       coordinateSpace: selectionState.coordinateSpace.value,
