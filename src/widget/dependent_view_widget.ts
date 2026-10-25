@@ -79,6 +79,7 @@ export class DependentViewWidget<T> extends RefCounted {
       this.registerEventListener(window, "pointercancel", releasePointer, {
         capture: true,
       });
+      this.registerEventListener(window, "blur", releasePointer);
       this.registerEventListener(this.element, "focusout", () =>
         this.debouncedUpdateView(),
       );

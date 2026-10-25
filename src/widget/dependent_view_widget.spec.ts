@@ -103,4 +103,20 @@ describe("DependentViewWidget", () => {
     view.widget.dispose();
     view.widget.element.remove();
   });
+
+  it("shows a change made during a press once the window loses focus, since the press end is never seen", async () => {
+    const model = new WatchableValue("first");
+    const view = makePressableView(model);
+    view.button().dispatchEvent(new Event("pointerdown", { bubbles: true }));
+
+    model.value = "second";
+    await nextFrame();
+    expect(view.button().textContent).toBe("first");
+    window.dispatchEvent(new Event("blur"));
+
+    await nextFrame();
+    expect(view.button().textContent).toBe("second");
+    view.widget.dispose();
+    view.widget.element.remove();
+  });
 });
