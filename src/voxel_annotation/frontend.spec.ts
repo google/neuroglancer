@@ -30,18 +30,28 @@ function createRealSourceMock() {
 }
 
 // Preview source mock mirroring InMemoryVolumeChunkSource's stroke-seq tags:
-// invalidateChunks purges the tag, like the real deleteChunk does.
+// a tagged chunk exists, and invalidateChunks deletes it with its tag, like the
+// real deleteChunk does.
 function createPreviewSourceMock() {
   const previewSeqs = new Map<string, number>();
+  const chunks = new Map<string, object>();
   return {
     previewSeqs,
-    setPreviewSeq: (key: string, seq: number) => previewSeqs.set(key, seq),
+    chunks,
+    addChunk: (key: string) => chunks.set(key, {}),
+    setPreviewSeq: (key: string, seq: number) => {
+      chunks.set(key, {});
+      previewSeqs.set(key, seq);
+    },
     getPreviewSeq: (key: string) => previewSeqs.get(key) ?? 0,
     keysWithPreviewSeq: (seq: number) =>
       [...previewSeqs.entries()].filter(([, s]) => s === seq).map(([k]) => k),
     clearPreviewSeq: (key: string) => previewSeqs.delete(key),
     invalidateChunks: vi.fn((keys: string[]) => {
-      for (const key of keys) previewSeqs.delete(key);
+      for (const key of keys) {
+        previewSeqs.delete(key);
+        chunks.delete(key);
+      }
     }),
   };
 }
@@ -50,6 +60,7 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
   let realSources: ReturnType<typeof createRealSourceMock>[];
   let previewSources: ReturnType<typeof createPreviewSourceMock>[];
   let visibleChunksChanged: NullarySignal;
+  let flushPendingChunkUpdates: ReturnType<typeof vi.fn>;
   let controller: VoxelEditingController;
 
   beforeEach(() => {
@@ -57,9 +68,12 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
     realSources = [createRealSourceMock(), createRealSourceMock()];
     previewSources = [createPreviewSourceMock(), createPreviewSourceMock()];
     visibleChunksChanged = new NullarySignal();
+    flushPendingChunkUpdates = vi.fn();
     const makeMultiscale = (sources: unknown[]) => ({
       rank: 3,
-      chunkManager: { chunkQueueManager: { visibleChunksChanged } },
+      chunkManager: {
+        chunkQueueManager: { visibleChunksChanged, flushPendingChunkUpdates },
+      },
       getSources: () => [
         sources.map((chunkSource) => ({
           chunkSource,
@@ -198,6 +212,7 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
   });
 
   it("clears without coverage info when no stroke ever tagged the chunk", () => {
+    previewSources[0].addChunk("0,0,0");
     controller.callChunkReload([makeLodChunkKey("0,0,0", 0)], false);
     realSources[0].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
@@ -282,6 +297,103 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
     visibleChunksChanged.dispatch();
     expect(previewSources[0].invalidateChunks).toHaveBeenCalledTimes(1);
     expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+  });
+
+  it("applies the chunk updates already received before recording the stale chunk", () => {
+    const seq = controller.beginStroke();
+    previewSources[0].setPreviewSeq("0,0,0", seq);
+    realSources[0].fireFreshChunk("0,0,0");
+    // A refetch predating the write is still queued when the reload arrives:
+    // it is applied before arming, so it cannot resolve the swap.
+    flushPendingChunkUpdates.mockImplementation(() =>
+      realSources[0].fireFreshChunk("0,0,0"),
+    );
+
+    const lodChunkKey = makeLodChunkKey("0,0,0", 0);
+    controller.callChunkReload([lodChunkKey], false, undefined, {
+      [lodChunkKey]: seq,
+    });
+    expect(flushPendingChunkUpdates).toHaveBeenCalled();
+    visibleChunksChanged.dispatch();
+    expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
+
+    realSources[0].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+  });
+
+  it("keeps the preview while a finer real chunk is still the stale copy", () => {
+    const seq = controller.beginStroke();
+    previewSources[0].setPreviewSeq("0,0,0", seq);
+    // Both levels are on the frontend: LOD 0 drawn over LOD 1.
+    realSources[0].fireFreshChunk("0,0,0");
+    realSources[1].fireFreshChunk("0,0,0");
+
+    const originKey = makeLodChunkKey("0,0,0", 0);
+    const parentKey = makeLodChunkKey("0,0,0", 1);
+    controller.callChunkReload([originKey], false, undefined, {
+      [originKey]: seq,
+    });
+    controller.callChunkReload(
+      [parentKey],
+      false,
+      { [parentKey]: originKey },
+      { [parentKey]: seq },
+    );
+
+    // The coarser parent arrives first: the stale LOD 0 is still on screen.
+    realSources[1].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
+    expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
+
+    realSources[0].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+  });
+
+  it("is not held back by a finer real chunk the frontend does not hold", () => {
+    // Zoomed out: LOD 0 is not loaded, LOD 1 is what is on screen.
+    const seq = controller.beginStroke();
+    previewSources[0].setPreviewSeq("0,0,0", seq);
+    realSources[1].fireFreshChunk("0,0,0");
+
+    const originKey = makeLodChunkKey("0,0,0", 0);
+    const parentKey = makeLodChunkKey("0,0,0", 1);
+    controller.callChunkReload([originKey], false, undefined, {
+      [originKey]: seq,
+    });
+    controller.callChunkReload(
+      [parentKey],
+      false,
+      { [parentKey]: originKey },
+      { [parentKey]: seq },
+    );
+
+    realSources[1].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+  });
+
+  it("clears every origin written into the same parent", () => {
+    const seq = controller.beginStroke();
+    previewSources[0].setPreviewSeq("0,0,0", seq);
+    previewSources[0].setPreviewSeq("1,0,0", seq);
+    realSources[1].fireFreshChunk("0,0,0");
+
+    const parentKey = makeLodChunkKey("0,0,0", 1);
+    for (const origin of ["0,0,0", "1,0,0"]) {
+      controller.callChunkReload(
+        [parentKey],
+        false,
+        { [parentKey]: makeLodChunkKey(origin, 0) },
+        { [parentKey]: seq },
+      );
+    }
+
+    realSources[1].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["1,0,0"]);
   });
 
   it("rollbackStroke drops exactly the preview chunks tagged by that stroke", () => {

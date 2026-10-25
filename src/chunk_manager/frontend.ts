@@ -253,7 +253,14 @@ export class ChunkQueueManager extends SharedObject {
       const newState: number = update.state;
       if (newState === ChunkState.EXPIRED) {
         // FIXME: maybe use freeList for chunks here
-        source.deleteChunk(update.id);
+        // The frontend may already have dropped a chunk it invalidated itself.
+        const chunk = source.chunks.get(update.id);
+        if (chunk !== undefined) {
+          if (chunk.state === ChunkState.GPU_MEMORY) {
+            visibleChunksChanged = true;
+          }
+          source.deleteChunk(update.id);
+        }
       } else {
         let chunk: Chunk;
         const key = update.id;

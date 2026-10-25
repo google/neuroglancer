@@ -59,6 +59,17 @@ export interface VoxelEditingControllerHost {
   rpc: RPC;
 }
 
+interface PreviewSwap {
+  lodIndex: number;
+  source: VolumeChunkSource;
+  chunkKey: string;
+  staleChunk: unknown;
+  previewChunkSource: InMemoryVolumeChunkSource;
+  previewChunkKey: string;
+  coveredSeq: number;
+  arrived: boolean;
+}
+
 @registerSharedObjectOwner(VOXEL_EDITING_BACKEND_RPC_ID)
 export class VoxelEditingController extends SharedObject {
   public undoCount = new WatchableValue<number>(0);
@@ -69,44 +80,72 @@ export class VoxelEditingController extends SharedObject {
   // backend.
   private dispatchSeq = 0;
 
-  // Preview swaps awaiting their refetched real chunk, keyed by real voxel
-  // chunk key and resolved by observing visibleChunksChanged: the real
-  // chunk's object identity distinguishes the lazily kept stale chunk
-  // (recorded at arming) from the refetched one, since a `new` chunk update
-  // always builds a fresh Chunk object. A newer reload for the same chunk
-  // overwrites its entry, so the map never grows beyond the set of chunks
-  // awaiting a swap.
-  private pendingPreviewSwaps = new Map<
-    string,
-    {
-      source: VolumeChunkSource;
-      chunkKey: string;
-      staleChunk: unknown;
-      previewChunkSource: InMemoryVolumeChunkSource;
-      previewChunkKey: string;
-      coveredSeq: number;
-    }
-  >();
+  // Preview swaps awaiting their refetched real chunks, by preview chunk,
+  // then by real chunk: a LOD-0 preview chunk waits on its own real chunk and
+  // on the parents written from it at coarser LODs. A swap is resolved by
+  // observing visibleChunksChanged: the real chunk's object identity
+  // distinguishes the lazily kept stale chunk (recorded at arming) from the
+  // refetched one, since a `new` chunk update always builds a fresh Chunk
+  // object. A newer reload for the same pair overwrites its entry.
+  private pendingPreviewSwaps = new Map<string, Map<string, PreviewSwap>>();
 
   private processPendingPreviewSwaps(): void {
-    if (this.pendingPreviewSwaps.size === 0) return;
-    for (const [lodChunkKey, swap] of this.pendingPreviewSwaps) {
-      const chunk = swap.source.chunks.get(swap.chunkKey);
-      // Still the stale chunk (or gone): the refetch has not landed yet.
-      if (chunk === undefined || chunk === swap.staleChunk) continue;
-      // Refetched but not yet displayed: keep waiting.
-      if (chunk.state !== ChunkState.GPU_MEMORY) continue;
-      this.pendingPreviewSwaps.delete(lodChunkKey);
+    for (const [previewLodChunkKey, swaps] of this.pendingPreviewSwaps) {
+      const { previewChunkSource, previewChunkKey } = swaps
+        .values()
+        .next().value!;
+      if (!previewChunkSource.chunks.has(previewChunkKey)) {
+        // Cleared by another path (undo, rollback, reconcile).
+        this.pendingPreviewSwaps.delete(previewLodChunkKey);
+        continue;
+      }
+      let finestArrived: PreviewSwap | undefined;
+      for (const swap of swaps.values()) {
+        if (!swap.arrived) {
+          const chunk = swap.source.chunks.get(swap.chunkKey);
+          // Still the stale chunk (or gone), or not yet displayed.
+          if (
+            chunk === undefined ||
+            chunk === swap.staleChunk ||
+            chunk.state !== ChunkState.GPU_MEMORY
+          ) {
+            continue;
+          }
+          swap.arrived = true;
+        }
+        if (
+          finestArrived === undefined ||
+          swap.lodIndex < finestArrived.lodIndex
+        ) {
+          finestArrived = swap;
+        }
+      }
+      if (finestArrived === undefined) continue;
+      // What is on screen comes from the finest real chunk the frontend
+      // holds: while a finer one is still the stale copy, keep the preview.
+      let finerStale = false;
+      for (const swap of swaps.values()) {
+        if (
+          !swap.arrived &&
+          swap.lodIndex < finestArrived.lodIndex &&
+          swap.source.chunks.has(swap.chunkKey)
+        ) {
+          finerStale = true;
+          break;
+        }
+      }
+      if (finerStale) continue;
       // The preview tag is read now, at swap time: a stroke that touched the
       // chunk since arming raised it above coveredSeq, keeping the preview on
       // screen; the covering write's own reload re-arms the swap.
       if (
-        swap.coveredSeq <
-        swap.previewChunkSource.getPreviewSeq(swap.previewChunkKey)
+        finestArrived.coveredSeq <
+        previewChunkSource.getPreviewSeq(previewChunkKey)
       ) {
         continue;
       }
-      swap.previewChunkSource.invalidateChunks([swap.previewChunkKey]);
+      this.pendingPreviewSwaps.delete(previewLodChunkKey);
+      previewChunkSource.invalidateChunks([previewChunkKey]);
     }
   }
 
@@ -695,15 +734,12 @@ export class VoxelEditingController extends SharedObject {
       const previewSources = this.host.previewSource?.getSources(
         this.getIdentitySliceViewSourceOptions(),
       )[0];
-      // Known, accepted race: a refetch predating the write we are reloading
-      // for may still sit in the frontend's pending-update queue at arming
-      // time; its arrival is indistinguishable from the fresh one and can
-      // clear the preview over pre-write data. The window requires the queue
-      // to lag behind RPC processing (heavy load only), and the backend's
-      // in-flight download cancellation on write guarantees a correct
-      // refetch follows within one round trip, so the effect is a rare,
-      // self-healing flicker — the trade-off for keeping the chunk manager
-      // free of voxel-specific hooks.
+      // Apply the chunk updates already received before recording the stale
+      // chunks: they predate the write being reloaded for, and applied later
+      // they would resolve its swap with pre-write data. The worker
+      // invalidated these chunks before sending this reload, so any update
+      // received from now on comes from a refetch started after the write.
+      this.host.primarySource.chunkManager.chunkQueueManager.flushPendingChunkUpdates();
       for (const lodChunkKey of lodChunkKeys) {
         const parsed = parseLodChunkKey(lodChunkKey);
         if (!parsed) continue;
@@ -713,15 +749,18 @@ export class VoxelEditingController extends SharedObject {
         if (!source) continue;
         const { chunkKey } = parsed;
 
-        const previewParsed = parseLodChunkKey(
-          previewKeysToClear?.[lodChunkKey] ?? lodChunkKey,
-        );
+        const previewLodChunkKey =
+          previewKeysToClear?.[lodChunkKey] ?? lodChunkKey;
+        const previewParsed = parseLodChunkKey(previewLodChunkKey);
         const previewChunkSource = previewParsed
           ? (previewSources?.[previewParsed.lodIndex]?.chunkSource as
               | InMemoryVolumeChunkSource
               | undefined)
           : undefined;
-        if (previewChunkSource) {
+        if (
+          previewChunkSource &&
+          previewChunkSource.chunks.has(previewParsed!.chunkKey)
+        ) {
           // The backend echoes, per reloaded chunk, the highest stroke seq
           // its write covers. The preview chunk carries the seq of the last
           // stroke whose preview touched it (including a stroke still under
@@ -738,13 +777,20 @@ export class VoxelEditingController extends SharedObject {
             // (Ctrl+Z mid-drag, accepted).
             previewChunkSource.clearPreviewSeq(previewParsed!.chunkKey);
           }
-          this.pendingPreviewSwaps.set(lodChunkKey, {
+          let swaps = this.pendingPreviewSwaps.get(previewLodChunkKey);
+          if (swaps === undefined) {
+            swaps = new Map();
+            this.pendingPreviewSwaps.set(previewLodChunkKey, swaps);
+          }
+          swaps.set(lodChunkKey, {
+            lodIndex: parsed.lodIndex,
             source,
             chunkKey,
             staleChunk: source.chunks.get(chunkKey),
             previewChunkSource,
             previewChunkKey: previewParsed!.chunkKey,
             coveredSeq: coveredSeqs?.[lodChunkKey] ?? 0,
+            arrived: false,
           });
         }
         let arr = chunksToInvalidateBySource.get(source);

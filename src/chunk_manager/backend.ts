@@ -129,8 +129,15 @@ export class Chunk implements Disposable {
    */
   downloadAbortController: AbortController | undefined = undefined;
 
+  /**
+   * Set when the cached data was invalidated while the frontend held a copy,
+   * which it keeps on display until refetched data replaces it.
+   */
+  staleOnFrontend = false;
+
   initialize(key: string) {
     this.key = key;
+    this.staleOnFrontend = false;
     this.priority = Number.NEGATIVE_INFINITY;
     this.priorityTier = ChunkPriorityTier.RECENT;
     this.newPriority = Number.NEGATIVE_INFINITY;
@@ -854,6 +861,14 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     ) {
       // Delete this chunk.
       const { source } = chunk;
+      if (chunk.staleOnFrontend) {
+        // Nothing will refetch it: drop the stale copy the frontend still holds.
+        this.rpc!.invoke("Chunk.update", {
+          id: chunk.key,
+          state: ChunkState.EXPIRED,
+          source: source!.rpcId,
+        });
+      }
       source!.removeChunk(chunk);
       this.adjustCapacitiesForChunk(chunk, false);
       return false;
@@ -996,6 +1011,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 
   moveChunkToFrontend(chunk: Chunk) {
+    chunk.staleOnFrontend = false;
     const rpc = this.rpc!;
     const msg: any = {};
     const transfers: any[] = [];
@@ -1116,6 +1132,10 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       const chunk = source.chunks.get(key);
       if (!chunk) continue;
       switch (chunk.state) {
+        case ChunkState.GPU_MEMORY:
+        case ChunkState.SYSTEM_MEMORY:
+          chunk.staleOnFrontend = true;
+          break;
         case ChunkState.DOWNLOADING:
           cancelChunkDownload(chunk);
           break;
