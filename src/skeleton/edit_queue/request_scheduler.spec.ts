@@ -86,6 +86,44 @@ async function flush() {
   await Promise.resolve();
 }
 
+async function isPending(promise: Promise<unknown>) {
+  const marker = {};
+  return (await Promise.race([promise, Promise.resolve(marker)])) === marker;
+}
+
+describe("SpatialSkeletonEditRequestLock", () => {
+  it("a retained lease keeps later edits to the same source waiting until it is released", async () => {
+    const lock = new SpatialSkeletonEditRequestLock();
+    const editRequestScope = {};
+    const lease = await lock.acquire({ editRequestScope });
+    expect(lease.retain()).toBe(true);
+    expect(lease.state).toBe("retained");
+
+    const waiting = lock.acquire({ editRequestScope });
+    expect(await isPending(waiting)).toBe(true);
+    expect(lease.retain()).toBe(false);
+
+    expect(lease.release()).toBe(true);
+    const next = await waiting;
+    expect(next.state).toBe("active");
+    expect(lease.release()).toBe(false);
+    next.release();
+  });
+
+  it("refuses a scope that is not an object and an acquisition that was already cancelled", async () => {
+    const lock = new SpatialSkeletonEditRequestLock();
+    await expect(
+      lock.acquire({ editRequestScope: null as unknown as object }),
+    ).rejects.toThrow("requires an object scope");
+
+    const controller = new AbortController();
+    controller.abort("stopped");
+    await expect(
+      lock.acquire({ editRequestScope: {}, signal: controller.signal }),
+    ).rejects.toBe("stopped");
+  });
+});
+
 describe("SpatialSkeletonRequestScheduler", () => {
   it("sends an edit and keeps the source locked until the queue releases it", async () => {
     const { adapter, commits } = makeAdapter();

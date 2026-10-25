@@ -675,6 +675,46 @@ describe("skeleton edit session", () => {
       },
     );
 
+    it("Undo and Redo with no edit queue do nothing and report a no-op", async () => {
+      const state = new SpatialSkeletonEditSession();
+
+      const undo = state.undoLatestEdit();
+      const redo = state.redoLatestEdit();
+
+      expect(state.canUndoEdit()).toBe(false);
+      expect(state.canRedoEdit()).toBe(false);
+      for (const execution of [undo, redo]) {
+        await expect(execution).resolves.toBe(false);
+        await expect(execution.acceptedByQueue).resolves.toBeUndefined();
+        await expect(execution.settled).resolves.toEqual({
+          outcome: "unchanged",
+          reason: "no-op",
+        });
+      }
+    });
+
+    it("Undo and Redo are not sent to an edit queue that has nothing to undo or redo", async () => {
+      const { state, layer, source } = makeEditQueueLayer({
+        createPlanner: () => makeRegistration(),
+      });
+      const queue = ensureSpatialSkeletonEditQueue(layer, source);
+      const undoLatest = vi.spyOn(queue, "undoLatest");
+      const redoLatest = vi.spyOn(queue, "redoLatest");
+
+      const undo = state.undoLatestEdit();
+      const redo = state.redoLatestEdit();
+
+      await expect(undo).resolves.toBe(false);
+      await expect(redo).resolves.toBe(false);
+      await expect(undo.settled).resolves.toEqual({
+        outcome: "unchanged",
+        reason: "no-op",
+      });
+      expect(undoLatest).not.toHaveBeenCalled();
+      expect(redoLatest).not.toHaveBeenCalled();
+      state.dispose();
+    });
+
     it("the edit queue and Undo history hold 64 edits by default, or a configured number of at least one", () => {
       const defaultState = new SpatialSkeletonEditSession();
       expect(defaultState.editQueueCapacity).toBe(64);
