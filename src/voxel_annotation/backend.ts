@@ -33,6 +33,7 @@ import {
   VOXEL_EDITING_BACKEND_RPC_ID,
   VOXEL_EDITING_COMMIT_VOXELS_RPC_ID,
   VOXEL_EDITING_CHUNK_RELOAD_RPC_ID,
+  VOXEL_EDITING_CASCADE_DONE_RPC_ID,
   VOXEL_EDITING_FAILURE_RPC_ID,
   VOXEL_EDITING_UNDO_RPC_ID,
   VOXEL_EDITING_REDO_RPC_ID,
@@ -330,6 +331,8 @@ class BrushOptimizationCache {
     }
   }
 }
+
+const CASCADE_FAILED = Symbol("cascadeFailed");
 
 @registerSharedObject(VOXEL_EDITING_BACKEND_RPC_ID)
 export class VoxelEditingController extends SharedObject {
@@ -758,16 +761,22 @@ export class VoxelEditingController extends SharedObject {
     // preview over a parent that lacks those edits. Under-claiming is safe:
     // that flush enqueues its own chain, which re-claims with its seq.
     const chainCoveredSeq = this.lastFlushedSeq.get(key) ?? 0;
-    let currentKey: string | null = key;
+    let next: string | null | typeof CASCADE_FAILED = key;
 
-    while (currentKey !== null) {
-      currentKey = await this.downsampleStep(currentKey, key, chainCoveredSeq);
+    while (typeof next === "string") {
+      next = await this.downsampleStep(next, key, chainCoveredSeq);
     }
 
-    // Note: the preview is no longer cleared eagerly here. Each parent's real
-    // reload (above) drops the originating LOD-0 preview once it reaches the
-    // GPU, so the visible preview is never removed before its replacement is
-    // rendered — even when zoomed out.
+    // The frontend keeps the origin's preview until every resolution has been
+    // rewritten, so that zooming out cannot reveal a level that lacks the
+    // edits. After a failure the preview stays.
+    if (next === null) {
+      this.rpc?.invoke(VOXEL_EDITING_CASCADE_DONE_RPC_ID, {
+        rpcId: this.rpcId,
+        lodChunkKey: key,
+        coveredSeq: chainCoveredSeq,
+      });
+    }
     this.updatePendingCount();
   }
 
@@ -803,17 +812,19 @@ export class VoxelEditingController extends SharedObject {
 
   /**
    * Performs a single downsampling step from a child chunk to its parent.
-   * @returns The key of the parent chunk that was updated, or null if the cascade should stop.
+   * @returns The key of the parent chunk that was updated, null once the
+   * coarsest resolution is reached, or CASCADE_FAILED if the cascade stops on
+   * an error.
    */
   private async downsampleStep(
     childKey: string,
     originKey: string,
     originCoveredSeq: number,
-  ): Promise<string | null> {
+  ): Promise<string | null | typeof CASCADE_FAILED> {
     const childInfo = parseLodChunkKey(childKey);
     if (childInfo === null) {
       console.error(`[Downsample] Invalid child key format: ${childKey}`);
-      return null;
+      return CASCADE_FAILED;
     }
     const childRes = this.resolutions.get(childInfo.lodIndex)!;
 
@@ -840,7 +851,7 @@ export class VoxelEditingController extends SharedObject {
       );
 
       if (!childCtx.data) {
-        return null;
+        return CASCADE_FAILED;
       }
 
       const childChunkData = childCtx.data as Uint32Array | BigUint64Array;
@@ -890,7 +901,7 @@ export class VoxelEditingController extends SharedObject {
           lodChunkKeys: [parentKey],
           message: `Downsampling to ${parentKey} failed.`,
         });
-        return null;
+        return CASCADE_FAILED;
       }
 
       return parentKey;

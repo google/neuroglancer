@@ -784,6 +784,12 @@ describe("VoxelEditingController: Downsampling Integration", () => {
 
     expect(keysReloaded).toContain(makeLodChunkKey("0,0,0", 1));
     expect(keysReloaded).toContain(makeLodChunkKey("0,0,0", 2));
+
+    // The frontend may now clear the origin's preview.
+    expect(mockRpc.invoke).toHaveBeenCalledWith(
+      "voxelEditing.cascadeDone",
+      expect.objectContaining({ lodChunkKey: key }),
+    );
   });
 
   it("Queue Deduplication: Processes same key once per batch", async () => {
@@ -819,6 +825,7 @@ describe("VoxelEditingController: Downsampling Integration", () => {
 
   it("Error Handling: Child download failure aborts chain gracefully", async () => {
     setupIntegration(2);
+    (mockRpc.invoke as any).mockClear();
     const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     childSource.download.mockRejectedValue(new Error("Network Error"));
@@ -829,12 +836,18 @@ describe("VoxelEditingController: Downsampling Integration", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(editsOf(parentSource)).not.toHaveBeenCalled();
+    // The preview stays rather than reveal parents that lack the edits.
+    expect(mockRpc.invoke).not.toHaveBeenCalledWith(
+      "voxelEditing.cascadeDone",
+      expect.anything(),
+    );
 
     consoleSpy.mockRestore();
   });
 
   it("Error Handling: Parent write failure reports error and stops recursion", async () => {
     setupIntegration(3);
+    (mockRpc.invoke as any).mockClear();
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     editsOf(parentSource).mockRejectedValue(new Error("Write Failed"));
@@ -853,6 +866,10 @@ describe("VoxelEditingController: Downsampling Integration", () => {
       expect.objectContaining({
         lodChunkKeys: [makeLodChunkKey("0,0,0", 1)],
       }),
+    );
+    expect(mockRpc.invoke).not.toHaveBeenCalledWith(
+      "voxelEditing.cascadeDone",
+      expect.anything(),
     );
 
     consoleSpy.mockRestore();

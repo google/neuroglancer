@@ -63,10 +63,11 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
   let flushPendingChunkUpdates: ReturnType<typeof vi.fn>;
   let controller: VoxelEditingController;
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    realSources = [createRealSourceMock(), createRealSourceMock()];
-    previewSources = [createPreviewSourceMock(), createPreviewSourceMock()];
+  // With several resolutions, a preview also waits for the downsampling
+  // cascade of its origin chunk to complete.
+  const createController = (levels: number) => {
+    realSources = Array.from({ length: levels }, createRealSourceMock);
+    previewSources = Array.from({ length: levels }, createPreviewSourceMock);
     visibleChunksChanged = new NullarySignal();
     flushPendingChunkUpdates = vi.fn();
     const makeMultiscale = (sources: unknown[]) => ({
@@ -104,6 +105,11 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
       previewSource: makeMultiscale(previewSources),
     };
     controller = new VoxelEditingController(host as any);
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createController(1);
   });
 
   it("allocates monotonically increasing stroke seqs", () => {
@@ -220,6 +226,7 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
   });
 
   it("guards downsampled-parent reloads with the origin chunk's coverage", () => {
+    createController(2);
     controller.beginStroke(); // seq 1, written
     const seq2 = controller.beginStroke(); // seq 2, unwritten
     previewSources[0].setPreviewSeq("1,2,3", seq2);
@@ -238,7 +245,7 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
       lazy: true,
     });
     realSources[1].fireFreshChunk("0,0,0");
-    visibleChunksChanged.dispatch();
+    controller.handleCascadeDone(originKey, 1);
     expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
 
     // Cascade re-run after stroke 2's flush covers seq 2.
@@ -249,7 +256,7 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
       { [parentKey]: 2 },
     );
     realSources[1].fireFreshChunk("0,0,0");
-    visibleChunksChanged.dispatch();
+    controller.handleCascadeDone(originKey, 2);
     expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["1,2,3"]);
   });
 
@@ -322,10 +329,43 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
     expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
-  it("keeps the preview while a finer real chunk is still the stale copy", () => {
+  it("keeps the preview until the cascade is done, even once the displayed level is fresh", () => {
+    // Zoomed in: LOD 0 is on screen, LOD 1 is held from an earlier view.
+    createController(2);
     const seq = controller.beginStroke();
     previewSources[0].setPreviewSeq("0,0,0", seq);
-    // Both levels are on the frontend: LOD 0 drawn over LOD 1.
+    realSources[0].fireFreshChunk("0,0,0");
+    realSources[1].fireFreshChunk("0,0,0");
+
+    const originKey = makeLodChunkKey("0,0,0", 0);
+    const parentKey = makeLodChunkKey("0,0,0", 1);
+    controller.callChunkReload([originKey], false, undefined, {
+      [originKey]: seq,
+    });
+    realSources[0].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
+    // Zooming out now would show LOD 1 without the stroke.
+    expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
+
+    controller.callChunkReload(
+      [parentKey],
+      false,
+      { [parentKey]: originKey },
+      { [parentKey]: seq },
+    );
+    controller.handleCascadeDone(originKey, seq);
+    // The cascade wrote LOD 1, but its held copy is still the stale one.
+    expect(previewSources[0].invalidateChunks).not.toHaveBeenCalled();
+
+    realSources[1].fireFreshChunk("0,0,0");
+    visibleChunksChanged.dispatch();
+    expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
+  });
+
+  it("keeps the preview while a finer held level is still stale", () => {
+    createController(2);
+    const seq = controller.beginStroke();
+    previewSources[0].setPreviewSeq("0,0,0", seq);
     realSources[0].fireFreshChunk("0,0,0");
     realSources[1].fireFreshChunk("0,0,0");
 
@@ -340,6 +380,7 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
       { [parentKey]: originKey },
       { [parentKey]: seq },
     );
+    controller.handleCascadeDone(originKey, seq);
 
     // The coarser parent arrives first: the stale LOD 0 is still on screen.
     realSources[1].fireFreshChunk("0,0,0");
@@ -351,8 +392,9 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
     expect(previewSources[0].invalidateChunks).toHaveBeenCalledWith(["0,0,0"]);
   });
 
-  it("is not held back by a finer real chunk the frontend does not hold", () => {
+  it("is not held back by a level the frontend does not hold", () => {
     // Zoomed out: LOD 0 is not loaded, LOD 1 is what is on screen.
+    createController(2);
     const seq = controller.beginStroke();
     previewSources[0].setPreviewSeq("0,0,0", seq);
     realSources[1].fireFreshChunk("0,0,0");
@@ -368,6 +410,7 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
       { [parentKey]: originKey },
       { [parentKey]: seq },
     );
+    controller.handleCascadeDone(originKey, seq);
 
     realSources[1].fireFreshChunk("0,0,0");
     visibleChunksChanged.dispatch();
@@ -375,6 +418,7 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
   });
 
   it("clears every origin written into the same parent", () => {
+    createController(2);
     const seq = controller.beginStroke();
     previewSources[0].setPreviewSeq("0,0,0", seq);
     previewSources[0].setPreviewSeq("1,0,0", seq);
@@ -388,6 +432,7 @@ describe("VoxelEditingController.callChunkReload: preview swap observation", () 
         { [parentKey]: makeLodChunkKey(origin, 0) },
         { [parentKey]: seq },
       );
+      controller.handleCascadeDone(makeLodChunkKey(origin, 0), seq);
     }
 
     realSources[1].fireFreshChunk("0,0,0");

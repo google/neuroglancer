@@ -37,6 +37,7 @@ import {
   getSphereRowRangesKernel,
   parseLodChunkKey,
   VOXEL_EDITING_BACKEND_RPC_ID,
+  VOXEL_EDITING_CASCADE_DONE_RPC_ID,
   VOXEL_EDITING_FAILURE_RPC_ID,
   VOXEL_EDITING_HISTORY_UPDATE_RPC_ID,
   VOXEL_EDITING_OPERATION_RPC_ID,
@@ -60,14 +61,22 @@ export interface VoxelEditingControllerHost {
 }
 
 interface PreviewSwap {
-  lodIndex: number;
   source: VolumeChunkSource;
   chunkKey: string;
   staleChunk: unknown;
-  previewChunkSource: InMemoryVolumeChunkSource;
-  previewChunkKey: string;
   coveredSeq: number;
   arrived: boolean;
+}
+
+interface PendingPreview {
+  previewChunkSource: InMemoryVolumeChunkSource;
+  previewChunkKey: string;
+  // The real chunks written from the origin, by LOD chunk key: its own LOD-0
+  // chunk and, with downsampling, its parents at coarser LODs.
+  swaps: Map<string, PreviewSwap>;
+  awaitsCascade: boolean;
+  // Highest stroke seq covered by a completed downsampling cascade.
+  cascadeCoveredSeq: number;
 }
 
 @registerSharedObjectOwner(VOXEL_EDITING_BACKEND_RPC_ID)
@@ -80,73 +89,68 @@ export class VoxelEditingController extends SharedObject {
   // backend.
   private dispatchSeq = 0;
 
-  // Preview swaps awaiting their refetched real chunks, by preview chunk,
-  // then by real chunk: a LOD-0 preview chunk waits on its own real chunk and
-  // on the parents written from it at coarser LODs. A swap is resolved by
-  // observing visibleChunksChanged: the real chunk's object identity
-  // distinguishes the lazily kept stale chunk (recorded at arming) from the
-  // refetched one, since a `new` chunk update always builds a fresh Chunk
-  // object. A newer reload for the same pair overwrites its entry.
-  private pendingPreviewSwaps = new Map<string, Map<string, PreviewSwap>>();
+  // LOD-0 previews awaiting their replacement by real data, by origin LOD
+  // chunk key. A swap is resolved by observing visibleChunksChanged: the real
+  // chunk's object identity distinguishes the lazily kept stale chunk
+  // (recorded at arming) from the refetched one, since a `new` chunk update
+  // always builds a fresh Chunk object. A newer reload for the same real
+  // chunk overwrites its swap.
+  private pendingPreviews = new Map<string, PendingPreview>();
 
   private processPendingPreviewSwaps(): void {
-    for (const [previewLodChunkKey, swaps] of this.pendingPreviewSwaps) {
-      const { previewChunkSource, previewChunkKey } = swaps
-        .values()
-        .next().value!;
+    for (const [originLodChunkKey, pending] of this.pendingPreviews) {
+      const { previewChunkSource, previewChunkKey } = pending;
       if (!previewChunkSource.chunks.has(previewChunkKey)) {
         // Cleared by another path (undo, rollback, reconcile).
-        this.pendingPreviewSwaps.delete(previewLodChunkKey);
+        this.pendingPreviews.delete(originLodChunkKey);
         continue;
       }
-      let finestArrived: PreviewSwap | undefined;
-      for (const swap of swaps.values()) {
-        if (!swap.arrived) {
-          const chunk = swap.source.chunks.get(swap.chunkKey);
-          // Still the stale chunk (or gone), or not yet displayed.
-          if (
-            chunk === undefined ||
-            chunk === swap.staleChunk ||
-            chunk.state !== ChunkState.GPU_MEMORY
-          ) {
-            continue;
-          }
-          swap.arrived = true;
-        }
+      for (const swap of pending.swaps.values()) {
+        if (swap.arrived) continue;
+        const chunk = swap.source.chunks.get(swap.chunkKey);
+        // Still the stale chunk (or gone), or not yet displayed.
         if (
-          finestArrived === undefined ||
-          swap.lodIndex < finestArrived.lodIndex
+          chunk === undefined ||
+          chunk === swap.staleChunk ||
+          chunk.state !== ChunkState.GPU_MEMORY
         ) {
-          finestArrived = swap;
+          continue;
         }
+        swap.arrived = true;
       }
-      if (finestArrived === undefined) continue;
-      // What is on screen comes from the finest real chunk the frontend
-      // holds: while a finer one is still the stale copy, keep the preview.
-      let finerStale = false;
-      for (const swap of swaps.values()) {
-        if (
-          !swap.arrived &&
-          swap.lodIndex < finestArrived.lodIndex &&
-          swap.source.chunks.has(swap.chunkKey)
-        ) {
-          finerStale = true;
-          break;
-        }
+      if (this.isPreviewReplaced(pending)) {
+        this.pendingPreviews.delete(originLodChunkKey);
+        previewChunkSource.invalidateChunks([previewChunkKey]);
       }
-      if (finerStale) continue;
-      // The preview tag is read now, at swap time: a stroke that touched the
-      // chunk since arming raised it above coveredSeq, keeping the preview on
-      // screen; the covering write's own reload re-arms the swap.
-      if (
-        finestArrived.coveredSeq <
-        previewChunkSource.getPreviewSeq(previewChunkKey)
-      ) {
-        continue;
-      }
-      this.pendingPreviewSwaps.delete(previewLodChunkKey);
-      previewChunkSource.invalidateChunks([previewChunkKey]);
     }
+  }
+
+  // The preview may go once the real data contains every stroke it shows, at
+  // every resolution the frontend holds: otherwise zooming in or out would
+  // reveal a level that lacks them. The tag is read now: a stroke that touched
+  // the preview since arming raises it, and its own reloads re-arm the swaps.
+  private isPreviewReplaced(pending: PendingPreview): boolean {
+    const tag = pending.previewChunkSource.getPreviewSeq(
+      pending.previewChunkKey,
+    );
+    if (pending.awaitsCascade && pending.cascadeCoveredSeq < tag) return false;
+    let anyReplaced = false;
+    for (const swap of pending.swaps.values()) {
+      if (swap.arrived && swap.coveredSeq >= tag) {
+        anyReplaced = true;
+      } else if (swap.source.chunks.has(swap.chunkKey)) {
+        // Held but stale: still on screen at that resolution.
+        return false;
+      }
+    }
+    return anyReplaced;
+  }
+
+  handleCascadeDone(originLodChunkKey: string, coveredSeq: number): void {
+    const pending = this.pendingPreviews.get(originLodChunkKey);
+    if (pending === undefined) return;
+    pending.cascadeCoveredSeq = Math.max(pending.cascadeCoveredSeq, coveredSeq);
+    this.processPendingPreviewSwaps();
   }
 
   // Allocates a stroke's seq before its first preview. Previews tag the
@@ -777,18 +781,21 @@ export class VoxelEditingController extends SharedObject {
             // (Ctrl+Z mid-drag, accepted).
             previewChunkSource.clearPreviewSeq(previewParsed!.chunkKey);
           }
-          let swaps = this.pendingPreviewSwaps.get(previewLodChunkKey);
-          if (swaps === undefined) {
-            swaps = new Map();
-            this.pendingPreviewSwaps.set(previewLodChunkKey, swaps);
+          let pending = this.pendingPreviews.get(previewLodChunkKey);
+          if (pending === undefined) {
+            pending = {
+              previewChunkSource,
+              previewChunkKey: previewParsed!.chunkKey,
+              swaps: new Map(),
+              awaitsCascade: sources.length > 1,
+              cascadeCoveredSeq: -1,
+            };
+            this.pendingPreviews.set(previewLodChunkKey, pending);
           }
-          swaps.set(lodChunkKey, {
-            lodIndex: parsed.lodIndex,
+          pending.swaps.set(lodChunkKey, {
             source,
             chunkKey,
             staleChunk: source.chunks.get(chunkKey),
-            previewChunkSource,
-            previewChunkKey: previewParsed!.chunkKey,
             coveredSeq: coveredSeqs?.[lodChunkKey] ?? 0,
             arrived: false,
           });
@@ -881,6 +888,11 @@ registerRPC(VOXEL_EDITING_CHUNK_RELOAD_RPC_ID, function (x: any) {
     asRecordOrUndefined<number>(x.coveredSeqs),
     x.isRollback === true,
   );
+});
+
+registerRPC(VOXEL_EDITING_CASCADE_DONE_RPC_ID, function (x: any) {
+  const obj = this.get(x.rpcId) as VoxelEditingController;
+  obj.handleCascadeDone(String(x.lodChunkKey), Number(x.coveredSeq));
 });
 
 registerRPC(VOXEL_EDITING_FAILURE_RPC_ID, function (x: any) {

@@ -20,6 +20,7 @@ export const VOXEL_EDITING_CHUNK_RELOAD_RPC_ID = "voxelEditing.chunkReload";
 export const VOXEL_EDITING_BACKEND_RPC_ID = "voxelEditing/VoxelEditingBackend";
 export const VOXEL_EDITING_COMMIT_VOXELS_RPC_ID = "voxelEditing.commitVoxels";
 export const VOXEL_EDITING_FAILURE_RPC_ID = "voxelEditing.failure";
+export const VOXEL_EDITING_CASCADE_DONE_RPC_ID = "voxelEditing.cascadeDone";
 export const VOXEL_EDITING_UNDO_RPC_ID = "voxelEditing.undo";
 export const VOXEL_EDITING_REDO_RPC_ID = "voxelEditing.redo";
 export const VOXEL_EDITING_HISTORY_UPDATE_RPC_ID = "voxelEditing.historyUpdate";
