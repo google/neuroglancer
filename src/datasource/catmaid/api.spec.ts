@@ -15,11 +15,16 @@
  */
 
 import { pack } from "msgpackr";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  CredentialsProvider,
+  type CredentialsWithGeneration,
+} from "#src/credentials_provider/index.js";
 import {
   CatmaidClient,
   getDefaultCatmaidChunkSize,
+  type CatmaidToken,
 } from "#src/datasource/catmaid/api.js";
 import { HttpError } from "#src/util/http_request.js";
 
@@ -62,6 +67,37 @@ function getFetchInit(fetchMock: FetchMock, callIndex = 0) {
   }
   return requestInit as RequestInit & { priority?: unknown };
 }
+
+class SequenceCredentialsProvider extends CredentialsProvider<CatmaidToken> {
+  calls: Array<CredentialsWithGeneration<CatmaidToken> | undefined> = [];
+
+  constructor(private credentials: CatmaidToken[]) {
+    super();
+  }
+
+  get: CredentialsProvider<CatmaidToken>["get"] = async (
+    invalidCredentials,
+  ) => {
+    this.calls.push(invalidCredentials);
+    const index = Math.min(this.calls.length - 1, this.credentials.length - 1);
+    return {
+      generation: this.calls.length,
+      credentials: this.credentials[index],
+    };
+  };
+}
+
+function jsonResponse(value: unknown, status = 200) {
+  return new Response(JSON.stringify(value), {
+    status,
+    statusText: status === 200 ? "OK" : "Forbidden",
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("CatmaidClient", () => {
   it("does not cache transient metadata discovery failures as null", async () => {
@@ -1217,6 +1253,89 @@ describe("CatmaidClient", () => {
     await expect(client.addNode(1, 2, 3)).rejects.toThrow(
       /too large to read exactly/,
     );
+  });
+});
+
+describe("CatmaidClient authenticated requests", () => {
+  it("retries anonymous 403 responses with refreshed credentials", async () => {
+    const provider = new SequenceCredentialsProvider([
+      { token: "anonymous-token", kind: "anonymous" },
+      { token: "personal-token", kind: "personal" },
+    ]);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ detail: "forbidden" }, 403))
+      .mockResolvedValueOnce(jsonResponse([17]));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new CatmaidClient("https://catmaid.example", 1, provider);
+
+    await expect(client.listSkeletons()).resolves.toEqual([17n]);
+    expect(provider.calls).toHaveLength(2);
+    expect(provider.calls[1]).toMatchObject({
+      credentials: { kind: "anonymous" },
+    });
+    expect(
+      (fetchMock.mock.calls[0][1].headers as Headers).get("Authorization"),
+    ).toBe("Token anonymous-token");
+    expect(
+      (fetchMock.mock.calls[1][1].headers as Headers).get("Authorization"),
+    ).toBe("Token personal-token");
+  });
+
+  it("does not retry personal-token 403 responses", async () => {
+    const provider = new SequenceCredentialsProvider([
+      { token: "personal-token", kind: "personal" },
+    ]);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ detail: "forbidden" }, 403));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new CatmaidClient("https://catmaid.example", 1, provider);
+
+    await expect(client.listSkeletons()).rejects.toThrow("HTTP error 403");
+    expect(provider.calls).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces personal credentials after a 401 response", async () => {
+    const provider = new SequenceCredentialsProvider([
+      { token: "expired-token", kind: "personal" },
+      { token: "replacement-token", kind: "personal" },
+    ]);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ detail: "invalid" }, 401))
+      .mockResolvedValueOnce(jsonResponse([23]));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new CatmaidClient("https://catmaid.example", 1, provider);
+
+    await expect(client.listSkeletons()).resolves.toEqual([23n]);
+    expect(provider.calls).toHaveLength(2);
+    expect(provider.calls[1]).toMatchObject({
+      credentials: { token: "expired-token", kind: "personal" },
+    });
+  });
+
+  it("preserves caller and form headers while adding authorization", async () => {
+    const provider = new SequenceCredentialsProvider([
+      { token: "personal-token", kind: "personal" },
+    ]);
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new CatmaidClient("https://catmaid.example", 1, provider);
+
+    await (client as any).fetchProjectEndpoint("test", {
+      method: "POST",
+      body: new URLSearchParams({ value: "1" }),
+      headers: { "X-Test": "present" },
+    });
+
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.get("Authorization")).toBe("Token personal-token");
+    expect(headers.get("Content-Type")).toBe(
+      "application/x-www-form-urlencoded",
+    );
+    expect(headers.get("X-Test")).toBe("present");
   });
 });
 
