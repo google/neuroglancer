@@ -18,10 +18,8 @@
  * @file Prefetches the complete skeleton of a merge target.
  */
 
-import type {
-  SpatialSkeletonInputReference,
-  SpatialSkeletonEditSession,
-} from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import type { SpatialSkeletonInputReference } from "#src/skeleton/edit/complete_skeleton_cache.js";
+import type { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 
 type MergeTargetLoad =

@@ -137,7 +137,7 @@ failure. Other consumers keep their own references; unused data becomes eligible
 for cache eviction. Missing-input reads have independent request owners, share an
 existing fetch when possible, and survive inactivity while awaited.
 
-`SpatialSkeletonEditSession` stores this data in browser memory.
+The session's `CompleteSkeletonCache` stores this data in browser memory.
 `fullSegmentNodeCache` maps segment IDs to complete node arrays.
 `fullSegmentSnapshotHandles` maps the same IDs to immutable snapshot handles and
 local cache revisions. For example, skeleton 23 can have nodes 1 and 2 in the

@@ -21,10 +21,8 @@
  */
 
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import type {
-  SpatialSkeletonInputReference,
-  SpatialSkeletonLayerContext,
-} from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import type { SpatialSkeletonInputReference } from "#src/skeleton/edit/complete_skeleton_cache.js";
+import type { SpatialSkeletonLayerContext } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   ensureSpatialSkeletonEditQueue,
   getSpatialSkeletonEditCommandFactoryForAction,

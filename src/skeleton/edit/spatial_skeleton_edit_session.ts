@@ -16,26 +16,25 @@
 
 /**
  * @file Holds one layer's spatial skeleton editing state: its edit modes, its
- * edit queue, and the display of confirmed skeletons and previews. Downloads
- * complete skeletons and caches them under revision fences.
+ * edit queue, its complete skeleton cache, and the display of confirmed
+ * skeletons and previews.
  */
 
 import type {
   EditableSkeletonSource,
-  SkeletonEdge,
-  SkeletonFragmentNode,
-  SkeletonFragmentSource,
   SkeletonNode,
-  SkeletonNodeAttributes,
 } from "#src/skeleton/api.js";
+import type {
+  CompleteSkeletonCachePublication,
+  CompleteSkeletonDownloadTarget,
+  SpatialSkeletonCachedSegmentSnapshot,
+} from "#src/skeleton/edit/complete_skeleton_cache.js";
+import { CompleteSkeletonCache } from "#src/skeleton/edit/complete_skeleton_cache.js";
 import type {
   SpatialSkeletonAction,
   SpatialSkeletonEditCommand,
 } from "#src/skeleton/edit_commands.js";
-import {
-  getSpatialSkeletonActionSupportLabel,
-  getSpatialSkeletonEditCommandFactoryFromSource,
-} from "#src/skeleton/edit_commands.js";
+import { getSpatialSkeletonEditCommandFactoryFromSource } from "#src/skeleton/edit_commands.js";
 import type {
   SpatialSkeletonEditPlannerProvider,
   SpatialSkeletonProvisionalNumericIdPolicy,
@@ -48,8 +47,6 @@ import {
 } from "#src/skeleton/edit_queue/api.js";
 import type { CompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import { createCompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
-import type { SpatialSkeletonInspectionRequiredReason } from "#src/skeleton/edit_queue/edit_errors.js";
-import { SpatialSkeletonInspectionRequiredError } from "#src/skeleton/edit_queue/edit_errors.js";
 import { SpatialSkeletonEditQueue } from "#src/skeleton/edit_queue/edit_queue.js";
 import type {
   SpatialSkeletonPreparedPreviewCachePublication,
@@ -90,13 +87,11 @@ import {
   createSpatialSkeletonHistoryPort,
   SpatialSkeletonUndoHistory,
 } from "#src/skeleton/edit_queue/undo_history.js";
-import { resolveSkeletonParents } from "#src/skeleton/skeleton_edges.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { PromiseConcurrencyLimiter } from "#src/util/promise_concurrency_limiter.js";
 
 export function getSpatialSkeletonEditPlannerProvider(
   source: EditableSkeletonSource,
@@ -210,41 +205,6 @@ export interface SpatialSkeletonPendingEdit {
 }
 
 /**
- * A cloneable snapshot of a full cached segment.  `undefined` represents an
- * uncached segment, while an empty array represents a known empty segment.
- */
-export type SpatialSkeletonCachedSegmentSnapshot =
-  | readonly SkeletonNode[]
-  | undefined;
-
-/**
- * The immutable complete-skeleton handle currently represented by a cache
- * entry, paired with the manager revision at which it was published.
- *
- * `cacheRevision` fences asynchronous cache publication. The immutable handle
- * represents snapshot contents without a separate lineage counter.
- */
-export interface SpatialSkeletonCachedSegmentSnapshotHandle {
-  readonly handle: CompleteSkeleton;
-  readonly cacheRevision: number;
-}
-
-/**
- * An edit's temporary reference to a complete cached skeleton snapshot.
- *
- * Its exact complete snapshot is retained against visual cache eviction.
- * Any explicit cache invalidation or replacement makes it stale; callers must
- * check `isCurrent` before exact-preview publication. `release` removes only this
- * reference's cache-retention registration and is idempotent.
- */
-export interface SpatialSkeletonInputReference {
-  readonly segmentId: bigint;
-  readonly snapshot: SpatialSkeletonCachedSegmentSnapshotHandle;
-  isCurrent(): boolean;
-  release(): void;
-}
-
-/**
  * The complete presentation observed by rendering and Skeleton Details.
  * Topology references are always exact complete-skeleton handles.  A cold
  * structural intent is represented only by `pendingEdits` until its exact
@@ -307,129 +267,11 @@ export function editableSpatiallyIndexedSkeletonSourceSupportsAction(
   return commandFactory !== undefined;
 }
 
-async function fetchCompleteSkeleton(
-  source: SkeletonFragmentSource,
-  segmentId: bigint,
-  signal: AbortSignal,
-): Promise<SkeletonNode[]> {
-  const { fragmentKeys } = await source.getSkeletonManifest(segmentId, signal);
-  const nodeIds = new Set<bigint>();
-  const nodes: SkeletonFragmentNode[] = [];
-  const edges: SkeletonEdge[] = [];
-  // One request at a time, so that a limit on concurrent skeleton reads also limits requests.
-  for (const fragmentKey of fragmentKeys) {
-    signal.throwIfAborted();
-    const fragment = await source.getSkeletonFragment(
-      segmentId,
-      fragmentKey,
-      signal,
-    );
-    for (const node of fragment.nodes) {
-      if (nodeIds.has(node.nodeId)) {
-        throw new Error(
-          `Skeleton ${segmentId} has node ${node.nodeId} in more than one fragment.`,
-        );
-      }
-      nodeIds.add(node.nodeId);
-      nodes.push(node);
-    }
-    edges.push(...fragment.edges);
-  }
-  return resolveSkeletonParents(segmentId, nodes, edges, source.edgeDirection);
-}
-
-export function normalizeSkeletonNode(
-  node: SkeletonNode,
-): SkeletonNode | undefined {
-  const x = Number(node.position[0]);
-  const y = Number(node.position[1]);
-  const z = Number(node.position[2]);
-  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
-    return undefined;
-  }
-  return {
-    ...node,
-    position: new Float32Array([x, y, z]),
-    description:
-      typeof node.description === "string" && node.description.length > 0
-        ? node.description
-        : undefined,
-  };
-}
-
-function cloneSkeletonNode(node: SkeletonNode): SkeletonNode {
-  return {
-    ...node,
-    position: new Float32Array(node.position),
-  };
-}
-
-function skeletonNodeAttributesEqual(
-  a: SkeletonNodeAttributes | undefined,
-  b: SkeletonNodeAttributes | undefined,
-) {
-  const aIds = Object.keys(a ?? {});
-  if (aIds.length !== Object.keys(b ?? {}).length) return false;
-  for (const id of aIds) {
-    const aValue = a![id];
-    const bValue = b?.[id];
-    if (bValue === undefined || aValue.length !== bValue.length) return false;
-    for (let i = 0; i < aValue.length; ++i) {
-      if (aValue[i] !== bValue[i]) return false;
-    }
-  }
-  return true;
-}
-
-function cachedSkeletonNodesEqual(a: SkeletonNode, b: SkeletonNode) {
-  if (
-    a.nodeId !== b.nodeId ||
-    a.segmentId !== b.segmentId ||
-    a.parentNodeId !== b.parentNodeId ||
-    a.description !== b.description ||
-    !skeletonNodeAttributesEqual(a.attributes, b.attributes) ||
-    a.position.length !== b.position.length
-  ) {
-    return false;
-  }
-  for (let i = 0; i < a.position.length; ++i) {
-    if (a.position[i] !== b.position[i]) return false;
-  }
-  return true;
-}
-
-function cachedSegmentSnapshotsEqual(
-  a: readonly SkeletonNode[] | undefined,
-  b: readonly SkeletonNode[] | undefined,
-) {
-  if (a === undefined || b === undefined) return a === b;
-  return (
-    a.length === b.length &&
-    a.every((node, index) => cachedSkeletonNodesEqual(node, b[index]))
-  );
-}
-
-interface SpatialSkeletonCachedSegmentReplacement {
-  readonly nodes: readonly SkeletonNode[] | undefined;
-  readonly handle: CompleteSkeleton | undefined;
-  readonly adoptHandleStorage: boolean;
-}
-
 interface SpatialSkeletonPreparedPreviewCachePublicationImplementation
   extends SpatialSkeletonPreparedPreviewCachePublication {
   readonly owner: object;
-  readonly expectedCacheRevisionClock: number;
+  readonly cache: CompleteSkeletonCachePublication;
   readonly expectedDisplay: SpatialSkeletonDisplaySnapshot;
-  readonly expectedRevisions: ReadonlyMap<bigint, number>;
-  readonly cacheRevisions: ReadonlyMap<bigint, number>;
-  readonly nextCacheRevisionClock: number;
-  readonly nextFullSegmentNodeRevisions: Map<bigint, number>;
-  readonly nextFullSegmentNodeCache: Map<bigint, SkeletonNode[]>;
-  readonly nextFullSegmentSnapshotHandles: Map<
-    bigint,
-    SpatialSkeletonCachedSegmentSnapshotHandle
-  >;
-  readonly nextCachedNodesById: Map<bigint, SkeletonNode>;
   readonly nextDisplayStableOwners: Map<
     bigint,
     SpatialSkeletonStableSegmentHandle
@@ -441,9 +283,6 @@ interface SpatialSkeletonPreparedPreviewCachePublicationImplementation
   readonly nextDisplayProvisionalNodeIds: Set<bigint>;
   readonly nextDisplayRemovedSegmentIds: Set<bigint>;
   readonly nextPendingEditsById: Map<number, SpatialSkeletonPendingEdit>;
-  readonly changedSegmentIds: readonly bigint[];
-  readonly abortSegmentIds: readonly bigint[];
-  readonly retiredSegmentIds: ReadonlySet<bigint>;
   readonly notifyNodeData: boolean;
   readonly display?: SpatialSkeletonDisplaySnapshot;
 }
@@ -610,19 +449,6 @@ function normalizeSpatialSkeletonPendingEdit(
   });
 }
 
-/**
- * Full-segment skeleton fetches bypass the chunk queue manager, so they are
- * capped separately at min(this, the concurrentDownloads viewer setting).
- */
-const MAX_CONCURRENT_FULL_SEGMENT_NODE_FETCHES = 8;
-
-/**
- * Full-segment requests do not go through the chunk queue's request timeout.
- * Bound the underlying source request independently so a lost response cannot
- * retain a concurrency slot forever.
- */
-const FULL_SEGMENT_NODE_FETCH_TIMEOUT_MS = 120_000;
-
 class StateOwnedSpatialSkeletonProvisionalNumericIdService
   implements SpatialSkeletonProvisionalNumericIdService
 {
@@ -681,7 +507,7 @@ export interface SpatialSkeletonEditSessionOptions {
 
 export class SpatialSkeletonEditSession
   extends RefCounted
-  implements SpatialSkeletonUndoRedoControls
+  implements SpatialSkeletonUndoRedoControls, CompleteSkeletonDownloadTarget
 {
   readonly commandHistory: SpatialSkeletonUndoHistory;
   readonly editQueueCapacity: number;
@@ -745,55 +571,7 @@ export class SpatialSkeletonEditSession
   private nodeDataNotificationPending = false;
   private readonly previewCachePublicationOwner = {};
   private readonly adoptedPreviewCachePublications = new WeakSet<object>();
-  /** Complete node arrays for the current cached versions of skeletons. */
-  private fullSegmentNodeCache = new Map<bigint, SkeletonNode[]>();
-  /** Immutable views of those versions, paired with local cache revisions. */
-  private fullSegmentSnapshotHandles = new Map<
-    bigint,
-    SpatialSkeletonCachedSegmentSnapshotHandle
-  >();
-  /**
-   * Per-segment registrations that protect current snapshots from eviction.
-   * Each acquisition adds its own token pointing to the snapshot and revision;
-   * releasing that input reference removes only its token.
-   */
-  private queueInputReferenceRegistrations = new Map<
-    bigint,
-    Map<object, SpatialSkeletonCachedSegmentSnapshotHandle>
-  >();
-  /**
-   * A monotonic revision fence for each complete segment cache entry.  The
-   * floor represents a global cache invalidation without having to enumerate
-   * every segment id that may have been captured by an outstanding read.
-   */
-  private fullSegmentNodeRevisionClock = 0;
-  private fullSegmentNodeRevisionFloor = 0;
-  private fullSegmentNodeRevisions = new Map<bigint, number>();
-  private pendingFullSegmentNodeFetches = new Map<
-    bigint,
-    {
-      promise: Promise<SkeletonNode[]>;
-      abortController: AbortController;
-      retainWhileInactive: boolean;
-      /** Command/source instances currently awaiting this shared read. */
-      requestOwners: Set<object>;
-      /** True once a visual or other unowned caller has joined the read. */
-      hasUnownedConsumer: boolean;
-    }
-  >();
-  private fullSegmentNodeFetchLimitLayer:
-    | SpatiallyIndexedSkeletonLayer
-    | undefined;
-  private fullSegmentNodeFetchLimiter = new PromiseConcurrencyLimiter(() => {
-    const itemLimit =
-      this.fullSegmentNodeFetchLimitLayer?.chunkManager?.chunkQueueManager
-        ?.capacities?.download?.itemLimit?.value;
-    return Math.min(
-      MAX_CONCURRENT_FULL_SEGMENT_NODE_FETCHES,
-      itemLimit ?? Number.POSITIVE_INFINITY,
-    );
-  });
-  private cachedNodesById = new Map<bigint, SkeletonNode>();
+  private readonly completeSkeletons = new CompleteSkeletonCache(this);
   /**
    * First-wins, layer-scoped editing latch. It deliberately is not part of
    * queue or datasource runtime state: clearing either cannot make editing
@@ -1484,10 +1262,7 @@ export class SpatialSkeletonEditSession
 
   private clearRuntimeStateInDisplay() {
     const queueChanged = this.releaseEditQueue();
-    const cacheChanged =
-      this.fullSegmentNodeCache.size !== 0 ||
-      this.pendingFullSegmentNodeFetches.size !== 0 ||
-      this.cachedNodesById.size !== 0;
+    const cacheChanged = !this.completeSkeletons.isEmpty;
     const pendingChanged = this.clearPendingNodePositions();
     const intentCuesChanged = this.clearSpatialSkeletonPendingEdits();
     const displayIdentitiesChanged =
@@ -1518,7 +1293,7 @@ export class SpatialSkeletonEditSession
     }
     const historyChanged = this.commandHistory.reset();
     if (cacheChanged) {
-      this.clearFullSkeletonCache();
+      this.completeSkeletons.clear();
       this.markNodeDataChanged();
     }
     return (
@@ -1543,160 +1318,35 @@ export class SpatialSkeletonEditSession
   }
 
   getCachedSegmentNodes(segmentId: bigint) {
-    return this.fullSegmentNodeCache.get(segmentId);
+    return this.completeSkeletons.getSegmentNodes(segmentId);
   }
 
-  /**
-   * Returns the current local revision of a complete cached segment.  The
-   * revision also changes when an uncached segment is explicitly invalidated,
-   * allowing callers to fence asynchronous work without relying on cache
-   * presence alone.
-   */
   getCachedSegmentRevision(segmentId: bigint) {
-    if (segmentId === 0n) {
-      throw new RangeError(`Invalid spatial skeleton segment id: ${segmentId}`);
-    }
-    return this.getCurrentCachedSegmentRevision(segmentId);
+    return this.completeSkeletons.getSegmentRevision(segmentId);
   }
 
-  /**
-   * Returns the immutable handle represented by the current cache entry and
-   * the manager revision that fences it.  The pair is omitted for an uncached
-   * segment; callers should re-check `cacheRevision` before publishing work
-   * derived asynchronously from the handle.
-   */
-  getCachedSegmentSnapshotHandle(
-    segmentId: bigint,
-  ): SpatialSkeletonCachedSegmentSnapshotHandle | undefined {
-    if (segmentId === 0n) {
-      throw new RangeError(`Invalid spatial skeleton segment id: ${segmentId}`);
-    }
-    const entry = this.fullSegmentSnapshotHandles.get(segmentId);
-    if (
-      entry === undefined ||
-      entry.cacheRevision !== this.getCurrentCachedSegmentRevision(segmentId)
-    ) {
-      return undefined;
-    }
-    return entry;
+  getCachedSegmentSnapshotHandle(segmentId: bigint) {
+    return this.completeSkeletons.getSnapshotHandle(segmentId);
   }
 
-  /**
-   * Validates a queue input requirement against the current complete
-   * previewed snapshot without starting a read or changing cache state.
-   */
-  private getCachedQueueInputSegment(
-    requirement: SpatialSkeletonQueueInputRequirement,
-  ):
-    | {
-        readonly segmentId: bigint;
-        readonly snapshot: SpatialSkeletonCachedSegmentSnapshotHandle;
-      }
-    | undefined {
-    const { segmentId, nodeId } = requirement;
-    if (nodeId === 0n) {
-      throw new RangeError(`Invalid spatial skeleton node id: ${nodeId}`);
-    }
-    const snapshot = this.getCachedSegmentSnapshotHandle(segmentId);
-    if (snapshot === undefined) return undefined;
-    const node =
-      nodeId === undefined ? undefined : snapshot.handle.getNode(nodeId);
-    if (
-      nodeId !== undefined &&
-      (node === undefined || node.segmentId !== segmentId)
-    ) {
-      return undefined;
-    }
-    return Object.freeze({
-      segmentId,
-      snapshot: Object.freeze({ ...snapshot }),
-    });
+  tryAcquireInputReference(requirement: SpatialSkeletonQueueInputRequirement) {
+    return this.completeSkeletons.tryAcquireInputReference(requirement);
   }
 
-  /**
-   * Acquires a reference that keeps the current complete snapshot available.
-   * Returns `undefined` when the snapshot is not cached or does not contain
-   * the requested node. The caller releases its reference after preparation.
-   */
-  tryAcquireInputReference(
-    requirement: SpatialSkeletonQueueInputRequirement,
-  ): SpatialSkeletonInputReference | undefined {
-    const cachedInput = this.getCachedQueueInputSegment(requirement);
-    if (cachedInput === undefined) return undefined;
-
-    const token = {};
-    let registrationsForSegment = this.queueInputReferenceRegistrations.get(
-      cachedInput.segmentId,
-    );
-    if (registrationsForSegment === undefined) {
-      registrationsForSegment = new Map();
-      this.queueInputReferenceRegistrations.set(
-        cachedInput.segmentId,
-        registrationsForSegment,
-      );
-    }
-    registrationsForSegment.set(token, cachedInput.snapshot);
-    let released = false;
-    const isCurrent = () => {
-      if (
-        released ||
-        this.queueInputReferenceRegistrations
-          .get(cachedInput.segmentId)
-          ?.get(token) !== cachedInput.snapshot
-      ) {
-        return false;
-      }
-      const current = this.getCachedSegmentSnapshotHandle(
-        cachedInput.segmentId,
-      );
-      return (
-        current?.handle === cachedInput.snapshot.handle &&
-        current.cacheRevision === cachedInput.snapshot.cacheRevision
-      );
-    };
-    const release = () => {
-      if (released) return;
-      released = true;
-      const currentRegistrations = this.queueInputReferenceRegistrations.get(
-        cachedInput.segmentId,
-      );
-      if (currentRegistrations?.delete(token) !== true) return;
-      if (currentRegistrations.size === 0) {
-        this.queueInputReferenceRegistrations.delete(cachedInput.segmentId);
-      }
-    };
-    return Object.freeze({
-      ...cachedInput,
-      isCurrent,
-      release,
-    });
-  }
-
-  /** Acquires an input reference or reports a typed requirement error. */
   acquireInputReference(
     requirement: SpatialSkeletonQueueInputRequirement,
     action?: SpatialSkeletonAction,
-  ): SpatialSkeletonInputReference {
-    const inputReference = this.tryAcquireInputReference(requirement);
-    if (inputReference !== undefined) return inputReference;
-    const reason: SpatialSkeletonInspectionRequiredReason =
-      this.getCachedSegmentSnapshotHandle(requirement.segmentId) === undefined
-        ? "snapshot-unavailable"
-        : "node-unavailable";
-    throw new SpatialSkeletonInspectionRequiredError(
-      requirement,
-      reason,
-      action && getSpatialSkeletonActionSupportLabel(action),
-    );
+  ) {
+    return this.completeSkeletons.acquireInputReference(requirement, action);
   }
 
   getCachedNode(nodeId: bigint) {
-    return this.cachedNodesById.get(nodeId);
+    return this.completeSkeletons.getNode(nodeId);
   }
 
   /** The cached node at its pending position, if it has one. */
   getDisplayedNode(nodeId: bigint): SkeletonNode | undefined {
-    const cachedNode = this.cachedNodesById.get(nodeId);
+    const cachedNode = this.completeSkeletons.getNode(nodeId);
     if (cachedNode === undefined) {
       return undefined;
     }
@@ -1735,50 +1385,24 @@ export class SpatialSkeletonEditSession
       expectedRevisions?: ReadonlyMap<bigint, number>;
     } = {},
   ) {
-    const replacements = new Map<
-      bigint,
-      {
-        nodes: readonly SkeletonNode[] | undefined;
-        handle: CompleteSkeleton | undefined;
-        adoptHandleStorage: boolean;
+    const changedSegmentIds = this.completeSkeletons.replaceSnapshots(
+      snapshots,
+      { expectedRevisions: options.expectedRevisions },
+    );
+    if (changedSegmentIds.length === 0) return false;
+    for (const segmentId of changedSegmentIds) {
+      if (this.completeSkeletons.getSegmentNodes(segmentId) !== undefined) {
+        this.displayRemovedSegmentIds.delete(segmentId);
       }
-    >();
-    for (const [segmentId, snapshot] of snapshots) {
-      if (segmentId === 0n) {
-        throw new RangeError(
-          `Invalid spatial skeleton segment id: ${segmentId}`,
-        );
-      }
-      if (snapshot === undefined) {
-        replacements.set(segmentId, {
-          nodes: undefined,
-          handle: undefined,
-          adoptHandleStorage: false,
-        });
-        continue;
-      }
-      const clonedNodes: SkeletonNode[] = [];
-      for (const node of snapshot) {
-        if (node.nodeId === 0n) {
-          throw new RangeError(
-            `Invalid spatial skeleton node id: ${node.nodeId}`,
-          );
-        }
-        clonedNodes.push(cloneSkeletonNode({ ...node, segmentId }));
-      }
-      replacements.set(segmentId, {
-        nodes: clonedNodes,
-        // Untrusted input remains defensively cloned above. The immutable
-        // handle is the complete baseline used by inspection and preview.
-        handle: createCompleteSkeleton(clonedNodes),
-        adoptHandleStorage: false,
-      });
     }
-    return this.publishCachedSegmentSnapshotReplacements(replacements, options);
+    if (options.notify ?? true) {
+      this.markNodeDataChanged();
+    }
+    return true;
   }
 
   /** Routes only queue-owned reads through preview/history state. */
-  private publishAuthoritativeReadSnapshots(
+  publishAuthoritativeReadSnapshots(
     snapshots: ReadonlyMap<bigint, readonly SkeletonNode[] | undefined>,
     options: {
       readonly notify?: boolean;
@@ -1871,47 +1495,14 @@ export class SpatialSkeletonEditSession
       }
     }
 
-    for (const segmentId of handles.keys()) {
-      if (
-        request.expectedRevisions.get(segmentId) !==
-        this.getCurrentCachedSegmentRevision(segmentId)
-      ) {
-        return undefined;
-      }
-    }
-
-    const replacements = new Map<
-      bigint,
-      SpatialSkeletonCachedSegmentReplacement
-    >();
-    for (const [segmentId, handle] of handles) {
-      if (handle === undefined) {
-        replacements.set(segmentId, {
-          nodes: undefined,
-          handle: undefined,
-          adoptHandleStorage: true,
-        });
-        continue;
-      }
-      const nodes = handle.materialize();
-      for (const node of nodes) {
-        if (node.nodeId === 0n) {
-          throw new RangeError(
-            `Invalid spatial skeleton node id: ${node.nodeId}`,
-          );
-        }
-        if (node.segmentId !== segmentId) {
-          throw new Error(
-            `Trusted complete skeleton handle for segment ${segmentId} contains node ${node.nodeId} owned by segment ${node.segmentId}.`,
-          );
-        }
-      }
-      replacements.set(segmentId, {
-        nodes,
-        handle,
-        adoptHandleStorage: true,
-      });
-    }
+    const cache = this.completeSkeletons.preparePublication(
+      handles,
+      retiredSegmentIds,
+      request.expectedRevisions,
+    );
+    if (cache === undefined) return undefined;
+    const nodeDataChanged =
+      request.notify && cache.changedSegmentIds.length !== 0;
 
     const nextDisplayRemovedSegmentIds = new Set(this.displayRemovedSegmentIds);
     for (const [segmentId, handle] of handles) {
@@ -1924,78 +1515,6 @@ export class SpatialSkeletonEditSession
       [...nextDisplayRemovedSegmentIds].some(
         (id) => !this.displayRemovedSegmentIds.has(id),
       );
-
-    const changedSegmentIds = [...replacements]
-      .filter(([segmentId, replacement]) => {
-        const currentHandle = this.fullSegmentSnapshotHandles.get(segmentId);
-        return (
-          retiredSegmentIds.has(segmentId) ||
-          replacement.handle !== currentHandle?.handle ||
-          replacement.nodes !== this.fullSegmentNodeCache.get(segmentId)
-        );
-      })
-      .map(([segmentId]) => segmentId);
-    const changedSegmentIdSet = new Set(changedSegmentIds);
-    const nextFullSegmentNodeCache = new Map(this.fullSegmentNodeCache);
-    const nextFullSegmentSnapshotHandles = new Map(
-      this.fullSegmentSnapshotHandles,
-    );
-    const nextCachedNodesById = new Map(this.cachedNodesById);
-
-    for (const segmentId of changedSegmentIds) {
-      for (const node of this.fullSegmentNodeCache.get(segmentId) ?? []) {
-        if (nextCachedNodesById.get(node.nodeId) === node) {
-          nextCachedNodesById.delete(node.nodeId);
-        }
-      }
-    }
-    for (const [segmentId, replacement] of replacements) {
-      if (!changedSegmentIdSet.has(segmentId)) continue;
-      for (const node of replacement.nodes ?? []) {
-        const existing = nextCachedNodesById.get(node.nodeId);
-        if (existing !== undefined) {
-          throw new Error(
-            `Spatial skeleton node ${node.nodeId} is present in both segment ${existing.segmentId} and segment ${segmentId}.`,
-          );
-        }
-        nextCachedNodesById.set(node.nodeId, node);
-      }
-      if (replacement.nodes === undefined) {
-        nextFullSegmentNodeCache.delete(segmentId);
-      } else {
-        nextFullSegmentNodeCache.set(
-          segmentId,
-          replacement.nodes as SkeletonNode[],
-        );
-      }
-    }
-
-    const expectedCacheRevisionClock = this.fullSegmentNodeRevisionClock;
-    let nextCacheRevisionClock = expectedCacheRevisionClock;
-    const nextFullSegmentNodeRevisions = new Map(this.fullSegmentNodeRevisions);
-    const cacheRevisions = new Map<bigint, number>();
-    for (const segmentId of changedSegmentIds) {
-      const cacheRevision = ++nextCacheRevisionClock;
-      nextFullSegmentNodeRevisions.set(segmentId, cacheRevision);
-      const handle = replacements.get(segmentId)!.handle;
-      if (handle === undefined) {
-        nextFullSegmentSnapshotHandles.delete(segmentId);
-      } else {
-        nextFullSegmentSnapshotHandles.set(segmentId, {
-          handle,
-          cacheRevision,
-        });
-      }
-    }
-    for (const segmentId of handles.keys()) {
-      cacheRevisions.set(
-        segmentId,
-        Math.max(
-          this.fullSegmentNodeRevisionFloor,
-          nextFullSegmentNodeRevisions.get(segmentId) ?? 0,
-        ),
-      );
-    }
 
     const identities = this.prepareSpatialSkeletonDisplayIdentities(
       request.activeStableOwners,
@@ -2014,7 +1533,7 @@ export class SpatialSkeletonEditSession
       removalsChanged ||
       identities.changed ||
       pendingEditsChanged ||
-      (request.notify && changedSegmentIds.length !== 0);
+      nodeDataChanged;
     const display = publishDisplay
       ? this.prepareSpatialSkeletonDisplayPublication({
           stableOwners: identities.nextOwners,
@@ -2030,24 +1549,15 @@ export class SpatialSkeletonEditSession
       {
         [preparedSpatialSkeletonPreviewCachePublicationBrand]: true,
         owner: this.previewCachePublicationOwner,
-        expectedCacheRevisionClock,
+        cacheRevisions: cache.cacheRevisions,
+        cache,
         expectedDisplay: this.spatialSkeletonDisplay.value,
-        expectedRevisions: new Map(request.expectedRevisions),
-        cacheRevisions,
-        nextCacheRevisionClock,
-        nextFullSegmentNodeRevisions,
-        nextFullSegmentNodeCache,
-        nextFullSegmentSnapshotHandles,
-        nextCachedNodesById,
         nextDisplayStableOwners: identities.nextOwners,
         nextDisplayNumericAliases: identities.nextAliases,
         nextDisplayProvisionalNodeIds: identities.nextProvisionalNodeIds,
         nextDisplayRemovedSegmentIds,
         nextPendingEditsById,
-        changedSegmentIds: Object.freeze(changedSegmentIds),
-        abortSegmentIds: Object.freeze([...changedSegmentIds]),
-        retiredSegmentIds,
-        notifyNodeData: request.notify && changedSegmentIds.length !== 0,
+        notifyNodeData: nodeDataChanged,
         ...(display === undefined ? {} : { display }),
       };
     return Object.freeze(implementation);
@@ -2073,26 +1583,14 @@ export class SpatialSkeletonEditSession
       );
     }
     if (
-      this.fullSegmentNodeRevisionClock !==
-        prepared.expectedCacheRevisionClock ||
+      !this.completeSkeletons.canAdoptPublication(prepared.cache) ||
       this.spatialSkeletonDisplay.value !== prepared.expectedDisplay
     ) {
       return false;
     }
-    for (const [segmentId, expectedRevision] of prepared.expectedRevisions) {
-      if (
-        this.getCurrentCachedSegmentRevision(segmentId) !== expectedRevision
-      ) {
-        return false;
-      }
-    }
 
     this.adoptedPreviewCachePublications.add(prepared);
-    this.fullSegmentNodeRevisionClock = prepared.nextCacheRevisionClock;
-    this.fullSegmentNodeRevisions = prepared.nextFullSegmentNodeRevisions;
-    this.fullSegmentNodeCache = prepared.nextFullSegmentNodeCache;
-    this.fullSegmentSnapshotHandles = prepared.nextFullSegmentSnapshotHandles;
-    this.cachedNodesById = prepared.nextCachedNodesById;
+    this.completeSkeletons.adoptPublication(prepared.cache);
     this.displayStableOwners = prepared.nextDisplayStableOwners;
     this.displayNumericAliases = prepared.nextDisplayNumericAliases;
     this.displayProvisionalNodeIds = prepared.nextDisplayProvisionalNodeIds;
@@ -2121,232 +1619,11 @@ export class SpatialSkeletonEditSession
         "Only an adopted session-owned spatial skeleton publication can be finalized.",
       );
     }
-    for (const segmentId of prepared.abortSegmentIds) {
-      try {
-        this.abortPendingFullSegmentNodeFetch(
-          segmentId,
-          prepared.retiredSegmentIds.has(segmentId)
-            ? "spatial skeleton full-segment inspection request retired after authoritative topology change"
-            : "spatial skeleton full-segment inspection request replaced by atomic local cache update",
-          { preserveRetained: !prepared.retiredSegmentIds.has(segmentId) },
-        );
-      } catch (error) {
-        try {
-          reportError?.(error);
-        } catch {
-          // Finalization is best effort after the model is already adopted.
-        }
-      }
-    }
+    this.completeSkeletons.finishPublication(prepared.cache, reportError);
   }
 
-  private publishCachedSegmentSnapshotReplacements(
-    replacements: ReadonlyMap<
-      bigint,
-      {
-        nodes: readonly SkeletonNode[] | undefined;
-        handle: CompleteSkeleton | undefined;
-        adoptHandleStorage: boolean;
-      }
-    >,
-    options: {
-      notify?: boolean;
-      expectedRevisions?: ReadonlyMap<bigint, number>;
-    },
-  ) {
-    if (replacements.size === 0) return false;
-
-    if (options.expectedRevisions !== undefined) {
-      for (const segmentId of replacements.keys()) {
-        if (
-          options.expectedRevisions.get(segmentId) !==
-          this.getCurrentCachedSegmentRevision(segmentId)
-        ) {
-          return false;
-        }
-      }
-    }
-
-    const changedSegmentIds: bigint[] = [];
-    for (const [segmentId, replacement] of replacements) {
-      const currentHandle = this.fullSegmentSnapshotHandles.get(segmentId);
-      if (
-        replacement.adoptHandleStorage
-          ? replacement.handle !== currentHandle?.handle ||
-            replacement.nodes !== this.fullSegmentNodeCache.get(segmentId)
-          : !cachedSegmentSnapshotsEqual(
-              this.fullSegmentNodeCache.get(segmentId),
-              replacement.nodes,
-            )
-      ) {
-        changedSegmentIds.push(segmentId);
-      }
-    }
-    if (changedSegmentIds.length === 0) {
-      return false;
-    }
-    const changedSegmentIdSet = new Set(changedSegmentIds);
-
-    // Validate the prospective reverse-index entries before mutating either
-    // cache.  The existing reverse index lets us check ownership against every
-    // unaffected segment without walking or rebuilding their complete
-    // snapshots.  Entries owned by changed segments are intentionally ignored:
-    // those old entries are removed below before the validated replacements
-    // are installed.  `nextChangedNodesById` additionally rejects duplicates
-    // between (or within) the replacements themselves.
-    const nextChangedNodesById = new Map<bigint, SkeletonNode>();
-    for (const [segmentId, replacement] of replacements) {
-      if (
-        changedSegmentIdSet.has(segmentId) &&
-        replacement.nodes !== undefined
-      ) {
-        for (const node of replacement.nodes) {
-          const changedExisting = nextChangedNodesById.get(node.nodeId);
-          if (changedExisting !== undefined) {
-            throw new Error(
-              `Spatial skeleton node ${node.nodeId} is present in both segment ${changedExisting.segmentId} and segment ${segmentId}.`,
-            );
-          }
-          const unaffectedExisting = this.cachedNodesById.get(node.nodeId);
-          if (
-            unaffectedExisting !== undefined &&
-            !changedSegmentIdSet.has(unaffectedExisting.segmentId)
-          ) {
-            throw new Error(
-              `Spatial skeleton node ${node.nodeId} is present in both segment ${unaffectedExisting.segmentId} and segment ${segmentId}.`,
-            );
-          }
-          nextChangedNodesById.set(node.nodeId, node);
-        }
-      }
-    }
-
-    for (const segmentId of changedSegmentIds) {
-      this.abortPendingFullSegmentNodeFetch(
-        segmentId,
-        "spatial skeleton full-segment inspection request replaced by atomic local cache update",
-        { preserveRetained: true },
-      );
-    }
-    // Remove only reverse-index entries belonging to snapshots that are about
-    // to change.  Identity guards against deleting a newer/corrupt entry if an
-    // invariant was violated elsewhere, while the validation above still
-    // makes this entire publication all-or-nothing for expected input.
-    for (const segmentId of changedSegmentIds) {
-      const previousNodes = this.fullSegmentNodeCache.get(segmentId);
-      if (previousNodes === undefined) continue;
-      for (const node of previousNodes) {
-        if (this.cachedNodesById.get(node.nodeId) === node) {
-          this.cachedNodesById.delete(node.nodeId);
-        }
-      }
-    }
-    for (const [segmentId, replacement] of replacements) {
-      if (!changedSegmentIdSet.has(segmentId)) continue;
-      if (replacement.nodes === undefined) {
-        this.fullSegmentNodeCache.delete(segmentId);
-      } else {
-        this.displayRemovedSegmentIds.delete(segmentId);
-        // The public cache historically exposes a mutable-array type. Trusted
-        // handle materializations are frozen readonly arrays at runtime, but
-        // retaining the established type avoids widening unrelated callers.
-        this.fullSegmentNodeCache.set(
-          segmentId,
-          replacement.nodes as SkeletonNode[],
-        );
-      }
-    }
-    for (const segmentId of changedSegmentIds) {
-      const cacheRevision = this.advanceCachedSegmentRevision(segmentId);
-      const handle = replacements.get(segmentId)!.handle;
-      if (handle === undefined) {
-        this.fullSegmentSnapshotHandles.delete(segmentId);
-      } else {
-        this.fullSegmentSnapshotHandles.set(segmentId, {
-          handle,
-          cacheRevision,
-        });
-      }
-    }
-    for (const [nodeId, node] of nextChangedNodesById) {
-      this.cachedNodesById.set(nodeId, node);
-    }
-    if (options.notify ?? true) {
-      this.markNodeDataChanged();
-    }
-    return true;
-  }
-
-  private deleteCachedSegment(segmentId: bigint) {
-    const previousSegmentNodes = this.fullSegmentNodeCache.get(segmentId);
-    if (previousSegmentNodes === undefined) return false;
-    for (const node of previousSegmentNodes) {
-      if (this.cachedNodesById.get(node.nodeId) === node) {
-        this.cachedNodesById.delete(node.nodeId);
-      }
-    }
-
-    this.fullSegmentNodeCache.delete(segmentId);
-    this.fullSegmentSnapshotHandles.delete(segmentId);
-    this.advanceCachedSegmentRevision(segmentId);
-    return true;
-  }
-
-  private abortPendingFullSegmentNodeFetch(
-    segmentId: bigint,
-    message: string,
-    options: { preserveRetained?: boolean } = {},
-  ) {
-    const pendingEntry = this.pendingFullSegmentNodeFetches.get(segmentId);
-    if (
-      pendingEntry === undefined ||
-      ((options.preserveRetained ?? false) && pendingEntry.retainWhileInactive)
-    ) {
-      return false;
-    }
-    pendingEntry.abortController.abort(new DOMException(message, "AbortError"));
-    this.pendingFullSegmentNodeFetches.delete(segmentId);
-    return true;
-  }
-
-  /**
-   * Releases every pending full-skeleton read leased by `owner`.
-   *
-   * A shared request is aborted only after its final explicit owner is
-   * released and only if no unowned (for example, visual) consumer ever
-   * joined it. Fetch retention remains monotonic for surviving shared
-   * consumers: releasing an owner does not undo retention.
-   */
   releaseFullSegmentNodeFetchOwner(owner: object) {
-    let released = false;
-    for (const [segmentId, pendingEntry] of this
-      .pendingFullSegmentNodeFetches) {
-      if (!pendingEntry.requestOwners.delete(owner)) continue;
-      released = true;
-      if (
-        pendingEntry.requestOwners.size === 0 &&
-        !pendingEntry.hasUnownedConsumer
-      ) {
-        this.abortPendingFullSegmentNodeFetch(
-          segmentId,
-          "spatial skeleton full-segment request owner released",
-        );
-      }
-    }
-    return released;
-  }
-
-  private getCurrentCachedSegmentRevision(segmentId: bigint) {
-    return Math.max(
-      this.fullSegmentNodeRevisionFloor,
-      this.fullSegmentNodeRevisions.get(segmentId) ?? 0,
-    );
-  }
-
-  private advanceCachedSegmentRevision(segmentId: bigint) {
-    const revision = ++this.fullSegmentNodeRevisionClock;
-    this.fullSegmentNodeRevisions.set(segmentId, revision);
-    return revision;
+    return this.completeSkeletons.releaseFetchOwner(owner);
   }
 
   evictInactiveSegmentNodes(activeSegmentIds: Iterable<bigint>) {
@@ -2357,213 +1634,19 @@ export class SpatialSkeletonEditSession
         activeSegmentIdSet.add(segmentId);
       }
     }
-    for (const [segmentId, registrationsForSegment] of this
-      .queueInputReferenceRegistrations) {
-      const current = this.getCachedSegmentSnapshotHandle(segmentId);
-      for (const [token, snapshot] of registrationsForSegment) {
-        if (
-          current?.handle === snapshot.handle &&
-          current.cacheRevision === snapshot.cacheRevision
-        ) {
-          activeSegmentIdSet.add(segmentId);
-        } else {
-          // A replacement or explicit invalidation makes this input reference
-          // stale. Do not let it accidentally retain a newer snapshot.
-          registrationsForSegment.delete(token);
-        }
-      }
-      if (registrationsForSegment.size === 0) {
-        this.queueInputReferenceRegistrations.delete(segmentId);
-      }
-    }
-    let changed = false;
-    for (const segmentId of this.fullSegmentNodeCache.keys()) {
-      if (activeSegmentIdSet.has(segmentId)) continue;
-      changed = this.deleteCachedSegment(segmentId) || changed;
-    }
-    for (const [segmentId, pendingEntry] of this
-      .pendingFullSegmentNodeFetches) {
-      if (
-        activeSegmentIdSet.has(segmentId) ||
-        pendingEntry.retainWhileInactive
-      ) {
-        continue;
-      }
-      if (
-        this.abortPendingFullSegmentNodeFetch(
-          segmentId,
-          "spatial skeleton full-segment inspection request evicted for inactive segment",
-        )
-      ) {
-        // There may not have been a cache entry to delete, but eviction is
-        // still an explicit invalidation of this fetch's publication fence.
-        this.advanceCachedSegmentRevision(segmentId);
-      }
-    }
-    return changed;
+    return this.completeSkeletons.evictInactive(activeSegmentIdSet);
   }
 
-  async getFullSegmentNodes(
+  getFullSegmentNodes(
     skeletonLayer: SpatiallyIndexedSkeletonLayer,
     segmentId: bigint,
-    options: {
-      retainWhileInactive?: boolean;
-      /**
-       * Opaque lease owner that can release this pending read on disposal.
-       * An owned read starts before unowned reads waiting for a slot.
-       */
-      requestOwner?: object;
-    } = {},
+    options: { retainWhileInactive?: boolean; requestOwner?: object } = {},
   ): Promise<SkeletonNode[]> {
-    const cached = this.fullSegmentNodeCache.get(segmentId);
-    if (cached !== undefined) {
-      return cached;
-    }
-    const pendingEntry = this.pendingFullSegmentNodeFetches.get(segmentId);
-    if (pendingEntry !== undefined) {
-      if (options.requestOwner === undefined) {
-        pendingEntry.hasUnownedConsumer = true;
-      } else {
-        pendingEntry.requestOwners.add(options.requestOwner);
-      }
-      if (options.retainWhileInactive) {
-        // A command may join a fetch that was originally started only for the
-        // render overlay. Promote the shared request so visibility-based cache
-        // eviction cannot cancel work that an edit is actively awaiting.
-        pendingEntry.retainWhileInactive = true;
-      }
-      return pendingEntry.promise;
-    }
-    const skeletonSource = skeletonLayer.fragmentSource;
-    if (skeletonSource === undefined) {
-      throw new Error(
-        "The active spatial skeleton source does not expose full skeleton inspection.",
-      );
-    }
-    const fetchRevision = this.getCachedSegmentRevision(segmentId);
-    const abortController = new AbortController();
-    const pendingFetch: {
-      promise?: Promise<SkeletonNode[]>;
-    } = {};
-    this.fullSegmentNodeFetchLimitLayer = skeletonLayer;
-    const fetchPromise = this.fullSegmentNodeFetchLimiter
-      .run(
-        async () => {
-          if (abortController.signal.aborted) {
-            throw (
-              abortController.signal.reason ??
-              new DOMException("Skeleton request aborted.", "AbortError")
-            );
-          }
-          const timeout = setTimeout(() => {
-            abortController.abort(
-              new DOMException(
-                `Spatial skeleton ${segmentId} full-segment request timed out.`,
-                "TimeoutError",
-              ),
-            );
-          }, FULL_SEGMENT_NODE_FETCH_TIMEOUT_MS);
-          let rejectAbort!: (reason: unknown) => void;
-          const aborted = new Promise<never>((_resolve, reject) => {
-            rejectAbort = reject;
-          });
-          const rejectFromAbort = () =>
-            rejectAbort(
-              abortController.signal.reason ??
-                new DOMException("Skeleton request aborted.", "AbortError"),
-            );
-          abortController.signal.addEventListener("abort", rejectFromAbort, {
-            once: true,
-          });
-          const sourceRequest = fetchCompleteSkeleton(
-            skeletonSource,
-            segmentId,
-            abortController.signal,
-          );
-          // If abort/deadline wins the race, the source may still resolve or
-          // reject later because not every implementation observes its
-          // signal. Keep that detached outcome observed.
-          void sourceRequest.catch(() => undefined);
-          let fetchedNodes: SkeletonNode[];
-          try {
-            fetchedNodes = await Promise.race([sourceRequest, aborted]);
-          } finally {
-            clearTimeout(timeout);
-            abortController.signal.removeEventListener(
-              "abort",
-              rejectFromAbort,
-            );
-          }
-          const normalizedNodes: SkeletonNode[] = [];
-          for (const fetchedNode of fetchedNodes) {
-            const mappedNode = normalizeSkeletonNode(fetchedNode);
-            if (mappedNode === undefined) continue;
-            normalizedNodes.push(mappedNode);
-          }
-          normalizedNodes.sort((a, b) => bigintCompare(a.nodeId, b.nodeId));
-          if (
-            this.getCurrentCachedSegmentRevision(segmentId) === fetchRevision &&
-            pendingFetch.promise !== undefined &&
-            this.pendingFullSegmentNodeFetches.get(segmentId)?.promise ===
-              pendingFetch.promise
-          ) {
-            this.publishAuthoritativeReadSnapshots(
-              new Map([[segmentId, normalizedNodes]]),
-              {
-                expectedRevisions: new Map([[segmentId, fetchRevision]]),
-              },
-            );
-          }
-          return normalizedNodes;
-        },
-        {
-          signal: abortController.signal,
-          isPrioritized: () => {
-            const pendingEntry =
-              this.pendingFullSegmentNodeFetches.get(segmentId);
-            return (
-              pendingEntry !== undefined &&
-              pendingEntry.promise === pendingFetch.promise &&
-              pendingEntry.requestOwners.size > 0
-            );
-          },
-        },
-      )
-      .finally(() => {
-        if (
-          this.pendingFullSegmentNodeFetches.get(segmentId)?.promise ===
-          pendingFetch.promise
-        ) {
-          this.pendingFullSegmentNodeFetches.delete(segmentId);
-        }
-      });
-    pendingFetch.promise = fetchPromise;
-    this.pendingFullSegmentNodeFetches.set(segmentId, {
-      promise: fetchPromise,
-      abortController,
-      retainWhileInactive: options.retainWhileInactive ?? false,
-      requestOwners:
-        options.requestOwner === undefined
-          ? new Set<object>()
-          : new Set([options.requestOwner]),
-      hasUnownedConsumer: options.requestOwner === undefined,
-    });
-    return fetchPromise;
-  }
-
-  private clearFullSkeletonCache() {
-    this.fullSegmentNodeRevisionFloor = ++this.fullSegmentNodeRevisionClock;
-    this.fullSegmentNodeRevisions.clear();
-    for (const segmentId of this.pendingFullSegmentNodeFetches.keys()) {
-      this.abortPendingFullSegmentNodeFetch(
-        segmentId,
-        "stale spatial skeleton full-segment inspection request",
-      );
-    }
-    this.fullSegmentNodeCache.clear();
-    this.fullSegmentSnapshotHandles.clear();
-    this.queueInputReferenceRegistrations.clear();
-    this.cachedNodesById.clear();
+    return this.completeSkeletons.fetchSegmentNodes(
+      skeletonLayer,
+      segmentId,
+      options,
+    );
   }
 
   disposed() {
