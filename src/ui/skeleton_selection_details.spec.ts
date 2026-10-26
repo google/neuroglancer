@@ -39,7 +39,10 @@ import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
 import { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { WatchableValue } from "#src/trackable_value.js";
-import { displaySkeletonNodeSelection } from "#src/ui/skeleton_selection_details.js";
+import {
+  displayProvisionalSkeletonSegment,
+  displaySkeletonNodeSelection,
+} from "#src/ui/skeleton_selection_details.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { NullarySignal } from "#src/util/signal.js";
@@ -93,6 +96,7 @@ function makeDetailsLayer(
   options: {
     editableSource?: unknown;
     layerDimensionNames?: string[];
+    loadedSegmentNodes?: SkeletonNode[];
   } = {},
 ) {
   const spatialSkeletonEditSession = new SpatialSkeletonEditSession();
@@ -131,7 +135,7 @@ function makeDetailsLayer(
         };
   const skeletonNodeAccess = new WatchableValue<SkeletonNodeAccess | undefined>(
     {
-      getSegmentNodes: () => [],
+      getSegmentNodes: () => options.loadedSegmentNodes ?? [],
       parentsInferred: false,
       nodesChanged: new NullarySignal(),
       hasPickableNodes: false,
@@ -170,7 +174,6 @@ function makeDetailsLayer(
     skeletonSourceConnection,
     skeletonNodeSelection,
     skeletonNodeAccess,
-    selectSegment: vi.fn(),
   };
 }
 
@@ -187,10 +190,6 @@ function showSelectedNode(
     { nodeId, value: segmentId } as SegmentationLayerSelectionState,
     parent,
     context,
-    {
-      changed: new NullarySignal(),
-      get: () => new Float32Array([0.2, 0.4, 0.6, 1]),
-    },
   );
   return parent;
 }
@@ -208,6 +207,13 @@ function getPropertyValue(parent: HTMLElement, label: string) {
     }
   }
   return undefined;
+}
+
+function getPropertyLabels(parent: HTMLElement) {
+  return Array.from(
+    parent.querySelectorAll(".neuroglancer-annotation-property-label"),
+    (label) => label.textContent,
+  );
 }
 
 afterEach(() => {
@@ -357,27 +363,55 @@ describe("skeleton selection details", () => {
     expect(getPropertyValue(parent, "Node ID")!.textContent).toBe("1");
   });
 
-  it("shows Preview as the skeleton id until the server confirms the skeleton", () => {
-    const layer = makeDetailsLayer({ editableSource: makeEditableSource() });
-    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
-      [5n, [makeNode(1n)]],
-    ]);
+  it("shows Preview in place of the segment id until the server confirms the skeleton", () => {
+    const layer = makeDetailsLayer();
     const { spatialSkeletonDisplay } = layer.spatialSkeletonEditSession;
     const alias = {
       logicalHandle: { kind: "segment", stableId: "intent:1:created-segment" },
       segmentId: 5n,
     } as const;
+    const state = { value: 5n } as SegmentationLayerSelectionState;
     spatialSkeletonDisplay.value = {
       ...spatialSkeletonDisplay.value,
       numericAliases: [{ ...alias, authoritative: false }] as any,
     };
-    const parent = showSelectedNode(layer, 1n);
-    expect(getPropertyValue(parent, "Segment ID")!.textContent).toBe("Preview");
+    const provisionalParent = document.createElement("div");
+    expect(
+      displayProvisionalSkeletonSegment(layer, state, provisionalParent),
+    ).toBe(true);
+    expect(getPropertyValue(provisionalParent, "Segment ID")!.textContent).toBe(
+      "Preview",
+    );
+
     spatialSkeletonDisplay.value = {
       ...spatialSkeletonDisplay.value,
       numericAliases: [{ ...alias, authoritative: true }] as any,
     };
-    expect(getPropertyValue(parent, "Segment ID")!.textContent).toBe("5");
+    const confirmedParent = document.createElement("div");
+    expect(
+      displayProvisionalSkeletonSegment(layer, state, confirmedParent),
+    ).toBe(false);
+    expect(confirmedParent.childElementCount).toBe(0);
+  });
+
+  it("lists the node id before the node type, for a cached node and for a node only on screen", () => {
+    const fullLayer = makeDetailsLayer({
+      editableSource: makeEditableSource(),
+    });
+    fullLayer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
+      [5n, [makeNode(1n), makeNode(2n, { parentNodeId: 1n })]],
+    ]);
+    expect(
+      getPropertyLabels(showSelectedNode(fullLayer, 2n)).slice(0, 2),
+    ).toEqual(["Node ID", "Node type"]);
+
+    const outlineLayer = makeDetailsLayer({
+      loadedSegmentNodes: [makeNode(1n), makeNode(2n, { parentNodeId: 1n })],
+    });
+    expect(getPropertyLabels(showSelectedNode(outlineLayer, 2n, 5n))).toEqual([
+      "Node ID",
+      "Node type",
+    ]);
   });
 
   it("keeps a radius being typed when the server confirms an earlier edit", () => {
@@ -447,32 +481,6 @@ describe("skeleton selection details", () => {
     expect(
       vi.mocked(executeSpatialSkeletonNodeRadiusUpdate).mock.calls[0][1],
     ).toMatchObject({ nextRadius: 6 });
-  });
-
-  it("the segment chip follows a change of the skeleton's colour", () => {
-    const layer = makeDetailsLayer({ editableSource: makeEditableSource() });
-    layer.spatialSkeletonEditSession.replaceCachedSegmentSnapshots([
-      [5n, [makeNode(1n)]],
-    ]);
-    const parent = document.createElement("div");
-    document.body.appendChild(parent);
-    const colorsChanged = new NullarySignal();
-    let color = new Float32Array([1, 0, 0, 1]);
-    displaySkeletonNodeSelection(
-      layer,
-      { nodeId: 1n } as SegmentationLayerSelectionState,
-      parent,
-      new DependentViewContext(() => {}),
-      { changed: colorsChanged, get: () => color },
-    );
-    const chip = getPropertyValue(parent, "Segment ID")!
-      .firstElementChild as HTMLElement;
-    expect(chip.style.backgroundColor).toBe("rgb(255, 0, 0)");
-
-    color = new Float32Array([0, 0, 1, 1]);
-    colorsChanged.dispatch();
-
-    expect(chip.style.backgroundColor).toBe("rgb(0, 0, 255)");
   });
 
   it("explains when the selected node is not in loaded or cached skeleton data", () => {

@@ -28,7 +28,6 @@ import {
 } from "#src/layer/segmentation/selection.js";
 import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import type { SpatialSkeletonDisplaySnapshot } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   executeSpatialSkeletonDeleteNode,
   executeSpatialSkeletonNodeConfidenceUpdate,
@@ -53,11 +52,8 @@ import {
 } from "#src/skeleton/node_types.js";
 import { StatusMessage } from "#src/status.js";
 import { getSkeletonNodeTypeIcon } from "#src/ui/skeleton_node_icons.js";
-import { serializeColor } from "#src/util/color.js";
 import { RefCounted } from "#src/util/disposable.js";
-import type { vec3 } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
-import type { NullarySignal } from "#src/util/signal.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { makeIcon } from "#src/widget/icon.js";
@@ -68,10 +64,9 @@ export type SkeletonNodeDetailsLayer = Pick<
   | "skeletonSourceConnection"
   | "skeletonNodeSelection"
   | "skeletonNodeAccess"
-  | "selectSegment"
 >;
 
-export interface FormattedSkeletonNodePosition {
+interface FormattedSkeletonNodePosition {
   readonly copyText: string;
   readonly displayText: string;
   readonly fullText: string;
@@ -91,7 +86,7 @@ function formatPosition(
   };
 }
 
-export function formatSkeletonNodePosition(
+function formatSkeletonNodePosition(
   modelPosition: ArrayLike<number>,
   transform: RenderLayerTransformOrError | undefined,
 ): FormattedSkeletonNodePosition {
@@ -114,41 +109,35 @@ export function formatSkeletonNodePosition(
   return formatPosition(layerPosition, transform.layerDimensionNames);
 }
 
-export interface SkeletonSegmentColors {
-  readonly changed: NullarySignal;
-  get(segmentId: bigint): Float32Array;
-}
-
-function isProvisionalSkeletonSegment(
-  presentation: SpatialSkeletonDisplaySnapshot,
-  segmentId: bigint,
-) {
-  return presentation.numericAliases.some(
-    (alias) => alias.segmentId === segmentId && !alias.authoritative,
-  );
-}
-
-// The skeleton details label a provisional skeleton as Preview in place of the segment row.
-export function selectsProvisionalSkeleton(
+// A provisional skeleton has no permanent segment ID to show.
+export function displayProvisionalSkeletonSegment(
   layer: SkeletonNodeDetailsLayer,
   state: SegmentationLayerSelectionState,
-) {
+  parent: HTMLElement,
+): boolean {
   const segmentId = getSegmentIdFromLayerSelectionValue(state);
-  return (
-    segmentId !== undefined &&
-    isProvisionalSkeletonSegment(
-      layer.spatialSkeletonEditSession.spatialSkeletonDisplay.value,
-      segmentId,
+  if (
+    segmentId === undefined ||
+    !layer.spatialSkeletonEditSession.spatialSkeletonDisplay.value.numericAliases.some(
+      (alias) => alias.segmentId === segmentId && !alias.authoritative,
     )
+  ) {
+    return false;
+  }
+  const segmentChip = document.createElement("span");
+  segmentChip.classList.add(
+    "neuroglancer-selection-details-skeleton-segment-chip",
   );
-}
-
-function showProvisionalSegment(segmentChip: HTMLElement) {
   segmentChip.textContent = "Preview";
   segmentChip.title =
     "Preview skeleton. Red means the skeleton source has not yet confirmed its permanent skeleton ID.";
   segmentChip.style.backgroundColor = "rgb(255, 0, 0)";
   segmentChip.style.color = "#ffffff";
+  const element = document.createElement("div");
+  element.classList.add("neuroglancer-selection-details-skeleton");
+  element.appendChild(makePropertyRow("Segment ID", segmentChip));
+  parent.appendChild(element);
+  return true;
 }
 
 export function displaySkeletonNodeSelection(
@@ -156,28 +145,14 @@ export function displaySkeletonNodeSelection(
   state: SegmentationLayerSelectionState,
   parent: HTMLElement,
   context: DependentViewContext,
-  segmentColors: SkeletonSegmentColors,
 ): boolean {
   const nodeId = getNodeIdFromLayerSelectionState(state);
-  if (nodeId === undefined) {
-    if (!selectsProvisionalSkeleton(layer, state)) return false;
-    const segmentChip = document.createElement("span");
-    segmentChip.classList.add(
-      "neuroglancer-selection-details-skeleton-segment-chip",
-    );
-    showProvisionalSegment(segmentChip);
-    const element = document.createElement("div");
-    element.classList.add("neuroglancer-selection-details-skeleton");
-    element.appendChild(makePropertyRow("Segment ID", segmentChip));
-    parent.appendChild(element);
-    return true;
-  }
+  if (nodeId === undefined) return false;
   const details = context.registerDisposer(
     new SkeletonNodeDetails(
       layer,
       nodeId,
       getSegmentIdFromLayerSelectionValue(state),
-      segmentColors,
     ),
   );
   parent.appendChild(details.element);
@@ -190,17 +165,10 @@ enum SkeletonNodeDetailsKind {
   COMPLETE,
 }
 
-interface SkeletonProvisionalIds {
-  readonly node: boolean;
-  readonly segment: boolean;
-}
-
 interface SkeletonNodeOutline {
   readonly kind: SkeletonNodeDetailsKind.OUTLINE;
-  readonly segmentId: bigint;
   readonly nodeTypeLabel: string | undefined;
-  readonly position: FormattedSkeletonNodePosition | undefined;
-  readonly provisional: SkeletonProvisionalIds;
+  readonly provisionalNode: boolean;
 }
 
 interface SkeletonNodeDisabledReasons {
@@ -219,7 +187,7 @@ interface CompleteSkeletonNode {
   readonly nodeIsTrueEnd: boolean;
   readonly isLeaf: boolean;
   readonly position: FormattedSkeletonNodePosition;
-  readonly provisional: SkeletonProvisionalIds;
+  readonly provisionalNode: boolean;
   readonly confidenceValues: readonly number[] | undefined;
   readonly disabledReasons: SkeletonNodeDisabledReasons;
 }
@@ -244,11 +212,10 @@ function readSkeletonNodeDetails(
   } = layer;
   const transform = layer.skeletonNodeAccess.value?.displayState.transform
     .value as RenderLayerTransformOrError | undefined;
-  const presentation = spatialSkeletonEditSession.spatialSkeletonDisplay.value;
-  const getProvisionalIds = (segmentId: bigint): SkeletonProvisionalIds => ({
-    node: (presentation.provisionalNodeIds ?? []).includes(nodeId),
-    segment: isProvisionalSkeletonSegment(presentation, segmentId),
-  });
+  const provisionalNode = (
+    spatialSkeletonEditSession.spatialSkeletonDisplay.value
+      .provisionalNodeIds ?? []
+  ).includes(nodeId);
   const skeletonLayer = connection.getSpatiallyIndexedSkeletonLayer();
   const cachedNode = spatialSkeletonEditSession.getCachedNode(nodeId);
   const node = skeletonLayer?.getNode(nodeId) ?? cachedNode;
@@ -264,8 +231,7 @@ function readSkeletonNodeDetails(
     const graphNode = graph?.nodeById.get(nodeId);
     return {
       kind: SkeletonNodeDetailsKind.OUTLINE,
-      segmentId,
-      provisional: getProvisionalIds(segmentId),
+      provisionalNode,
       nodeTypeLabel:
         graphNode === undefined
           ? undefined
@@ -276,10 +242,6 @@ function readSkeletonNodeDetails(
               ),
               isSkeletonNodeTrueEnd(graphNode),
             ),
-      position:
-        graphNode === undefined
-          ? undefined
-          : formatSkeletonNodePosition(graphNode.position, transform),
     };
   }
   const segmentNodes = spatialSkeletonEditSession.getCachedSegmentNodes(
@@ -303,7 +265,7 @@ function readSkeletonNodeDetails(
     nodeIsTrueEnd,
     isLeaf: childCount === 0,
     position: formatSkeletonNodePosition(node.position, transform),
-    provisional: getProvisionalIds(node.segmentId),
+    provisionalNode,
     confidenceValues: editSource?.confidenceValues,
     disabledReasons: {
       deleteNode:
@@ -423,7 +385,6 @@ class SkeletonNodeDetails extends RefCounted {
     private readonly layer: SkeletonNodeDetailsLayer,
     private readonly selectedNodeId: bigint,
     private readonly selectedSegmentId: bigint | undefined,
-    private readonly segmentColors: SkeletonSegmentColors,
   ) {
     super();
     this.element.classList.add("neuroglancer-selection-details-skeleton");
@@ -440,7 +401,6 @@ class SkeletonNodeDetails extends RefCounted {
       spatialSkeletonEditSession.spatialSkeletonDisplay.changed.add(update),
     );
     this.registerDisposer(skeletonNodeSelection.selected.changed.add(update));
-    this.registerDisposer(segmentColors.changed.add(update));
     let unbindNodesChanged: (() => void) | undefined;
     const bindNodeAccess = () => {
       unbindNodesChanged?.();
@@ -496,7 +456,6 @@ class SkeletonNodeDetails extends RefCounted {
       spatialSkeletonEditSession.getReloadRequired(),
       skeletonLayer,
       skeletonLayer?.editableSource,
-      this.segmentColors.changed.count,
     ];
   }
 
@@ -546,24 +505,17 @@ class SkeletonNodeDetails extends RefCounted {
 
   private buildOutline() {
     const nodeTypeValue = document.createElement("span");
-    const positionValue = document.createElement("span");
     const nodeTypeRow = makePropertyRow("Node type", nodeTypeValue);
-    const positionRow = makePropertyRow("Position", positionValue);
-    const identifiers = new SkeletonNodeIdentifiers(
-      this.layer,
-      this.segmentColors,
-    );
+    const nodeIdRow = new SkeletonNodeIdRow();
     return (model: SkeletonNodeDetailsModel) => {
       if (model.kind !== SkeletonNodeDetailsKind.OUTLINE) return;
-      const rows: HTMLElement[] = [];
-      if (model.nodeTypeLabel !== undefined && model.position !== undefined) {
+      nodeIdRow.update(this.getNodeId(), model.provisionalNode);
+      const rows = [nodeIdRow.element];
+      if (model.nodeTypeLabel !== undefined) {
         nodeTypeValue.textContent = model.nodeTypeLabel;
-        positionValue.textContent = model.position.displayText;
-        positionValue.title = model.position.fullText;
-        rows.push(nodeTypeRow, positionRow);
+        rows.push(nodeTypeRow);
       }
-      identifiers.update(model.segmentId, this.getNodeId(), model.provisional);
-      showChildren(this.element, [...rows, ...identifiers.rows]);
+      showChildren(this.element, rows);
     };
   }
 
@@ -610,7 +562,7 @@ class SkeletonNodeDetails extends RefCounted {
     summary.append(icon, coordinates, deleteButton);
     let shownIconSvg: string | undefined;
 
-    const identifiers = new SkeletonNodeIdentifiers(layer, this.segmentColors);
+    const nodeIdRow = new SkeletonNodeIdRow();
     let choicePending = false;
     const runChoice = (
       action: SpatialSkeletonAction,
@@ -799,7 +751,6 @@ class SkeletonNodeDetails extends RefCounted {
       coordinates.title = position.fullText;
       deleteButton.disabled = reasons.deleteNode !== undefined;
       setDisabledReason(deleteButton, reasons.deleteNode, "Delete node");
-      identifiers.update(node.segmentId, node.nodeId, model.provisional);
       const pendingReason = choicePending
         ? "Saving the previous change."
         : undefined;
@@ -826,9 +777,10 @@ class SkeletonNodeDetails extends RefCounted {
       const description = node.description ?? "";
       readonlyDescription.textContent = description;
       setDisabledReason(readonlyDescription, reasons.description);
+      nodeIdRow.update(node.nodeId, model.provisionalNode);
       showChildren(this.element, [
         summary,
-        ...identifiers.rows,
+        nodeIdRow.element,
         nodeTypeRow,
         radius.row,
         confidence.row,
@@ -879,76 +831,19 @@ class SkeletonNodeDetails extends RefCounted {
   }
 }
 
-const SEGMENT_CHIP_TITLE =
-  "Ctrl+right-click to pin selection\nCtrl+shift+right-click to unpin";
+class SkeletonNodeIdRow {
+  private readonly value = document.createElement("span");
+  readonly element = makePropertyRow("Node ID", this.value);
 
-class SkeletonNodeIdentifiers {
-  private readonly segmentChip = document.createElement("span");
-  private readonly nodeIdValue = document.createElement("span");
-  private segmentId: bigint | undefined;
-  readonly rows: readonly HTMLElement[];
-
-  constructor(
-    layer: SkeletonNodeDetailsLayer,
-    private readonly segmentColors: SkeletonSegmentColors,
-  ) {
-    const { segmentChip } = this;
-    segmentChip.classList.add(
-      "neuroglancer-selection-details-skeleton-segment-chip",
-    );
-    const hasSegmentSelectionModifiers = (event: MouseEvent) =>
-      event.ctrlKey && !event.altKey && !event.metaKey;
-    const selectSegment = (event: MouseEvent) => {
-      if (this.segmentId === undefined) return;
-      layer.selectSegment(
-        this.segmentId,
-        event.shiftKey ? "force-unpin" : true,
-      );
-    };
-    segmentChip.addEventListener("mousedown", (event) => {
-      if (event.button !== 2 || !hasSegmentSelectionModifiers(event)) return;
-      selectSegment(event);
-      event.preventDefault();
-      event.stopPropagation();
-    });
-    segmentChip.addEventListener("contextmenu", (event) => {
-      if (!hasSegmentSelectionModifiers(event)) return;
-      if (event.button !== 2) selectSegment(event);
-      event.preventDefault();
-      event.stopPropagation();
-    });
-    this.rows = [
-      makePropertyRow("Segment ID", segmentChip),
-      makePropertyRow("Node ID", this.nodeIdValue),
-    ];
-  }
-
-  update(
-    segmentId: bigint,
-    nodeId: bigint,
-    provisional: SkeletonProvisionalIds,
-  ) {
-    const { segmentChip, nodeIdValue } = this;
-    this.segmentId = segmentId;
-    if (provisional.segment) {
-      showProvisionalSegment(segmentChip);
-    } else {
-      const color = this.segmentColors.get(segmentId);
-      const luminance = 0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2];
-      segmentChip.textContent = `${segmentId}`;
-      segmentChip.title = SEGMENT_CHIP_TITLE;
-      segmentChip.style.backgroundColor = serializeColor(
-        color.subarray(0, 3) as vec3,
-      );
-      segmentChip.style.color = luminance > 0.6 ? "#101010" : "#f5f5f5";
-    }
-    if (provisional.node) {
-      nodeIdValue.textContent = "Preview";
-      nodeIdValue.title =
+  update(nodeId: bigint, provisional: boolean) {
+    const { value } = this;
+    if (provisional) {
+      value.textContent = "Preview";
+      value.title =
         "Preview node. The skeleton source has not yet confirmed its permanent node ID.";
     } else {
-      nodeIdValue.textContent = `${nodeId}`;
-      nodeIdValue.removeAttribute("title");
+      value.textContent = `${nodeId}`;
+      value.removeAttribute("title");
     }
   }
 }

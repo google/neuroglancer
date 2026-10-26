@@ -131,8 +131,8 @@ import { DisplayOptionsTab } from "#src/ui/segmentation_display_options_tab.js";
 import { registerSpatialSkeletonEditTool } from "#src/ui/skeleton_edit_tools.js";
 import { registerSpatialSkeletonFindPathTool } from "#src/ui/skeleton_find_path_tool.js";
 import {
+  displayProvisionalSkeletonSegment,
   displaySkeletonNodeSelection,
-  selectsProvisionalSkeleton,
 } from "#src/ui/skeleton_selection_details.js";
 import { registerSkeletonTabs } from "#src/ui/skeleton_tab.js";
 import { Uint64Map } from "#src/uint64_map.js";
@@ -1608,21 +1608,9 @@ export class SegmentationUserLayer extends Base {
     context: DependentViewContext,
   ): boolean {
     let displayed =
-      !selectsProvisionalSkeleton(this, state) &&
+      displayProvisionalSkeletonSegment(this, state, parent) ||
       this.displaySegmentationSelection(state, parent, context);
-    const segmentColorsChanged = new NullarySignal();
-    registerCallbackWhenSegmentationDisplayStateChanged(
-      this.displayState,
-      context,
-      () => segmentColorsChanged.dispatch(),
-    );
-    if (
-      displaySkeletonNodeSelection(this, state, parent, context, {
-        changed: segmentColorsChanged,
-        get: (segmentId) =>
-          getBaseObjectColor(this.displayState, segmentId, new Float32Array(4)),
-      })
-    ) {
+    if (displaySkeletonNodeSelection(this, state, parent, context)) {
       displayed = true;
     }
     if (super.displaySelectionState(state, parent, context)) displayed = true;
