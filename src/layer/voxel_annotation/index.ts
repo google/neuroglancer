@@ -757,6 +757,17 @@ export function UserLayerWithVoxelEditingMixin<
         .volume as MultiscaleVolumeChunkSource;
 
       try {
+        if (writingEnabled) {
+          // A restored state can enable writing on a source that no longer
+          // supports it, e.g. once the stored array became sharded.
+          const { subsource } = loadedSubsource.subsourceEntry;
+          if (!subsource.supportsWriting) {
+            throw new Error("This data source does not support writing.");
+          }
+          if (subsource.writingIncompatibility !== undefined) {
+            throw new Error(subsource.writingIncompatibility);
+          }
+        }
         const context = new VoxelEditingContext(
           this,
           primarySource,

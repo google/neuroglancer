@@ -108,6 +108,7 @@ describe("Voxel Editing Utilities", () => {
   const createLayer = (
     dataType: DataType = DataType.UINT64,
     modelTransform?: CoordinateSpaceTransform,
+    writableSubsource: object = { supportsWriting: true },
   ) => {
     const credentialsManager = new SharedCredentialsManager(
       getDefaultCredentialsManager(),
@@ -184,7 +185,7 @@ describe("Voxel Editing Utilities", () => {
     const subsourceEntry = {
       id: "default",
       default: true,
-      subsource: { volume: multiscaleSource },
+      subsource: { volume: multiscaleSource, ...writableSubsource },
     };
 
     const loadedSubsource = new LoadedDataSubsource(
@@ -450,6 +451,27 @@ describe("Voxel Editing Utilities", () => {
         userLayer.editingContexts.get(loadedSubsource)!.previewRenderLayer!;
       expect(preview.drawnByHostLayer).toBe(true);
     });
+  });
+
+  describe("Restored writing state", () => {
+    it.for([
+      ["no write support", { supportsWriting: false }],
+      [
+        "a writing incompatibility",
+        { supportsWriting: true, writingIncompatibility: "Sharded array." },
+      ],
+    ] as const)(
+      "Source with %s: writing is turned back off",
+      ([, writableSubsource]) => {
+        const { userLayer, loadedSubsource } = createLayer(
+          DataType.UINT64,
+          undefined,
+          writableSubsource,
+        );
+        expect(loadedSubsource.writingEnabled.value).toBe(false);
+        expect(userLayer.hasSubsourcesWithWritingEnabled.value).toBe(false);
+      },
+    );
   });
 
   describe("Layer controls", () => {
