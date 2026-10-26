@@ -158,6 +158,12 @@ abstract class VoxelEditingTool extends LayerTool<UserLayerWithVoxelEditing> {
       activation.cancel();
       return false;
     }
+    const writingEnabled = this.layer.hasSubsourcesWithWritingEnabled;
+    activation.registerDisposer(
+      writingEnabled.changed.add(() => {
+        if (!writingEnabled.value) activation.cancel();
+      }),
+    );
     this.showToolOptionsBar(activation);
     this.bindToolInput(activation);
 
