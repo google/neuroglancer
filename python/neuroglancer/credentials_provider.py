@@ -27,10 +27,7 @@ class CredentialsManager:
         self._providers[key] = credentials_provider_getter
 
     def get(self, key, parameters):
-        getter = self._providers.get(key)
-        if getter is None:
-            return None
-        return getter(parameters)
+        return self._providers[key](parameters)
 
 
 class CredentialsProvider:
