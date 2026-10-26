@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Tracks the hovered and selected skeleton node of a segmentation layer
+ * through the viewer's selection state.
+ */
+
 import type {
   LayerSelectedValues,
   MouseSelectionState,

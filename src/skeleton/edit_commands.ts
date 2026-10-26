@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Defines the spatial skeleton edit actions, the edit command and command
+ * factory a datasource implements for each, and the lookup of a source's
+ * factory by action.
+ */
+
 import type { SpatialSkeletonIdentityService } from "#src/skeleton/edit_queue/api.js";
 import type { SpatialSkeletonQueueInputRequirements } from "#src/skeleton/edit_queue/queue_input.js";
 

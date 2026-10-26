@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Resolves a skeleton navigation, such as go to parent, from the current
+ * selection to its target node or to the reason it fails.
+ */
+
 import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import {

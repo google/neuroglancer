@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+/**
+ * @file Defines the request and result of each CATMAID edit operation.
+ */
+
 import type {
   CatmaidAddNodeResult,
   CatmaidDescriptionUpdateResult,

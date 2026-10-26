@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Implements the Find Path tool, which picks two nodes of one skeleton
+ * and finds the path between them in its cached nodes.
+ */
+
 import type { Annotation } from "#src/annotation/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";

@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Defines the contract of a skeleton datasource: nodes, edges, fragment
+ * and spatial index reads, and the edit command factories of an editable
+ * source.
+ */
+
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import type {
   SpatialSkeletonAddNodesCommandFactory,

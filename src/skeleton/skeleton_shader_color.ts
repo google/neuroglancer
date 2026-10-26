@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Defines the GLSL that colors skeleton edges and nodes, either per
+ * segment in the shader or from one uniform color.
+ */
+
 // `dynamic`: per-segment appearance resolved in the shader (spatial skeletons).
 // `legacy`: one skeleton drawn per call with a CPU-supplied `uColor`.
 export type SkeletonColorPath = "dynamic" | "legacy";

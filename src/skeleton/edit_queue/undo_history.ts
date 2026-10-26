@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Keeps the bounded Undo and Redo stacks, both confirmed and previewed,
+ * whose staged transitions confirm in the order they were staged.
+ */
+
 import type { SpatialSkeletonHistoryPort } from "#src/skeleton/edit_queue/api.js";
 import { DEFAULT_SPATIAL_SKELETON_EDIT_QUEUE_CAPACITY } from "#src/skeleton/edit_queue/types.js";
 import { WatchableValue } from "#src/trackable_value.js";

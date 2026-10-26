@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Moves skeleton chunk data from the worker into a message for the main
+ * thread, transferring its buffers.
+ */
+
 import type { TypedNumberArray } from "#src/util/array.js";
 
 export interface SkeletonChunkData {

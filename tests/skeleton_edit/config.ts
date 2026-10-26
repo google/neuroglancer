@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Defines the Playwright projects that run the skeleton edit
+ * browser-integration suites and the end-to-end suites.
+ */
+
 import { defineConfig, type Project } from "@playwright/test";
 
 export default defineConfig({

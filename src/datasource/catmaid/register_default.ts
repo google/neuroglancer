@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+/**
+ * @file Registers the catmaid:// data source provider.
+ */
+
 import { CatmaidDataSourceProvider } from "#src/datasource/catmaid/frontend.js";
 import { registerProvider } from "#src/datasource/default_provider.js";
 

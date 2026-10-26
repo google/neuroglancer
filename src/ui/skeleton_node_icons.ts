@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+/**
+ * @file Chooses the icon that shows the display type of a skeleton node.
+ */
+
 import svg_circle from "ikonate/icons/circle.svg?raw";
 import svg_flag from "ikonate/icons/flag.svg?raw";
 import svg_minus from "ikonate/icons/minus.svg?raw";

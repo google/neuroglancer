@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Mirrors a Find Path state as local annotations in both directions, so
+ * that deleting an annotation clears its endpoint or route.
+ */
+
 import {
   type AnnotationReference,
   AnnotationType,

@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Uses the personal CATMAID API token kept in session storage, otherwise
+ * an anonymous token. Asks the user for a personal token when the server
+ * rejects the current one.
+ */
+
 import {
   CredentialsProvider,
   makeCachedCredentialsGetter,

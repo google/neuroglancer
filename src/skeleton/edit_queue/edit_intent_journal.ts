@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Records admitted intents in sequence order, each with its lifecycle,
+ * the resources it touches and the earlier intents it waits for.
+ */
+
 import type { SpatialSkeletonStableResourceHandle } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import {
   getSpatialSkeletonStableResourceKey,

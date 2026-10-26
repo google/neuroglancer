@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Shows the nodes of the hovered or selected skeleton in the Skeleton
+ * tab, with controls that filter, select, navigate and edit them.
+ */
+
 import "#src/ui/skeleton_tab.css";
 import svg_arrow_left from "ikonate/icons/arrow-left.svg?raw";
 import svg_arrow_right from "ikonate/icons/arrow-right.svg?raw";

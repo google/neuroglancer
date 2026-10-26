@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Seeds a CATMAID project with preset skeletons and reads its nodes back
+ * through the CATMAID HTTP API.
+ */
+
 import { isDeepStrictEqual } from "node:util";
 import type { GraphNode } from "./skeleton_edit_page.js";
 

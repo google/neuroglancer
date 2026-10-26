@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Commits each CATMAID edit request through CATMAID's edit operations and
+ * classifies its failure as not started, rejected or indeterminate. Its edit
+ * request scope is one CATMAID server and project.
+ */
+
 import type { CatmaidClient } from "#src/datasource/catmaid/api.js";
 import type {
   CatmaidSpatialSkeletonAddNodeRequest,

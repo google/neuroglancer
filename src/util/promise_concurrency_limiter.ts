@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Runs promise-returning tasks with at most a given number running at
+ * once.
+ */
+
 interface QueuedTask {
   start: () => void;
   reject: (reason: unknown) => void;

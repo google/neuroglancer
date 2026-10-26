@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Reads skeletons and spatial index metadata from a CATMAID project
+ * through its HTTP API. Sends skeleton edits to it.
+ */
+
 import { Unpackr } from "msgpackr";
 import type { BoundingBox } from "#src/coordinate_transform.js";
 import { fetchOkWithCredentials } from "#src/credentials_provider/http_request.js";

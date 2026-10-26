@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Defines the planner, edit request adapter, preview, history and
+ * identity contracts that connect the generic edit queue to a datasource.
+ */
+
 import type { EditableSkeletonSource } from "#src/skeleton/api.js";
 import type { SpatialSkeletonEditCommand } from "#src/skeleton/edit_commands.js";
 import type { SpatialSkeletonEditInverseDelta } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";

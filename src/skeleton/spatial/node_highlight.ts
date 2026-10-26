@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Computes the overlay primitives drawn over skeleton nodes: rings on the
+ * selected and hovered nodes, and markers on pending edits.
+ */
+
 import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.js";
 import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
 import {

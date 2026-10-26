@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Places DOM overlays over a rendered panel and updates them only while
+ * the last drawn frame of the panel is current.
+ */
+
 import "#src/ui/panel_overlays.css";
 
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";

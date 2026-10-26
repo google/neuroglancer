@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Binds the input events of the skeleton tools to actions. Derives the
+ * shortcut hints of the tool status bar from those bindings.
+ */
+
 import { getDefaultRenderedDataPanelBindings } from "#src/ui/default_input_event_bindings.js";
 import svg_mouse from "#src/ui/images/mouse.svg?raw";
 import { makeToolStatusChip } from "#src/ui/tool.js";

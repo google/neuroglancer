@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Chooses the spatial index level that a view draws, from each level's
+ * node limit and the view's spacing target. Builds the chunk specification of
+ * each level from the spatial index metadata.
+ */
+
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import type { ProjectionParameters } from "#src/projection_parameters.js";
 import type {

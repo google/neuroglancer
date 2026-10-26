@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Serves the viewer beside the mock CATMAID server. Prints a viewer URL
+ * that opens the mock skeletons ready for editing.
+ */
+
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { startCatmaidMockServer } from "./catmaid_mock_server.js";

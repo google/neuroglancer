@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Downloads the visible chunks of the selected spatial index level for
+ * each view and packs their nodes into vertex, edge and ID arrays. It runs on
+ * the WebWorker.
+ */
+
 import { withChunkManager } from "#src/chunk_manager/backend.js";
 import { ChunkState } from "#src/chunk_manager/base.js";
 import {

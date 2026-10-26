@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Attaches Find Path to one loaded spatial skeleton subsource and shows
+ * its annotations.
+ */
+
 import {
   AnnotationDisplayState,
   AnnotationLayerState,

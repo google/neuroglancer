@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+/**
+ * @file Prefetches the complete skeleton of a merge target.
+ */
+
 import type {
   SpatialSkeletonInputReference,
   SpatialSkeletonEditSession,

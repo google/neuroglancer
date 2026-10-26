@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Implements the Skeleton editing tool, which turns clicks, drags and
+ * held mode keys in a rendered panel into skeleton edits.
+ */
+
 import "#src/ui/skeleton_edit_tools.css";
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";

@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Defines the values an edit intent publishes: its lifecycle, its
+ * settlement, the Reload-required state, and its Queue and Recent activity
+ * rows.
+ */
+
 /** State of the local optimistic preview. */
 export type SpatialSkeletonPreviewLifecycle =
   | "reserved"

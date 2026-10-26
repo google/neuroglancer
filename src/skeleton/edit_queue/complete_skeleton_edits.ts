@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Applies one delta to a set of complete skeletons and returns the new
+ * set with the inverse delta that undoes it.
+ */
+
 import type { SkeletonVector, SkeletonNode } from "#src/skeleton/api.js";
 import type {
   CompleteSkeletonNodeChanges,

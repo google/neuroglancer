@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Resolves a pick in skeleton geometry to the picked skeleton and node,
+ * preferring the node as the edit session displays it.
+ */
+
 import type { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type { SkeletonPickGeometry } from "#src/skeleton/spatial/frontend.js";
 

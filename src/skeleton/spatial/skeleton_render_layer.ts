@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Draws spatially indexed skeletons in 2D and 3D panels, first from
+ * spatial index chunks and then from all nodes of the chosen skeletons. It also
+ * looks up nodes as the edit session displays them.
+ */
+
 import { ChunkState } from "#src/chunk_manager/base.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { ChunkRenderLayerFrontend } from "#src/chunk_manager/frontend.js";

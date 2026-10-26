@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Runs a disposable CATMAID server in its own Docker Compose project.
+ * Creates and deletes test projects on it.
+ */
+
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";

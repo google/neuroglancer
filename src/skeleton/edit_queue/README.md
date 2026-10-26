@@ -44,38 +44,15 @@ to describe and persist its edit plans.
 
 ## Where the code lives
 
+Each file's `@file` comment states its job.
+
 `src/skeleton/edit_queue/` holds the generic queue. It must not import
 `src/datasource` or `src/skeleton/edit/`; eslint enforces both.
 
-| File                         | Responsibility                                                                                                                      |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `api.ts`                     | Provider and planner-registration contract; planner, preview, history and identity contracts; edit request adapter.                 |
-| `types.ts`                   | Shared value types: executions, queue entries, edit status, settlements, Reload required.                                           |
-| `edit_errors.ts`             | Edit errors (conflict, inspection required, queue capacity) and their user-facing messages. It stays a leaf: the worker reaches it. |
-| `queue_input.ts`             | The complete skeletons an intent needs before it is planned, and how the queue acquires them.                                       |
-| `edit_queue.ts`              | `SpatialSkeletonEditQueue`: intent status, history coupling, scheduling, failure rollback.                                          |
-| `edit_queue_rows.ts`         | Queue and Recent activity rows, including failure-reason formatting.                                                                |
-| `request_scheduler.ts`       | One global FIFO lane per edit request scope; adapter outcome normalization.                                                         |
-| `preview.ts`                 | `SpatialSkeletonEditPreview`: off-screen reduction, local guards, atomic adoption.                                                  |
-| `preview_ui_hints.ts`        | Selection, visibility and navigation hints that an adopted preview asks for.                                                        |
-| `complete_skeleton.ts`       | Immutable complete-skeleton handles with bounded lazy node views.                                                                   |
-| `complete_skeleton_edits.ts` | Pure functions that apply one delta to complete skeletons and derive its inverse.                                                   |
-| `edit_intent_journal.ts`     | Canonical ordered intents, their status, and their dependencies.                                                                    |
-| `stable_id_handles.ts`       | Stable ID handles and their provisional/confirmed ID mappings.                                                                      |
-| `undo_history.ts`            | Bounded Undo/Redo stacks, confirmed and previewed.                                                                                  |
-
 `src/skeleton/edit/` holds the layer-facing side.
 
-| File                               | Responsibility                                                                |
-| ---------------------------------- | ----------------------------------------------------------------------------- |
-| `spatial_skeleton_edit_session.ts` | `SpatialSkeletonEditSession`: one layer's modes, skeleton cache, and queue.   |
-| `submit_edits.ts`                  | Functions the UI calls to submit each edit; queue input preparation.          |
-| `merge_target_prefetch.ts`         | Loads a merge target's complete skeleton before the pick that merges into it. |
-| `pending_edit_markers.ts`          | Markers for accepted edits whose preview cannot show yet.                     |
-
-`src/skeleton/edit_commands.ts` holds the edit actions, the command object and
-the command factory signatures: the command contract that a datasource
-implements.
+`src/skeleton/edit_commands.ts` holds the edit actions and the command contract
+that a datasource implements.
 
 `src/datasource/catmaid/spatial_skeleton_edit/` holds the CATMAID planner; see
 [CATMAID boundary](#catmaid-boundary).
@@ -797,17 +774,6 @@ needed.
 CATMAID does not implement a queue, history registry, physical-resource list,
 lease cursor, compensation plan, direct cache lookup, or Reload-required
 policy.
-
-The CATMAID files in `src/datasource/catmaid/spatial_skeleton_edit/` are:
-
-| File                   | Responsibility                                                                                                     |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `command_factories.ts` | CATMAID edit command factories and the skeletons each command needs loaded before it can run.                      |
-| `command_payloads.ts`  | Command payload union, individual payload types, and datasource payload validation.                                |
-| `edit_planner.ts`      | `CatmaidEditPlanner`: Execute from queue input, Undo/Redo recipes, reconciliation.                                 |
-| `edit_plan.ts`         | Immutable captured edits and forward/inverse step derivation.                                                      |
-| `edit_requests.ts`     | Edit request scope, transport invocation, endpoint policy, finite failure classification.                          |
-| `edit_endpoints.ts`    | Request and result shapes of the CATMAID edit endpoints, and the operations that `edit_requests.ts` sends through. |
 
 ## Subscriptions
 

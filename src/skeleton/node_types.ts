@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Classifies skeleton nodes by display type and matches them against the
+ * node filter that `SkeletonBrowseState` saves.
+ */
+
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import { TrackableValue } from "#src/trackable_value.js";
 import { verifyString } from "#src/util/json.js";

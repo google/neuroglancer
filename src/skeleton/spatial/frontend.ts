@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Defines the main-thread spatial skeleton source, whose chunks upload
+ * their node positions and segment IDs to the GPU.
+ */
+
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import {
   type EditableSkeletonSource,

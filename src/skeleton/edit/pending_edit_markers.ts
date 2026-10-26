@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+/**
+ * @file Builds the markers and connectors that show pending edits.
+ */
+
 import type { SpatialSkeletonPendingEdit } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type {
   SkeletonNodeRing,

@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Registers the viewer commands that navigate from or edit the selected
+ * skeleton node.
+ */
+
 import type { UserLayer } from "#src/layer/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";

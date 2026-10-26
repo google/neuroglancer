@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Runs a test body against a new CATMAID project and deletes the project
+ * afterwards.
+ */
+
 import type { CatmaidIntegrationConfig } from "./catmaid_integration_fixture.js";
 
 interface ProjectOwner {
