@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Turns spatial skeleton edit actions into CATMAID commands. Sends their
+ * requests to a CATMAID client.
+ */
+
 import type { CatmaidClient } from "#src/datasource/catmaid/api.js";
 import {
   requireCatmaidAddNodeCommandOptions,

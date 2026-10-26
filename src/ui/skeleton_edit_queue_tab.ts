@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Lists the pending skeleton edits and Recent activity of a layer in its
+ * Queue tab. Shows a status message when an edit stalls, is rejected, or leaves
+ * the layer needing a reload.
+ */
+
 import "#src/ui/skeleton_tab.css";
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";

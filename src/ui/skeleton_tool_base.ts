@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Defines the tool IDs, the base class and the tool listing that the
+ * skeleton tools share.
+ */
+
 import type { DisplayContext, RenderedPanel } from "#src/display_context.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { getSegmentIdFromLayerSelectionValue } from "#src/layer/segmentation/selection.js";

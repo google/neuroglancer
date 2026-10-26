@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Stores complete skeletons as immutable handles whose edits, splits,
+ * merges and renumberings share nodes with their source instead of copying
+ * them.
+ */
+
 import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 
 export type CompleteSkeletonKind =

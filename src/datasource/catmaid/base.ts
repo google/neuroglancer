@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Defines the CATMAID source parameters and builds a CATMAID client from
+ * them on either thread. Parses a catmaid:// URL and maps a spatial index level
+ * to a CATMAID level of detail.
+ */
+
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
 import type { CatmaidToken } from "#src/datasource/catmaid/api.js";
 import { CatmaidClient } from "#src/datasource/catmaid/api.js";

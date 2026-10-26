@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Moves each Execute, Undo or Redo intent from admission through preview
+ * and edit requests to settlement, rolling back its preview and history when
+ * the authority rejects it.
+ */
+
 import type {
   SpatialSkeletonIntentDescription,
   SpatialSkeletonIntentPlan,

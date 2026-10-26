@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Turns each CATMAID Execute, Undo or Redo intent into a preview and a
+ * plan, builds the edit request for each step, and reads CATMAID's results into
+ * confirmed IDs.
+ */
+
 import { toCatmaidPositionInModelSpace } from "#src/datasource/catmaid/api.js";
 import type { CatmaidSpatialSkeletonCommandPayload } from "#src/datasource/catmaid/spatial_skeleton_edit/command_payloads.js";
 import type {

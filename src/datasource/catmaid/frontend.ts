@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Opens a catmaid:// data source with its spatially indexed skeletons,
+ * editable unless the project is read-only, its segment property map and its
+ * bounds. It runs on the main thread.
+ */
+
 import { makeDataBoundsBoundingBoxAnnotationSet } from "#src/annotation/index.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { WithParameters } from "#src/chunk_manager/frontend.js";

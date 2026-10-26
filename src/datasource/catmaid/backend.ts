@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Downloads the CATMAID nodes of one spatial index chunk. It runs on the
+ * WebWorker.
+ */
+
 import { WithParameters } from "#src/chunk_manager/backend.js";
 import { WithSharedCredentialsProviderCounterpart } from "#src/credentials_provider/shared_counterpart.js";
 import type {

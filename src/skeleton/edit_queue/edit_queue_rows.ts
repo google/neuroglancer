@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Builds the Queue and Recent activity rows from intent records, with
+ * failure reasons shortened and stripped of request URLs.
+ */
+
 import type { SpatialSkeletonIntentKind } from "#src/skeleton/edit_queue/edit_intent_journal.js";
 import type {
   SpatialSkeletonAuthorityLabels,

@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Performs skeleton edits on a viewer page through user gestures and
+ * reads the resulting skeleton graph and edit queue state.
+ */
+
 import { expect, type Page } from "@playwright/test";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { bigintCompare } from "#src/util/bigint.js";

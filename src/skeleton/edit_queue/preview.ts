@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Builds the preview off screen as retained history plus each active
+ * intent's delta in order, then adopts it into the display in one step. It also
+ * assigns and resolves the stable ID handles of nodes and skeletons.
+ */
+
 import type {
   SpatialSkeletonAuthoritativePublication,
   SpatialSkeletonPreviewPort,

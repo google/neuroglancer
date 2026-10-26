@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Resolves the stable ID handles in the selection, visibility and view
+ * hints of an adopted preview to current IDs.
+ */
+
 import type { SkeletonVector } from "#src/skeleton/api.js";
 import type {
   SpatialSkeletonStableIdHandles,

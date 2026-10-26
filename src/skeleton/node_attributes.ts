@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Reads and writes the known attributes of a skeleton node: radius,
+ * confidence and true end.
+ */
+
 import type {
   SkeletonNode,
   SkeletonNodeAttributes,

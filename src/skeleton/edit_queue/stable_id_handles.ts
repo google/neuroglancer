@@ -15,13 +15,10 @@
  */
 
 /**
- * Stable identities used by optimistic reducers.
- *
- * A handle is deliberately not a CATMAID id.  Its physical id may change when
- * a temporary node is created, a split id is assigned, or CATMAID reverses a
- * merge winner.  Journal entries keep the handle and the mapping is updated in
- * one place.
+ * @file Maps each stable ID handle to its confirmed ID, with each intent's
+ * provisional IDs layered on top until that intent commits or rolls back.
  */
+
 export interface SpatialSkeletonStableNodeHandle {
   readonly kind: "node";
   readonly stableId: string;

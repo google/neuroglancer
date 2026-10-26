@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Sends each edit request attempt to its adapter under a lease on its
+ * edit request scope. Each scope grants its lease to one intent at a time, in
+ * FIFO order.
+ */
+
 import type {
   SpatialSkeletonEditRequestIntent,
   SpatialSkeletonEditRequestOutcome,

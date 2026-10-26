@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Derives the rows, counts and messages of the Skeleton tab node list
+ * from a navigation graph and the pending edits, without touching the DOM.
+ */
+
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import type { SpatialSkeletonPendingEdit } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {

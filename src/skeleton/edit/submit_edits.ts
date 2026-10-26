@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Submits each spatial skeleton edit action to the layer's edit queue and
+ * reports its failure to the user. Prepares the complete skeletons an edit
+ * command needs as its queue input.
+ */
+
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import type {
   SpatialSkeletonInputReference,

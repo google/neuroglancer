@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Shows the selected skeleton node in the Selection panel, with controls
+ * that delete or reroot it and edit its true end, radius, confidence and
+ * description.
+ */
+
 import "#src/ui/skeleton_selection_details.css";
 
 import { debounce } from "lodash-es";

@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Serves an in-memory stand-in for the CATMAID HTTP API on a loopback
+ * port.
+ */
+
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";

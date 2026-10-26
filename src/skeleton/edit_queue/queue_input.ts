@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Describes the complete skeletons that an Execute or Redo intent needs
+ * before it is planned, with the port that acquires and pins them.
+ */
+
 import type { CompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
 
 /**

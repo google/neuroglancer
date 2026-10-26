@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Forwards a browser context's CATMAID requests to a real CATMAID server
+ * with the test token. Records each request and holds chosen ones before they
+ * are sent or before their response is delivered.
+ */
+
 import type { BrowserContext, Route } from "@playwright/test";
 import type { CatmaidIntegrationConfig } from "./catmaid_integration_fixture.js";
 

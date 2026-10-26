@@ -4,6 +4,11 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  */
 
+/**
+ * @file Defines the captured edit that a CATMAID plan stores and derives the
+ * plan's server steps in either direction.
+ */
+
 import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import type { CompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import type { SpatialSkeletonEditNodeAttributes } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";

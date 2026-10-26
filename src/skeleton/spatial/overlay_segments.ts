@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Chooses the skeletons drawn from all their nodes instead of from
+ * spatial index chunks, and builds the geometry of each.
+ */
+
 import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.js";
 import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";

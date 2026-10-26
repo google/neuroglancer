@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Draws node rings, pending-edit markers and their connectors as HTML
+ * elements over a panel, at the projected position of each node.
+ */
+
 import "#src/skeleton/spatial/node_overlay.css";
 
 import type { ProjectionParameters } from "#src/projection_parameters.js";

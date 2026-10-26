@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+/**
+ * @file Lists the nodes of a skeleton chunk with their parents.
+ */
+
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import { inferSkeletonParentIndices } from "#src/skeleton/skeleton_edges.js";
 

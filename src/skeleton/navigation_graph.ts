@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Builds the parent and child graph of one skeleton's nodes and finds
+ * navigation targets in it. Orders the nodes as rows of a flat list, optionally
+ * with unbranched runs collapsed.
+ */
+
 import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import { bigintCompare } from "#src/util/bigint.js";

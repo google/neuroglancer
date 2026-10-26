@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Resolves the parent of each skeleton node from edges that point either
+ * way or have no direction.
+ */
+
 import {
   SkeletonEdgeDirection,
   type SkeletonEdge,

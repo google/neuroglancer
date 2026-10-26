@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Extends the Playwright test with a session that seeds a real CATMAID
+ * project, edits it through the viewer, and checks that the viewer and CATMAID
+ * agree on the skeleton graph.
+ */
+
 import { expect } from "@playwright/test";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { bigintCompare } from "#src/util/bigint.js";

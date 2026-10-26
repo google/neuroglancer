@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Holds one layer's spatial skeleton editing state: its edit modes, its
+ * edit queue, and the display of confirmed skeletons and previews. Downloads
+ * complete skeletons and caches them under revision fences.
+ */
+
 import type {
   EditableSkeletonSource,
   SkeletonEdge,

@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+/**
+ * @file Reports which spatial skeleton edit actions the active source of a
+ * segmentation layer allows. Applies the hints of an adopted preview to the
+ * segments and the selection of the layer.
+ */
+
 import type { SkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
 import type { SegmentationGroupState } from "#src/segmentation_display_state/frontend.js";
 import type {

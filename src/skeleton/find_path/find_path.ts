@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Holds the saved Find Path state of one skeleton datasource: its source
+ * and target nodes and the route between them.
+ */
+
 import { TrackableValue } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
 import {

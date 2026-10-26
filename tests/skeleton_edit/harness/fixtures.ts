@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Extends the Playwright test with worker fixtures that serve the viewer
+ * and start a disposable CATMAID server.
+ */
+
 import { spawn, execFile } from "node:child_process";
 import path from "node:path";
 import readline from "node:readline";

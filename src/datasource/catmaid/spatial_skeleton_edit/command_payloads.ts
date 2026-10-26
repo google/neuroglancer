@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Defines the payload of each CATMAID edit command and rejects a payload
+ * that does not match it.
+ */
+
 import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 
 export interface CatmaidSpatialSkeletonAddNodeCommandOptions {

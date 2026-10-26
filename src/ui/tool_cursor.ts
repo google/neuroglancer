@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+/**
+ * @file Builds CSS cursors from SVG source. Sets the cursor that a tool shows
+ * over an element.
+ */
+
 const TOOL_CURSOR_PROPERTY = "--neuroglancer-tool-cursor";
 
 export function svgCursor(
