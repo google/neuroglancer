@@ -471,10 +471,15 @@ export class ChunkSource extends SharedObject {
     this.chunks.delete(key);
   }
 
+  /**
+   * Invalidates the given chunks in the frontend and in the backend cache.
+   *
+   * @param keys Keys of the chunks to invalidate.
+   * @param options.lazy Keep the frontend chunks on display while the backend
+   *     refetches them: the fresh data replaces them in place on arrival,
+   *     avoiding the lower-resolution fallback flicker.
+   */
   invalidateChunks(keys: string[], options?: { lazy?: boolean }): void {
-    // When `lazy` is set, the frontend chunk is kept on display while the
-    // backend cache is invalidated and refetched; the fresh data replaces it
-    // in place on arrival, avoiding the lower-resolution fallback flicker.
     const lazy = options?.lazy ?? false;
     const validKeys: string[] = [];
     for (const key of keys) {
