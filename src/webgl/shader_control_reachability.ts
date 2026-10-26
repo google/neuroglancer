@@ -34,7 +34,7 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function isCheckboxUsedInCode(
+function isNamedInCode(
   controlName: string,
   parseResult: ShaderControlsParseResult,
 ): boolean {
@@ -61,7 +61,7 @@ export function computeActiveControls(
     if (control.type === "checkbox") {
       // Checkboxes become `#define`s at compile time; they have no uniform, so
       // infer reachability from whether the shader code references the symbol.
-      if (isCheckboxUsedInCode(name, parseResult)) {
+      if (isNamedInCode(name, parseResult)) {
         active.add(name);
       }
       continue;
@@ -105,9 +105,6 @@ export function activeControlsEqual(
   return true;
 }
 
-// A shader that has not drawn yet may read controls outside the set.
-export type ActiveControlHint = ReadonlySet<string> | undefined;
-
 // A panel's attachment, or a slice view's entry for the layer.
 export type ViewBinding = RefCounted | { readonly disposers: Disposer[] };
 
@@ -123,14 +120,55 @@ interface BindingRecord {
   readonly controlsByProgram: Map<WebGLProgram, ReadonlySet<string>>;
 }
 
-// Holds the drawn shaders of each layer-to-view binding until the view releases it.
-export class ActiveShaderControls {
-  private readonly hint_ = new WatchableValue<ActiveControlHint>(undefined);
+interface LastDraw {
+  readonly builderStateKey: string;
+  readonly readControls: ReadonlySet<string>;
+}
+
+// Decides which controls are active from the shader text and from the shaders each view draws.
+export class ActiveShaderControls extends RefCounted {
+  private readonly hint_ = new WatchableValue<ReadonlySet<string>>(new Set());
   private readonly records = new Map<ViewBinding, BindingRecord>();
   private latestParameters: ShaderControlsBuilderState | undefined;
+  private validBuilderState: ShaderControlsBuilderState | undefined;
+  private lastDraw: LastDraw | undefined;
 
-  get hint(): WatchableValueInterface<ActiveControlHint> {
+  constructor(
+    private readonly builderState: WatchableValueInterface<ShaderControlsBuilderState>,
+  ) {
+    super();
+    this.handleBuilderStateChanged();
+    this.registerDisposer(
+      builderState.changed.add(() => this.handleBuilderStateChanged()),
+    );
+  }
+
+  get hint(): WatchableValueInterface<ReadonlySet<string>> {
     return this.hint_;
+  }
+
+  private updateHint() {
+    const { validBuilderState, lastDraw } = this;
+    if (validBuilderState === undefined) return;
+    const { parseResult } = validBuilderState;
+    const hint =
+      lastDraw?.builderStateKey === validBuilderState.key
+        ? lastDraw.readControls
+        : new Set(
+            [...parseResult.controls.keys()].filter((name) =>
+              isNamedInCode(name, parseResult),
+            ),
+          );
+    if (!activeControlsEqual(this.hint_.value, hint)) {
+      this.hint_.value = hint;
+    }
+  }
+
+  private handleBuilderStateChanged() {
+    const builderState = this.builderState.value;
+    if (builderState.parseResult.errors.length > 0) return;
+    this.validBuilderState = builderState;
+    this.updateHint();
   }
 
   trackShader(
@@ -158,29 +196,30 @@ export class ActiveShaderControls {
       shader.program,
       computeActiveControls(shader, parameters.parseResult),
     );
-    this.updateHint();
+    this.updateLastDraw();
   }
 
   private forget(binding: ViewBinding) {
     this.records.delete(binding);
-    this.updateHint();
+    this.updateLastDraw();
   }
 
-  private updateHint() {
-    const hint = new Set<string>();
+  private updateLastDraw() {
+    const { latestParameters } = this;
+    if (latestParameters === undefined) return;
+    const readControls = new Set<string>();
     let hasCurrentRecord = false;
     for (const { parameters, controlsByProgram } of this.records.values()) {
       // A view that has not drawn since the shader settings changed is stale.
-      if (parameters !== this.latestParameters) continue;
+      if (parameters !== latestParameters) continue;
       hasCurrentRecord = true;
       for (const controls of controlsByProgram.values()) {
-        for (const name of controls) hint.add(name);
+        for (const name of controls) readControls.add(name);
       }
     }
-    // Without a current record, the last hint stays rather than flash every control.
+    // Without a current record, the last draw stays until a view draws again.
     if (!hasCurrentRecord) return;
-    if (!activeControlsEqual(this.hint_.value, hint)) {
-      this.hint_.value = hint;
-    }
+    this.lastDraw = { builderStateKey: latestParameters.key, readControls };
+    this.updateHint();
   }
 }

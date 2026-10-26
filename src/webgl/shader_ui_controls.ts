@@ -154,7 +154,7 @@ export interface ShaderControlParseError {
 }
 
 export interface ShaderControlsParseResult {
-  // Original source code entered by user.
+  // Source code entered by user, with comment characters replaced by spaces.
   source: string;
   // Source code with comments stripped and UI controls replaced by appropriate text.
   code: string;
@@ -1548,7 +1548,7 @@ export class ShaderControlState
   parseResult: WatchableValueInterface<ShaderControlsParseResult>;
   builderState: WatchableValueInterface<ShaderControlsBuilderState>;
   histogramSpecifications: HistogramSpecifications;
-  readonly activeControls = new ActiveShaderControls();
+  readonly activeControls: ActiveShaderControls;
 
   private fragmentMainGeneration = -1;
   private dataContextGeneration = -1;
@@ -1617,6 +1617,9 @@ export class ShaderControlState
       },
       [this.parseResult, this],
       (a, b) => a.key === b.key,
+    );
+    this.activeControls = this.registerDisposer(
+      new ActiveShaderControls(this.builderState),
     );
     const histogramChannels = makeCachedDerivedWatchableValue(
       (state) => {

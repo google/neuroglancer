@@ -1588,6 +1588,76 @@ function drawWithShader(
 }
 
 describe("ShaderControlState.activeControls", () => {
+  it("hides a control that the shader code never names", () => {
+    const state = makeShaderControlState(`
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float unused slider(min=0, max=1, default=0.5)
+void main() {
+  outputValue = pointSize;
+}
+`);
+    expect(state.activeControls.hint.value).toEqual(new Set(["pointSize"]));
+  });
+
+  it("shows a control as soon as an edit names it", () => {
+    const state = makeShaderControlState(`
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float opacity slider(min=0, max=1, default=0.5)
+void main() {
+  outputValue = pointSize;
+}
+`);
+    state.fragmentMain.value = `
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float opacity slider(min=0, max=1, default=0.5)
+void main() {
+  outputValue = pointSize * opacity;
+}
+`;
+    expect(state.activeControls.hint.value).toEqual(
+      new Set(["pointSize", "opacity"]),
+    );
+  });
+
+  it("hides a control as soon as an edit stops naming it", () => {
+    const state = makeShaderControlState(`
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float opacity slider(min=0, max=1, default=0.5)
+void main() {
+  outputValue = pointSize * opacity;
+}
+`);
+    state.fragmentMain.value = `
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float opacity slider(min=0, max=1, default=0.5)
+void main() {
+  outputValue = pointSize;
+}
+`;
+    expect(state.activeControls.hint.value).toEqual(new Set(["pointSize"]));
+  });
+
+  it("keeps the last valid controls visible while the code has a parse error", () => {
+    const state = makeShaderControlState(`
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float opacity slider(min=0, max=1, default=0.5)
+void main() {
+  outputValue = pointSize * opacity;
+}
+`);
+    state.fragmentMain.value = `
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float opacity slider(min=0, max=
+void main() {
+  outputValue = pointSize * opacity;
+}
+`;
+    expect(state.parseErrors.value).not.toEqual([]);
+    expect(state.activeControls.hint.value).toEqual(
+      new Set(["pointSize", "opacity"]),
+    );
+  });
+
   it("shows only the controls a compiled shader reads", () => {
     const attachment = new RefCounted();
     const state = makeShaderControlState(`
@@ -1596,6 +1666,9 @@ describe("ShaderControlState.activeControls", () => {
 #uicontrol vec3 color color
 void main() {
   outputValue = contrast() + tf().a;
+  if (false) {
+    outputValue = color.r;
+  }
 }
 `);
     drawWithShader(state, attachment);
@@ -1636,6 +1709,9 @@ void main() {
 #uicontrol invlerp ca
 void main() {
   outputValue = ca();
+  if (false) {
+    outputValue = c();
+  }
 }
 `);
     drawWithShader(state, attachment);
@@ -1652,9 +1728,13 @@ void main() {
 `);
     drawWithShader(state, attachment);
     state.fragmentMain.value = `
+#uicontrol transferFunction tf
 #uicontrol vec3 color color
 void main() {
   outputValue = color.r;
+  if (false) {
+    outputValue = tf().a;
+  }
 }
 `;
     drawWithShader(state, attachment);
@@ -1680,5 +1760,43 @@ void main() {
     state.state.get("useColor")!.trackable.value = false;
     drawWithShader(state, attachment);
     expect(state.activeControls.hint.value).toEqual(new Set(["useColor"]));
+  });
+
+  it("shows a control that a checkbox enables before the layer draws again", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol bool useColor checkbox(default=false)
+#uicontrol vec3 color color
+void main() {
+  outputValue = 0.0;
+  if (useColor) {
+    outputValue = color.r;
+  }
+}
+`);
+    drawWithShader(state, attachment);
+    state.state.get("useColor")!.trackable.value = true;
+    expect(state.activeControls.hint.value).toEqual(
+      new Set(["useColor", "color"]),
+    );
+  });
+
+  it("shows a control that an edit adds before the layer draws again", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol vec3 color color
+void main() {
+  outputValue = color.r;
+}
+`);
+    drawWithShader(state, attachment);
+    state.fragmentMain.value = `
+#uicontrol vec3 color color
+#uicontrol float gain slider(min=0, max=2, default=1)
+void main() {
+  outputValue = color.r * gain;
+}
+`;
+    expect(state.activeControls.hint.value).toEqual(new Set(["color", "gain"]));
   });
 });

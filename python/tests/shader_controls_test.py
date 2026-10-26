@@ -267,3 +267,31 @@ void main() {
     expect_hidden_count(webdriver, "(1 hidden)")
     set_volume_rendering_mode("On")
     expect_hidden_count(webdriver, "")
+
+
+def test_annotation_layer_without_annotations_hides_unused_controls(webdriver):
+    with webdriver.viewer.txn() as s:
+        s.dimensions = neuroglancer.CoordinateSpace(
+            names=["x", "y", "z"], units="nm", scales=[1, 1, 1]
+        )
+        s.layers.append(
+            name="annotations",
+            layer=neuroglancer.LocalAnnotationLayer(
+                dimensions=s.dimensions,
+                hide_inactive_shader_controls=True,
+                tab="rendering",
+                shader="""
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float unused slider(min=0, max=1, default=0.5)
+void main() {
+  setColor(vec3(1.0, 0.3, 0.2));
+  setPointMarkerSize(pointSize);
+}
+""",
+            ),
+        )
+        s.selected_layer.layer = "annotations"
+        s.selected_layer.visible = True
+        s.layout = "xy"
+
+    expect_hidden_count(webdriver, "(1 hidden)")
