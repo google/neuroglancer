@@ -79,28 +79,51 @@ def test_volume_rendering_occlusion(webdriver, orthographic):
     """
     _setup_viewer_with_volume_and_mesh(webdriver, orthographic=orthographic)
 
-    # The mesh should occlude the volume with default camera
-    webdriver.sync()
-    screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-    pixels = screenshot.image_pixels
-    # Lighting causes each color channel to vary slightly instead of saturating
-    # at 255, so check bounds rather than exact equality.
-    # Mesh is red, so the only non-zero colors should be in the red channel.
-    np.testing.assert_array_equal(pixels[..., 1], 0)
-    np.testing.assert_array_equal(pixels[..., 2], 0)
-    np.testing.assert_array_equal(pixels[..., 3], 255)
-    assert np.all(pixels[..., 0] >= 230)
+    # Capture the same mesh without the volume to control for lighting.
+    with webdriver.viewer.txn() as s:
+        s.layers["image"].visible = False
 
-    # On flipping the camera, a full opacity volume rendering occludes the mesh
+    webdriver.sync()
+    mesh_pixels = webdriver.viewer.screenshot(size=[10, 10]).screenshot.image_pixels
+    np.testing.assert_array_equal(mesh_pixels[..., 1], 0)
+    np.testing.assert_array_equal(mesh_pixels[..., 2], 0)
+    np.testing.assert_array_equal(mesh_pixels[..., 3], 255)
+    assert np.all(mesh_pixels[..., 0] > 0)
+
+    # Adding a volume behind the opaque mesh must not change any pixels.
+    with webdriver.viewer.txn() as s:
+        s.layers["image"].visible = True
+
+    webdriver.sync()
+    pixels = webdriver.viewer.screenshot(size=[10, 10]).screenshot.image_pixels
+    np.testing.assert_array_equal(pixels, mesh_pixels)
+
+    # Verify that the hidden volume actually covers the tested pixels.
+    with webdriver.viewer.txn() as s:
+        s.layers["seg"].visible = False
+
+    webdriver.sync()
+    volume_pixels = webdriver.viewer.screenshot(size=[10, 10]).screenshot.image_pixels
+    expected_volume_pixels = np.tile(
+        np.array([0, 0, 255, 255], dtype=np.uint8), (10, 10, 1)
+    )
+    np.testing.assert_array_equal(volume_pixels, expected_volume_pixels)
+
+    # Capture a volume-only control with the reversed camera as well.
     with webdriver.viewer.txn() as s:
         s.projection_orientation = [0, 1, 0, 0]
 
     webdriver.sync()
-    screenshot = webdriver.viewer.screenshot(size=[10, 10]).screenshot
-    np.testing.assert_array_equal(
-        screenshot.image_pixels,
-        np.tile(np.array([0, 0, 255, 255], dtype=np.uint8), (10, 10, 1)),
-    )
+    volume_pixels = webdriver.viewer.screenshot(size=[10, 10]).screenshot.image_pixels
+    np.testing.assert_array_equal(volume_pixels, expected_volume_pixels)
+
+    # Adding the mesh behind the opaque volume must not change any pixels.
+    with webdriver.viewer.txn() as s:
+        s.layers["seg"].visible = True
+
+    webdriver.sync()
+    pixels = webdriver.viewer.screenshot(size=[10, 10]).screenshot.image_pixels
+    np.testing.assert_array_equal(pixels, volume_pixels)
 
 
 @pytest.mark.parametrize("orthographic", [False, True])
