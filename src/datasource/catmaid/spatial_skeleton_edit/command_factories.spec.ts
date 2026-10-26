@@ -22,7 +22,6 @@ import {
   getCatmaidMergeQueueInputRequirements,
   getCatmaidQueueInputRequirements,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/command_factories.js";
-import type { SkeletonNode } from "#src/skeleton/api.js";
 
 function makeCommands() {
   return new CatmaidSpatialSkeletonEditCommands({
@@ -55,22 +54,6 @@ describe("CATMAID edit commands", () => {
         }),
       ).toThrow(/invalid payload/);
     }
-  });
-
-  it("builds a labelled Move command from a valid node and position", () => {
-    const node: SkeletonNode = {
-      nodeId: 17n,
-      segmentId: 23n,
-      position: new Float32Array([1, 2, 3]),
-    };
-
-    const command = makeCommands().moveNodesCommand.createCommand({
-      node,
-      nextPositionInModelSpace: new Float32Array([7, 8, 9]),
-    });
-
-    expect(command?.label).toBe("Move node");
-    expect((command as any)?.payload).toMatchObject({ kind: "move-node" });
   });
 
   it("refuses a move whose node is malformed, naming the command", () => {

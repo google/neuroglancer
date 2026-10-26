@@ -84,7 +84,11 @@ describe("SWC fixture import", () => {
       reader.onload = () => resolve(reader.result);
       reader.readAsText(uploaded);
     });
-    expect(text).toBe(serializeSwc(skeletonPreset("chain")[0]));
+    expect(text).toBe(
+      "1 3 1000 1000 1000 100 -1\n" +
+        "2 3 2000 1000 1000 100 1\n" +
+        "3 3 3000 1000 1000 100 2\n",
+    );
   });
 
   it.each([{ 1: 10 }, { 1: 10, 2: 10, 3: 30 }, { 1: 10, 2: 20, 3: -1 }])(

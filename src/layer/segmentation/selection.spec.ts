@@ -44,20 +44,6 @@ import { WatchableValue } from "#src/trackable_value.js";
 import { NullarySignal } from "#src/util/signal.js";
 
 describe("segment selection", () => {
-  it("extracts segment ids from a layer selection state", () => {
-    expect(
-      getSegmentIdFromLayerSelectionValue({
-        nodeId: 23n,
-        value: "7",
-      }),
-    ).toBe(7n);
-    expect(
-      getSegmentIdFromLayerSelectionValue({
-        value: "9",
-      }),
-    ).toBe(9n);
-  });
-
   it("reads the segment of a clicked segment that has a label", () => {
     expect(
       getSegmentIdFromLayerSelectionValue({

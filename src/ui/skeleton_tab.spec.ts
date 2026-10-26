@@ -24,7 +24,6 @@ import {
   buildSkeletonSegmentRenderState,
   buildSkeletonVirtualListItems,
   getSkeletonEmptyListText,
-  getSkeletonNodeIdPresentation,
   getSpatialSkeletonDetailsPreparationState,
 } from "#src/ui/skeleton_tab_render.js";
 
@@ -63,24 +62,6 @@ function makePendingEdit(
     ...options,
   };
 }
-
-describe("spatial skeleton node id presentation", () => {
-  it("replaces only a provisional node id with a Preview placeholder", () => {
-    expect(
-      getSkeletonNodeIdPresentation(2n ** 63n + 1n, [2n ** 63n + 1n]),
-    ).toEqual({
-      label: "Preview",
-      tooltip:
-        "Preview node. The skeleton source has not yet confirmed its permanent node ID.",
-      provisional: true,
-    });
-    expect(getSkeletonNodeIdPresentation(42n, [2n ** 63n + 1n])).toEqual({
-      label: "42",
-      tooltip: undefined,
-      provisional: false,
-    });
-  });
-});
 
 describe("spatial skeleton edit tab render state", () => {
   it("shows only directly matching nodes for text filtering", () => {

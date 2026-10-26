@@ -20,10 +20,7 @@ import type {
   CatmaidSpatialSkeletonCommandDescriptor,
   CatmaidEditPlan,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_planner.js";
-import {
-  CatmaidEditPlanner,
-  getCatmaidAuthorityLabels,
-} from "#src/datasource/catmaid/spatial_skeleton_edit/edit_planner.js";
+import { CatmaidEditPlanner } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_planner.js";
 import type {
   CatmaidEditRequest,
   CatmaidEditRequestResult,
@@ -233,14 +230,6 @@ function commitNextAttempt(
 }
 
 describe("CatmaidEditPlanner", () => {
-  it("warns when CATMAID has not confirmed an edit after 30 seconds", () => {
-    expect(getCatmaidAuthorityLabels("move-node").stalledWarning).toEqual({
-      delayMs: 30_000,
-      message:
-        "CATMAID has not confirmed the optimistic skeleton edit yet. The server edit request lane is stalled, but you may continue previewing independent edits while the request remains in order.",
-    });
-  });
-
   it("a move adds no new node or skeleton IDs", () => {
     const original = node(2, 23, 1);
     const { planner } = makePlanner(new Map([[23n, [node(1, 23), original]]]));

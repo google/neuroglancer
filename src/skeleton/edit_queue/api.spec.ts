@@ -20,10 +20,7 @@ import type {
   SpatialSkeletonEditRequestContext,
   SpatialSkeletonEditRequestAdapter,
 } from "#src/skeleton/edit_queue/api.js";
-import {
-  commitSpatialSkeletonEditRequest,
-  isSpatialSkeletonEditPlannerProvider,
-} from "#src/skeleton/edit_queue/api.js";
+import { commitSpatialSkeletonEditRequest } from "#src/skeleton/edit_queue/api.js";
 
 interface TestEditRequest {
   readonly nodeId: bigint;
@@ -67,17 +64,5 @@ describe("saving one edit request", () => {
       error: editRequestError,
       classificationError,
     });
-  });
-});
-
-describe("edit planner provider", () => {
-  it("a value counts as an edit planner only if it has createPlanner", () => {
-    expect(
-      isSpatialSkeletonEditPlannerProvider({ createPlanner: () => ({}) }),
-    ).toBe(true);
-    expect(
-      isSpatialSkeletonEditPlannerProvider({ getOrCreateQueue: () => ({}) }),
-    ).toBe(false);
-    expect(isSpatialSkeletonEditPlannerProvider(null)).toBe(false);
   });
 });

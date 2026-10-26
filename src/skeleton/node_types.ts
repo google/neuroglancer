@@ -142,16 +142,3 @@ export function matchesSkeletonNodeFilter(
       return options.nodeHasDescription;
   }
 }
-
-export function getSkeletonNodeIconFilterType(options: {
-  nodeIsTrueEnd: boolean;
-  nodeType: SkeletonDisplayNodeType;
-}) {
-  if (options.nodeIsTrueEnd) {
-    return SkeletonNodeFilterType.TRUE_END;
-  }
-  if (options.nodeType === SkeletonDisplayNodeType.VIRTUAL_END) {
-    return SkeletonNodeFilterType.VIRTUAL_END;
-  }
-  return undefined;
-}

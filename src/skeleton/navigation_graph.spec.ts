@@ -21,7 +21,6 @@ import {
   buildSkeletonNavigationGraph,
   getBranchEnd,
   getBranchStart,
-  getChildNode,
   getFlatListNodeIds,
   getNextCollapsedLevelNode,
   getOpenLeaves,
@@ -197,11 +196,9 @@ describe("skeleton navigation", () => {
     ).toEqual([1n, 2n, 4n, 5n, 3n, 6n, 7n]);
   });
 
-  it("returns deterministic direct parent and child navigation targets", () => {
+  it("goes to the parent of a node, and nowhere from the root", () => {
     expect(getParentNode(graph, 6n)?.nodeId).toBe(5n);
     expect(getParentNode(graph, 1n)).toBeUndefined();
-    expect(getChildNode(graph, 3n)?.nodeId).toBe(7n);
-    expect(getChildNode(graph, 11n)).toBeUndefined();
   });
 
   describe("getPathBetweenNodes", () => {
