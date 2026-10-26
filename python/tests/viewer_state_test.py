@@ -114,5 +114,34 @@ def test_tool():
     assert p2.control == "abc"
 
 
+def test_voxel_editing_tools():
+    p = viewer_state.Tool("paintBrush")
+    assert isinstance(p, viewer_state.PaintBrushTool)
+    assert viewer_state.UndoTool(layer="seg").to_json() == {
+        "type": "undo",
+        "layer": "seg",
+    }
+
+
+def test_voxel_editing_state():
+    layer = viewer_state.SegmentationLayer(
+        source={
+            "url": "zarr://http://localhost/seg",
+            "subsources": {"default": {"enabled": True, "writingEnabled": True}},
+        },
+        voxelEditing={"paintValue": "18446744073709551615", "brushShape": "sphere"},
+    )
+    assert layer.source[0].subsources["default"].writing_enabled is True
+    assert layer.voxel_editing.paint_value == 2**64 - 1
+    assert layer.voxel_editing.brush_shape == "sphere"
+    assert layer.voxel_editing.brush_radius == 3
+
+    layer.voxel_editing.paint_value = -5
+    layer.voxel_editing.erase_paint_value_only = True
+    json = layer.to_json()["voxelEditing"]
+    assert json["paintValue"] == "-5"
+    assert json["erasePaintValueOnly"] is True
+
+
 def test_annotation():
     viewer_state.PointAnnotation(point=[1])
