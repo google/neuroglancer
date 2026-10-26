@@ -59,7 +59,7 @@ export interface CatmaidSpatialSkeletonMergeCommandPayload {
   secondNode: CatmaidSpatialSkeletonMergeEndpoint;
 }
 
-/** Payloads accepted by CATMAID skeleton command factories and workflows. */
+/** Payloads accepted by CATMAID skeleton command factories and plans. */
 export type CatmaidSpatialSkeletonCommandPayload =
   | {
       readonly kind: "add-node";

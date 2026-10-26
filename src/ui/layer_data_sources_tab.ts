@@ -234,6 +234,8 @@ export class DataSourceSubsourceView extends RefCounted {
       sourceTypeStr = "meshes (multi-res.)";
     } else if (subsource.mesh instanceof SkeletonSource) {
       sourceTypeStr = "skeletons";
+    } else if (subsource.spatialSkeleton !== undefined) {
+      sourceTypeStr = "skeletons (spatially indexed)";
     } else if (subsource.segmentPropertyMap !== undefined) {
       sourceTypeStr = "segment property map";
     } else if (subsource.local !== undefined) {

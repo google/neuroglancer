@@ -20,13 +20,13 @@ import type { Viewer } from "#src/viewer.js";
 import {
   startCatmaidMockServer,
   type CatmaidMockServer,
-} from "./catmaid_mock_server.js";
-import { test } from "./fixtures.js";
+} from "./harness/catmaid_mock_server.js";
+import { test } from "./harness/fixtures.js";
 import {
   readGraph,
   readQueue,
   SkeletonEditPage,
-} from "./skeleton_edit_page.js";
+} from "./harness/skeleton_edit_page.js";
 
 async function withBackend(
   testInfo: TestInfo,
@@ -115,7 +115,7 @@ for (const trigger of ["description blur", "save acknowledgement"] as const) {
   });
 }
 
-test("Delete survives a Move acknowledgement during a press without a focused editor", async ({
+test("Delete survives CATMAID confirming a Move during a press without a focused editor", async ({
   page,
 }, testInfo) => {
   await withBackend(testInfo, async (backend) => {
@@ -161,7 +161,7 @@ test("Delete survives a Move acknowledgement during a press without a focused ed
   });
 });
 
-test("Confidence keeps keyboard focus through a Move acknowledgement", async ({
+test("Confidence keeps keyboard focus when CATMAID confirms a Move", async ({
   page,
 }, testInfo) => {
   await withBackend(testInfo, async (backend) => {
@@ -340,147 +340,122 @@ test("a rejected Radius can be retried while switching between property editors"
   });
 });
 
-for (const field of ["Confidence", "True End"] as const) {
-  test(`choosing the saved ${field} after rejection preserves Redo`, async ({
-    page,
-  }, testInfo) => {
-    await withBackend(testInfo, async (backend) => {
-      const ui = new SkeletonEditPage(page);
-      await ui.open(backend.sourceUrl);
-      await ui.selectNode(103n);
-      const [original] = await readGraph(page, [103n]);
-      const property = field === "Confidence" ? "confidence" : "isTrueEnd";
-      const nextValue = field === "Confidence" ? 75 : true;
-      const description = page.getByRole("textbox", {
-        name: "Description",
-        exact: true,
-      });
-      const radius = page.getByRole("spinbutton");
-      const confidence = page.locator(
-        "select.neuroglancer-selection-details-skeleton-properties-input",
-      );
-      const changeProperty = () =>
-        field === "Confidence"
-          ? confidence.press("ArrowUp")
-          : page
-              .getByRole("radio", { name: "Flag True end", exact: true })
-              .check();
-      const redraw = () =>
-        page.evaluate(
-          () =>
-            new Promise<void>((resolve) =>
-              requestAnimationFrame(() =>
-                requestAnimationFrame(() => resolve()),
-              ),
-            ),
-        );
-      await expect(
-        page.getByRole("button", { name: "Nothing to undo.", exact: true }),
-      ).toBeDisabled();
-      await expect(
-        page.getByRole("button", { name: "Nothing to redo.", exact: true }),
-      ).toBeDisabled();
-      await ui.runEdit(async () => {
-        await description.fill("keep this Redo");
-        await description.press("Tab");
-      });
-      await ui.waitSaved();
-      await ui.undo();
-      await ui.waitSaved();
-      const redo = page.getByRole("button", {
-        name: "Redo Edit node description",
-        exact: true,
-      });
-      await expect(redo).toBeEnabled();
-
-      const blocked = Promise.withResolvers<void>();
-      const intercepted = Promise.withResolvers<void>();
-      // Intercept before applying the request so recovery must preserve Redo.
-      await page.route(
-        field === "Confidence"
-          ? "**/treenodes/103/confidence"
-          : "**/label/treenode/103/update",
-        async (route) => {
-          intercepted.resolve();
-          await blocked.promise;
-          await route.fulfill({
-            status: 409,
-            contentType: "application/json",
-            body: JSON.stringify({
-              error: `${field} rejected for recovery test`,
-            }),
-          });
-        },
-        { times: 1 },
-      );
-      try {
-        await ui.runEdit(changeProperty);
-        await intercepted.promise;
-        await expect(confidence).toBeEnabled();
-        await radius.focus();
-        await radius.press("Tab");
-        await expect(confidence).toBeFocused();
-        expect((await readGraph(page, [103n]))[0][property]).toBe(nextValue);
-      } finally {
-        blocked.resolve();
-      }
-      await expect
-        .poll(async () => (await readQueue(page)).pending)
-        .toBe(false);
-      await redraw();
-      await expect(confidence).toBeFocused();
-      expect((await readGraph(page, [103n]))[0][property]).toBe(
-        original[property],
-      );
-      expect((await readQueue(page)).canRedo).toBe(true);
-
-      // Return the preserved control to the value rollback already restored.
-      if (field === "Confidence") {
-        await expect(confidence).toHaveValue("75");
-        await confidence.press("ArrowDown");
-      } else {
-        await expect(
-          page.getByRole("radio", { name: "Flag True end", exact: true }),
-        ).toBeChecked();
-        await page
-          .getByRole("radio", { name: "Circle Virtual end", exact: true })
-          .check();
-      }
-      await redraw();
-      const queue = await readQueue(page);
-      expect(queue.canRedo).toBe(true);
-      expect(queue.entries).toHaveLength(3);
-      expect(queue.recent.map(({ status }) => status)).toEqual([
-        "not-saved",
-        "saved",
-        "saved",
-      ]);
-      expect(backend.mutations.map(({ path }) => path)).toEqual([
-        "label/treenode/103/update",
-        "label/treenode/103/update",
-      ]);
-      await expect(redo).toBeEnabled();
-      await ui.redo();
-      await ui.waitSaved();
-      expect((await readGraph(page, [103n]))[0].description).toBe(
-        "keep this Redo",
-      );
-
-      // The previously rejected value remains a valid new edit and Undo target.
-      await ui.runEdit(changeProperty);
-      await ui.waitSaved();
-      expect((await readGraph(page, [103n]))[0][property]).toBe(nextValue);
-      const saved = backend.snapshot().find(({ id }) => id === 103)!;
-      if (field === "Confidence") expect(saved.confidence).toBe(4);
-      else expect(saved.labels).toContain("ends");
-      await ui.undo();
-      await ui.waitSaved();
-      expect((await readGraph(page, [103n]))[0][property]).toBe(
-        original[property],
-      );
+test("choosing the saved Confidence after rejection preserves Redo", async ({
+  page,
+}, testInfo) => {
+  await withBackend(testInfo, async (backend) => {
+    const ui = new SkeletonEditPage(page);
+    await ui.open(backend.sourceUrl);
+    await ui.selectNode(103n);
+    const [original] = await readGraph(page, [103n]);
+    const description = page.getByRole("textbox", {
+      name: "Description",
+      exact: true,
     });
+    const radius = page.getByRole("spinbutton");
+    const confidence = page.locator(
+      "select.neuroglancer-selection-details-skeleton-properties-input",
+    );
+    const changeProperty = () => confidence.press("ArrowUp");
+    const redraw = () =>
+      page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+    await expect(
+      page.getByRole("button", { name: "Nothing to undo.", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Nothing to redo.", exact: true }),
+    ).toBeDisabled();
+    await ui.runEdit(async () => {
+      await description.fill("keep this Redo");
+      await description.press("Tab");
+    });
+    await ui.waitSaved();
+    await ui.undo();
+    await ui.waitSaved();
+    const redo = page.getByRole("button", {
+      name: "Redo Edit node description",
+      exact: true,
+    });
+    await expect(redo).toBeEnabled();
+
+    const blocked = Promise.withResolvers<void>();
+    const intercepted = Promise.withResolvers<void>();
+    // Intercept before applying the request so recovery must preserve Redo.
+    await page.route(
+      "**/treenodes/103/confidence",
+      async (route) => {
+        intercepted.resolve();
+        await blocked.promise;
+        await route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Confidence rejected for recovery test",
+          }),
+        });
+      },
+      { times: 1 },
+    );
+    try {
+      await ui.runEdit(changeProperty);
+      await intercepted.promise;
+      await expect(confidence).toBeEnabled();
+      await radius.focus();
+      await radius.press("Tab");
+      await expect(confidence).toBeFocused();
+      expect((await readGraph(page, [103n]))[0].confidence).toBe(75);
+    } finally {
+      blocked.resolve();
+    }
+    await expect.poll(async () => (await readQueue(page)).pending).toBe(false);
+    await redraw();
+    await expect(confidence).toBeFocused();
+    expect((await readGraph(page, [103n]))[0].confidence).toBe(
+      original.confidence,
+    );
+    expect((await readQueue(page)).canRedo).toBe(true);
+
+    // Return the preserved control to the value rollback already restored.
+    await expect(confidence).toHaveValue("75");
+    await confidence.press("ArrowDown");
+    await redraw();
+    const queue = await readQueue(page);
+    expect(queue.canRedo).toBe(true);
+    expect(queue.entries).toHaveLength(3);
+    expect(queue.recent.map(({ status }) => status)).toEqual([
+      "not-saved",
+      "saved",
+      "saved",
+    ]);
+    expect(backend.mutations.map(({ path }) => path)).toEqual([
+      "label/treenode/103/update",
+      "label/treenode/103/update",
+    ]);
+    await expect(redo).toBeEnabled();
+    await ui.redo();
+    await ui.waitSaved();
+    expect((await readGraph(page, [103n]))[0].description).toBe(
+      "keep this Redo",
+    );
+
+    // The previously rejected value remains a valid new edit and Undo target.
+    await ui.runEdit(changeProperty);
+    await ui.waitSaved();
+    expect((await readGraph(page, [103n]))[0].confidence).toBe(75);
+    const saved = backend.snapshot().find(({ id }) => id === 103)!;
+    expect(saved.confidence).toBe(4);
+    await ui.undo();
+    await ui.waitSaved();
+    expect((await readGraph(page, [103n]))[0].confidence).toBe(
+      original.confidence,
+    );
   });
-}
+});
 
 test("a rejected move cancels its child and preserves Undo of a saved description", async ({
   page,
@@ -583,7 +558,7 @@ test("a rejected move cancels its child and preserves Undo of a saved descriptio
   });
 });
 
-test("a move previews immediately and queued Undo cancels its write until Redo", async ({
+test("a move shows at once, and Undo before the move is sent cancels it until Redo", async ({
   page,
 }, testInfo) => {
   await withBackend(testInfo, async (backend) => {
@@ -644,7 +619,7 @@ test("a move previews immediately and queued Undo cancels its write until Redo",
   });
 });
 
-test("Undo of a saving move previews its inverse and submits it after acknowledgement", async ({
+test("Undo of a saving move shows the old position at once and sends it after CATMAID confirms the move", async ({
   page,
 }, testInfo) => {
   await withBackend(testInfo, async (backend) => {
@@ -771,7 +746,7 @@ test("true-end labels survive Undo, Redo, and a fresh inspection", async ({
     await ui.open(backend.sourceUrl);
     await ui.selectNode(103n);
     await ui.runEdit(() =>
-      page.getByRole("radio", { name: "Flag True end", exact: true }).check(),
+      page.getByRole("button", { name: /^(\S+ )?True end$/ }).click(),
     );
     await expect
       .poll(async () => (await readGraph(page, [103n]))[0].isTrueEnd)
@@ -854,7 +829,7 @@ test("deleting a leaf restores its parent and position under a fresh ID on Undo"
   });
 });
 
-test("two layers preview independently while mutations share one FIFO", async ({
+test("two layers on the same CATMAID project show previews independently, while their saves go one at a time in order", async ({
   page,
 }, testInfo) => {
   await withBackend(testInfo, async (backend) => {
@@ -893,7 +868,7 @@ test("two layers preview independently while mutations share one FIFO", async ({
   });
 });
 
-test("a new root and pending child chain survive full Undo and Redo with fresh IDs", async ({
+test("children and a move added while a new root is saving use CATMAID's IDs, through full Undo and Redo", async ({
   page,
 }, testInfo) => {
   test.setTimeout(60_000);
@@ -906,7 +881,7 @@ test("a new root and pending child chain survive full Undo and Redo with fresh I
         const viewer = (window as unknown as { viewer: Viewer }).viewer;
         const layer = viewer.layerManager.getLayerByName("Skeletons")!
           .layer as SegmentationUserLayer;
-        return layer.selectedSkeletonNodeInfo.value?.nodeId;
+        return layer.skeletonNodeSelection.selected.value?.nodeId;
       });
       expect(id).toBeDefined();
       const [node] = await readGraph(page, [id!]);

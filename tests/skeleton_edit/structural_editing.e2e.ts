@@ -17,8 +17,14 @@
 import { expect } from "@playwright/test";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { Viewer } from "#src/viewer.js";
-import { test, change, model, remap, type RealSession } from "./real_test.js";
-import { readGraph, readQueue } from "./skeleton_edit_page.js";
+import {
+  test,
+  change,
+  model,
+  remap,
+  type RealSession,
+} from "./harness/real_test.js";
+import { readGraph, readQueue } from "./harness/skeleton_edit_page.js";
 
 // Hold a real response captured while CATMAID still has the skeleton removed by
 // the preview. Confirmation must retire its physical ID even with no snapshot.
@@ -35,9 +41,10 @@ async function holdRetiringSegmentRead(real: RealSession, segmentId: bigint) {
     ).viewer.layerManager.getLayerByName("Skeletons")!
       .layer as SegmentationUserLayer;
     return {
-      revision: layer.spatialSkeletonState.getCachedSegmentRevision(segmentId),
+      revision:
+        layer.spatialSkeletonEditSession.getCachedSegmentRevision(segmentId),
       cached:
-        layer.spatialSkeletonState.getCachedSegmentNodes(segmentId) !==
+        layer.spatialSkeletonEditSession.getCachedSegmentNodes(segmentId) !==
         undefined,
     };
   }, segmentId);
@@ -48,8 +55,8 @@ async function holdRetiringSegmentRead(real: RealSession, segmentId: bigint) {
     ).viewer.layerManager.getLayerByName("Skeletons")!
       .layer as SegmentationUserLayer;
     try {
-      await layer.spatialSkeletonState.getFullSegmentNodes(
-        layer.getSpatiallyIndexedSkeletonLayer()!,
+      await layer.spatialSkeletonEditSession.getFullSegmentNodes(
+        layer.spatiallyIndexedSkeletonLayer.value!,
         segmentId,
         { retainWhileInactive: true },
       );
@@ -69,9 +76,9 @@ async function holdRetiringSegmentRead(real: RealSession, segmentId: bigint) {
         .layer as SegmentationUserLayer;
       return {
         revision:
-          layer.spatialSkeletonState.getCachedSegmentRevision(segmentId),
+          layer.spatialSkeletonEditSession.getCachedSegmentRevision(segmentId),
         cached:
-          layer.spatialSkeletonState.getCachedSegmentNodes(segmentId) !==
+          layer.spatialSkeletonEditSession.getCachedSegmentNodes(segmentId) !==
           undefined,
       };
     }, segmentId);
@@ -82,13 +89,10 @@ async function holdRetiringSegmentRead(real: RealSession, segmentId: bigint) {
   };
 }
 
-for (const [number, preset] of [
-  [13, "chain"],
-  [14, "branch"],
-] as const)
+for (const preset of ["chain", "branch"] as const)
   test.describe(preset, () => {
     test.use({ preset });
-    test(`[E2E-${number}] Split a ${preset}: complete partitions and repeated Undo/Redo`, async ({
+    test(`Split a ${preset}: both parts are complete, through repeated Undo and Redo`, async ({
       real,
     }, testInfo) => {
       const { ui, ids, original, transport } = real;
@@ -138,7 +142,7 @@ for (const [number, preset] of [
 
 test.describe("merge at root", () => {
   test.use({ seedOverrides: { Broot: { confidence: 25 } } });
-  test("[E2E-15] Merge at the target root separates again without reroot", async ({
+  test("Merge at the target root separates again without reroot", async ({
     real,
   }) => {
     const { ui, ids, original, transport } = real;
@@ -178,7 +182,7 @@ test.describe("branched merge", () => {
     preset: "branchPair",
     seedOverrides: { Broot: { confidence: 25 } },
   });
-  test("[E2E-16] non-root Merge preserves branches and restores both original roots repeatedly", async ({
+  test("non-root Merge preserves branches and restores both original roots repeatedly", async ({
     real,
   }, testInfo) => {
     const { ui, ids, original, transport } = real;
@@ -269,7 +273,7 @@ test.describe("branched merge", () => {
   });
 });
 
-test("[E2E-17] cold Merge target is prepared before preview and before the CATMAID request", async ({
+test("a Merge into a skeleton that is not loaded yet loads it before the preview and before the request", async ({
   real,
 }) => {
   const { ui, ids, original, transport } = real;
@@ -348,7 +352,7 @@ test.describe("branched reroot", () => {
       Aleaf: { confidence: 25, description: "side branch" },
     },
   });
-  test("[E2E-18] reroot reverses the attachment path and carries edge confidence", async ({
+  test("reroot reverses the attachment path and carries edge confidence", async ({
     real,
   }) => {
     const { ui, ids, original, transport } = real;
@@ -394,7 +398,7 @@ test.describe("branched reroot", () => {
   });
 });
 
-test("[E2E-28] skeletons and nodes with IDs above 2^32 keep their exact IDs through create, merge and split", async ({
+test("skeletons and nodes with IDs above 2^32 keep their exact IDs through create, merge and split", async ({
   real,
 }) => {
   const { ui, ids, original, transport } = real;
@@ -432,7 +436,7 @@ test("[E2E-28] skeletons and nodes with IDs above 2^32 keep their exact IDs thro
   await real.reload(split);
 });
 
-test("[E2E-29] hovering a hidden skeleton above 2^32 reports its exact skeleton and node", async ({
+test("hovering a hidden skeleton above 2^32 reports its exact skeleton and node", async ({
   real,
 }) => {
   const { ui, ids } = real;
@@ -461,7 +465,7 @@ test("[E2E-29] hovering a hidden skeleton above 2^32 reports its exact skeleton 
     .toEqual({ nodeId: node.id, segmentId: node.skeletonId });
 });
 
-test("[E2E-30] a visible skeleton above 2^32 is drawn when hidden skeletons are transparent", async ({
+test("a visible skeleton above 2^32 is drawn when hidden skeletons are transparent", async ({
   real,
 }) => {
   const { ui, ids } = real;

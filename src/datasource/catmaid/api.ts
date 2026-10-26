@@ -18,17 +18,51 @@ import { Unpackr } from "msgpackr";
 import type { BoundingBox } from "#src/coordinate_transform.js";
 import { fetchOkWithCredentials } from "#src/credentials_provider/http_request.js";
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
-import { getDefaultCatmaidChunkSize } from "#src/datasource/catmaid/default_chunk_size.js";
 import type {
   SkeletonSpatialIndexLevel,
   SkeletonVector,
   SkeletonNode,
 } from "#src/skeleton/api.js";
-import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_errors.js";
+import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_queue/edit_errors.js";
 import { setSkeletonNodeAttributes } from "#src/skeleton/node_attributes.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import { HttpError } from "#src/util/http_request.js";
 import { parseUint64 } from "#src/util/json.js";
+
+const MAX_CHUNKS = 64;
+const MIN_CHUNK_SIZE = 1;
+
+function getChunkCoverageForChunkSize(
+  extents: readonly number[],
+  chunkSize: number,
+) {
+  return extents.reduce((product, extent) => {
+    const axisChunks = extent <= 0 ? 1 : Math.ceil(extent / chunkSize);
+    return product * axisChunks;
+  }, 1);
+}
+
+// The smallest isotropic chunk size that covers the bounds with at most MAX_CHUNKS chunks.
+export function getDefaultCatmaidChunkSize(bounds: BoundingBox): number[] {
+  const extents = Array.from(bounds.lowerBounds, (lowerBound, index) =>
+    Math.max(0, bounds.upperBounds[index] - lowerBound),
+  );
+  const maxExtent = Math.max(...extents);
+  if (!(maxExtent > 0)) {
+    return extents.map(() => MIN_CHUNK_SIZE);
+  }
+  let low = MIN_CHUNK_SIZE;
+  let high = Math.max(MIN_CHUNK_SIZE, Math.ceil(maxExtent));
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (getChunkCoverageForChunkSize(extents, mid) <= MAX_CHUNKS) {
+      high = mid;
+    } else {
+      low = mid + 1;
+    }
+  }
+  return extents.map(() => low);
+}
 
 export interface CatmaidSpatialIndexInfo {
   readonly bounds: BoundingBox;

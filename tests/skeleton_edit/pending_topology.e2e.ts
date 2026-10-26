@@ -15,16 +15,16 @@
  */
 
 import { expect } from "@playwright/test";
-import { test, change } from "./real_test.js";
-import { readQueue } from "./skeleton_edit_page.js";
+import { test, change } from "./harness/real_test.js";
+import { readQueue } from "./harness/skeleton_edit_page.js";
 
-for (const [number, operation, preset] of [
-  [23, "Split", "branch"],
-  [24, "Merge", "branchPair"],
+for (const [operation, preset] of [
+  ["Split", "branch"],
+  ["Merge", "branchPair"],
 ] as const) {
   test.describe(`pending ${operation} dependencies`, () => {
     test.use({ preset });
-    test(`[E2E-${number}] edits queued behind pending ${operation} preserve topology and history through ID changes`, async ({
+    test(`edits queued behind a pending ${operation} wait for it, save to the new skeleton, and replay in order through Undo and Redo`, async ({
       real,
     }) => {
       const { ui, ids, original, transport } = real;

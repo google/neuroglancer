@@ -274,3 +274,19 @@ export function createSteppedCssGradient(colors: string[], conic = false) {
     })
     .join(", ")})`;
 }
+
+export function pickHighestContrastColor(
+  palette: readonly vec3[],
+  sourceColor: vec3,
+): vec3 {
+  let bestColor = palette[0];
+  let bestContrast = -1;
+  for (const candidate of palette) {
+    const contrast = getContrastRatio(candidate, sourceColor);
+    if (contrast > bestContrast) {
+      bestContrast = contrast;
+      bestColor = candidate;
+    }
+  }
+  return bestColor;
+}

@@ -20,8 +20,8 @@ import type { Viewer } from "#src/viewer.js";
 import {
   startCatmaidMockServer,
   type CatmaidMockServer,
-} from "./catmaid_mock_server.js";
-import { test as base } from "./fixtures.js";
+} from "./harness/catmaid_mock_server.js";
+import { test as base } from "./harness/fixtures.js";
 import {
   SkeletonEditPage,
   readGraph,
@@ -29,7 +29,7 @@ import {
   readRenderedNodeIds,
   parentMap,
   type ViewerNode,
-} from "./skeleton_edit_page.js";
+} from "./harness/skeleton_edit_page.js";
 
 const IDS = [101n, 102n, 103n, 201n, 202n, 203n];
 const INITIAL_PARENTS = [
@@ -360,7 +360,7 @@ test("merge through a non-root node restores the original root after repeated Un
   });
 });
 
-test("Undo during a saving Split restores the preview before its ordered inverse saves", async ({
+test("Undo during a saving Split shows the restored skeleton at once and saves the inverse after the Split", async ({
   page,
   server,
 }) => {
@@ -435,7 +435,7 @@ test("Undo and Redo during root creation preserve the preview and save in order"
     const viewer = (window as unknown as { viewer: Viewer }).viewer;
     const layer = viewer.layerManager.getLayerByName("Skeletons")!
       .layer as SegmentationUserLayer;
-    return layer.selectedSkeletonNodeInfo.value!.nodeId;
+    return layer.skeletonNodeSelection.selected.value!.nodeId;
   });
   const preview = await readGraph(page, [previewNodeId]);
   expect(preview).toHaveLength(1);
@@ -514,7 +514,7 @@ for (const kind of ["new root", "split"] as const) {
       const viewer = (window as unknown as { viewer: Viewer }).viewer;
       const layer = viewer.layerManager.getLayerByName("Skeletons")!
         .layer as SegmentationUserLayer;
-      return layer.selectedSkeletonNodeInfo.value!.nodeId;
+      return layer.skeletonNodeSelection.selected.value!.nodeId;
     });
     const [source] = await readGraph(page, [inputNodeId]);
     const [target] = await readGraph(page, [203n]);
@@ -576,7 +576,7 @@ for (const kind of ["new root", "split"] as const) {
       const layer = viewer.layerManager.getLayerByName("Skeletons")!
         .layer as SegmentationUserLayer;
       return {
-        segmentId: layer.selectedSkeletonNodeInfo.value?.segmentId,
+        segmentId: layer.skeletonNodeSelection.selected.value?.segmentId,
         visible: [
           ...layer.displayState.segmentationGroupState.value.visibleSegments,
         ],
@@ -603,7 +603,7 @@ for (const kind of ["new root", "split"] as const) {
 }
 
 for (const secondDirectionAdjusted of [false, true]) {
-  test(`a reversed Merge corrects chained Merge history through Undo/Redo and reload (second direction adjusted: ${secondDirectionAdjusted})`, async ({
+  test(`when CATMAID swaps the direction of a Merge, a second Merge still undoes and redoes correctly after reload, including a second Merge that CATMAID ${secondDirectionAdjusted ? "also swaps" : "keeps"}`, async ({
     page,
     server,
   }) => {
@@ -686,7 +686,7 @@ for (const secondDirectionAdjusted of [false, true]) {
 }
 
 for (const action of ["Undo Merge", "Reroot then Undo"] as const) {
-  test(`a reversed Merge preserves queued ${action} and matches the saved graph`, async ({
+  test(`when CATMAID swaps the direction of a Merge, a queued ${action} still matches the saved skeleton`, async ({
     page,
     server,
   }) => {
@@ -734,7 +734,7 @@ for (const action of ["Undo Merge", "Reroot then Undo"] as const) {
 }
 
 for (const action of ["Delete", "Split", "Confidence"] as const) {
-  test(`a reversed Merge corrects dependent ${action} history through Undo/Redo and reload`, async ({
+  test(`when CATMAID swaps the direction of a Merge, Undo of a dependent ${action} still restores the right skeleton`, async ({
     page,
     server,
   }) => {

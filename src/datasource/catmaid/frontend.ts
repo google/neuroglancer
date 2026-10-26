@@ -38,7 +38,7 @@ import {
   makeCatmaidClient,
   parseCatmaidUrl,
 } from "#src/datasource/catmaid/base.js";
-import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_commands.js";
+import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spatial_skeleton_edit/command_factories.js";
 import type {
   DataSource,
   DataSourceProvider,
@@ -57,11 +57,11 @@ import {
   type SkeletonManifest,
   type SkeletonSpatialIndexMetadata,
 } from "#src/skeleton/api.js";
-import { SkeletonDataSourceState } from "#src/skeleton/find_path.js";
+import { SkeletonDataSourceState } from "#src/skeleton/find_path/find_path.js";
 import {
   SpatiallyIndexedSkeletonSource,
   MultiscaleSpatiallyIndexedSkeletonSource,
-} from "#src/skeleton/frontend.js";
+} from "#src/skeleton/spatial/frontend.js";
 import { mat4 } from "#src/util/geom.js";
 import "#src/datasource/catmaid/register_credentials_provider.js";
 
@@ -243,7 +243,7 @@ export class CatmaidDataSourceProvider implements DataSourceProvider {
       {
         id: "skeletons",
         default: true,
-        subsource: { mesh: multiscaleSource },
+        subsource: { spatialSkeleton: multiscaleSource },
       },
       {
         id: "properties",

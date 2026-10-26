@@ -17,7 +17,7 @@
 import { expect } from "@playwright/test";
 import { bigintCompare } from "#src/util/bigint.js";
 import type { Viewer } from "#src/viewer.js";
-import { test, change, type RealSkeletonPage } from "./real_test.js";
+import { test, change, type RealSkeletonPage } from "./harness/real_test.js";
 
 test.use({ preset: "branch" });
 
@@ -77,7 +77,7 @@ async function expectRootRow(ui: RealSkeletonPage, id: bigint) {
   ).toHaveText(String(id));
 }
 
-test("[E2E-25] navigation and filters follow pending Split partitions through Undo/Redo and reload", async ({
+test("navigation and filters follow a pending Split through Undo, Redo and reload", async ({
   real,
 }) => {
   const { ui, ids, original, transport } = real;
@@ -138,7 +138,7 @@ test("[E2E-25] navigation and filters follow pending Split partitions through Un
   ]);
 });
 
-test("[E2E-26] navigation and collapsed-node filters follow pending reroot through Undo/Redo and reload", async ({
+test("navigation and collapsed-node filters follow pending reroot through Undo/Redo and reload", async ({
   real,
 }) => {
   const { ui, ids, original, transport } = real;
@@ -203,7 +203,7 @@ test("[E2E-26] navigation and collapsed-node filters follow pending reroot throu
   );
 });
 
-test("[E2E-27] description and true-end filters react to pending properties and their inverses", async ({
+test("description and true-end filters react to pending properties and their inverses", async ({
   real,
 }) => {
   const { ui, ids, original, transport } = real;
@@ -246,7 +246,7 @@ test("[E2E-27] description and true-end filters react to pending properties and 
   const ended = change(described, ids.Atip, { isTrueEnd: true });
   const endGate = transport.hold(`label/treenode/${ids.Atip}/update`);
   await ui.runEdit(() =>
-    ui.page.getByRole("radio", { name: "Flag True end", exact: true }).check(),
+    ui.page.getByRole("button", { name: /^(\S+ )?True end$/ }).click(),
   );
   await endGate.reached;
   await expectListedNodes(ui, [ids.Aleaf, ids.Asibling]);

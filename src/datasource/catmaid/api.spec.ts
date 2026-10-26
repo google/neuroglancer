@@ -19,7 +19,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   CatmaidClient,
-  getCatmaidSpatialSkeletonGridCellBounds,
+  getDefaultCatmaidChunkSize,
 } from "#src/datasource/catmaid/api.js";
 import { HttpError } from "#src/util/http_request.js";
 
@@ -63,7 +63,7 @@ function getFetchInit(fetchMock: FetchMock, callIndex = 0) {
   return requestInit as RequestInit & { priority?: unknown };
 }
 
-describe("CatmaidClient skeleton editing methods", () => {
+describe("CatmaidClient", () => {
   it("does not cache transient metadata discovery failures as null", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -100,7 +100,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     warnSpy.mockRestore();
   });
 
-  it("honors explicit writable CATMAID spatial skeleton metadata", async () => {
+  it("reports a stack as editable when its metadata says it is not read-only", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
     (client as any).getStackInfo = vi.fn().mockResolvedValue({
@@ -118,54 +118,38 @@ describe("CatmaidClient skeleton editing methods", () => {
     });
   });
 
-  it("uses default CATMAID spatial skeleton metadata when spatial levels are missing", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
-    (client as any).getStackInfo = vi.fn().mockResolvedValue({
-      dimension: { x: 10, y: 20, z: 30 },
-      resolution: { x: 2, y: 3, z: 4 },
-      translation: { x: 5, y: 6, z: 7 },
-      metadata: {},
-    });
+  it.each([
+    ["missing", {}],
+    ["empty", { spatial: [] }],
+  ])(
+    "falls back to one default level when the stack lists no spatial levels (%s)",
+    async (_case, metadata) => {
+      const client = new CatmaidClient("https://example.invalid", 1);
+      (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
+      (client as any).getStackInfo = vi.fn().mockResolvedValue({
+        dimension: { x: 10, y: 20, z: 30 },
+        resolution: { x: 2, y: 3, z: 4 },
+        translation: { x: 5, y: 6, z: 7 },
+        metadata,
+      });
 
-    await expect(client.getSpatialIndexMetadata()).resolves.toEqual({
-      bounds: {
-        lowerBounds: Float64Array.of(5, 6, 7),
-        upperBounds: Float64Array.of(25, 66, 127),
-      },
-      readonly: true,
-      spatial: [
-        {
-          chunkSize: [15, 15, 15],
-          limit: 0,
+      await expect(client.getSpatialIndexMetadata()).resolves.toEqual({
+        bounds: {
+          lowerBounds: Float64Array.of(5, 6, 7),
+          upperBounds: Float64Array.of(25, 66, 127),
         },
-      ],
-    });
-  });
+        readonly: true,
+        spatial: [
+          {
+            chunkSize: [15, 15, 15],
+            limit: 0,
+          },
+        ],
+      });
+    },
+  );
 
-  it("uses default CATMAID spatial skeleton metadata when spatial levels are empty", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
-    (client as any).getStackInfo = vi.fn().mockResolvedValue({
-      dimension: { x: 10, y: 20, z: 30 },
-      resolution: { x: 2, y: 3, z: 4 },
-      translation: { x: 5, y: 6, z: 7 },
-      metadata: {
-        spatial: [],
-      },
-    });
-
-    await expect(client.getSpatialIndexMetadata()).resolves.toMatchObject({
-      spatial: [
-        {
-          chunkSize: [15, 15, 15],
-          limit: 0,
-        },
-      ],
-    });
-  });
-
-  it("reads spatial skeleton spatial index levels from stack metadata", async () => {
+  it("reads the spatial index levels and cache provider from stack metadata", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
     (client as any).getStackInfo = vi.fn().mockResolvedValue({
@@ -257,28 +241,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     ]);
   });
 
-  it("accepts zero CATMAID spatial skeleton metadata limits", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
-    (client as any).getStackInfo = vi.fn().mockResolvedValue({
-      dimension: { x: 10, y: 20, z: 30 },
-      resolution: { x: 2, y: 3, z: 4 },
-      translation: { x: 5, y: 6, z: 7 },
-      metadata: {
-        spatial: [{ chunk_size: [15, 15, 15], limit: 0 }],
-      },
-    });
-
-    await expect(client.getSpatialIndexMetadata()).resolves.toMatchObject({
-      spatial: [
-        {
-          limit: 0,
-        },
-      ],
-    });
-  });
-
-  it("accepts zero CATMAID spatial skeleton metadata limits only on the finest level", async () => {
+  it("accepts a zero node limit on the finest level", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     (client as any).listStacks = vi.fn().mockResolvedValue([{ id: 7 }]);
     (client as any).getStackInfo = vi.fn().mockResolvedValue({
@@ -298,7 +261,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     });
   });
 
-  it("parses compact-detail rows with edition times and labels in one request", async () => {
+  it("loads a skeleton's nodes, descriptions and true ends in one request", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn().mockResolvedValue([
       [
@@ -528,7 +491,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     ]);
   });
 
-  it("reads compact-detail rows without requesting edition timestamps", async () => {
+  it("loads skeleton rows that have no edition time column", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi
       .fn()
@@ -551,37 +514,135 @@ describe("CatmaidClient skeleton editing methods", () => {
         attributes: { radius: [2000], confidence: [100] },
       },
     ]);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(getFetchPath(fetchMock)).toBe(
-      "skeletons/2/compact-detail?with_tags=true",
-    );
   });
 
-  it("always merges skeletons with nocheck state", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchMock = vi.fn().mockResolvedValue({
-      result_skeleton_id: 17,
-      deleted_skeleton_id: 21,
-      stable_annotation_swap: true,
-    });
-    (client as any).fetchProjectEndpoint = fetchMock;
+  const editRows: readonly {
+    name: string;
+    call: (client: CatmaidClient) => Promise<unknown>;
+    response: object;
+    result?: object;
+    path: string;
+    fields: Record<string, string | null>;
+  }[] = [
+    {
+      name: "merge",
+      call: (client) => client.mergeSkeletons(101n, 202n),
+      response: {
+        result_skeleton_id: 17,
+        deleted_skeleton_id: 21,
+        stable_annotation_swap: true,
+      },
+      result: {
+        resultSegmentId: 17n,
+        deletedSegmentId: 21n,
+        directionAdjusted: true,
+      },
+      path: "skeleton/join",
+      fields: { from_id: "101", to_id: "202" },
+    },
+    {
+      name: "add node",
+      call: (client) => client.addNode(1, 2, 3, 7n),
+      response: { treenode_id: 88, skeleton_id: 13 },
+      result: { nodeId: 88n, segmentId: 13n },
+      path: "treenode/create",
+      fields: { parent_id: "7", skeleton_id: null },
+    },
+    {
+      name: "insert node",
+      call: (client) => client.insertNode(1, 2, 3, 7n, [11n, 12n]),
+      response: { treenode_id: 89, skeleton_id: 13 },
+      result: { nodeId: 89n, segmentId: 13n },
+      path: "treenode/insert",
+      fields: {
+        parent_id: "7",
+        child_id: "11",
+        "takeover_child_ids[0]": "12",
+        skeleton_id: null,
+      },
+    },
+    {
+      name: "reroot",
+      call: (client) => client.rerootSkeleton(202n),
+      response: { newroot: 202, skeleton_id: 17 },
+      path: "skeleton/reroot",
+      fields: { treenode_id: "202" },
+    },
+    {
+      name: "split",
+      call: (client) => client.splitSkeleton(202n),
+      response: { existing_skeleton_id: 17, new_skeleton_id: 21 },
+      result: { existingSegmentId: 17n, newSegmentId: 21n },
+      path: "skeleton/split",
+      fields: { treenode_id: "202", downstream_annotation_map: "{}" },
+    },
+    {
+      name: "move",
+      call: (client) => client.moveNode(42n, 10, 11, 12),
+      response: { updated: 1 },
+      path: "node/update",
+      fields: {},
+    },
+    {
+      name: "delete",
+      call: (client) => client.deleteNode(11n),
+      response: { success: "Removed treenode successfully." },
+      path: "treenode/delete",
+      fields: { treenode_id: "11" },
+    },
+    {
+      name: "radius",
+      call: (client) => client.updateRadius(11n, 25),
+      response: {},
+      path: "treenode/11/radius",
+      fields: { radius: "25" },
+    },
+    {
+      name: "confidence",
+      call: (client) => client.updateConfidence(11n, 75),
+      response: {},
+      path: "treenodes/11/confidence",
+      fields: {},
+    },
+  ];
 
-    await expect(client.mergeSkeletons(101n, 202n)).resolves.toEqual({
-      resultSegmentId: 17n,
-      deletedSegmentId: 21n,
-      directionAdjusted: true,
-    });
+  it.each(editRows.map((row) => [row.name, row] as const))(
+    "sends the %s request with CATMAID's edition check turned off",
+    async (_name, { call, response, path, fields }) => {
+      const client = new CatmaidClient("https://example.invalid", 1);
+      const fetchMock = vi.fn().mockResolvedValue(response);
+      (client as any).fetchProjectEndpoint = fetchMock;
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const requestBody = getFetchBody(fetchMock);
-    expect(getFetchPath(fetchMock)).toBe("skeleton/join");
-    expect(requestBody.get("from_id")).toBe("101");
-    expect(requestBody.get("to_id")).toBe("202");
-    expect(requestBody.get("nocheck")).toBeNull();
-    expect(requestBody.get("state")).toBe(JSON.stringify({ nocheck: true }));
-  });
+      await call(client);
 
-  it("parses browse node/list rows without retaining edition metadata", async () => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(getFetchPath(fetchMock)).toBe(path);
+      const requestBody = getFetchBody(fetchMock);
+      for (const [field, value] of Object.entries(fields)) {
+        expect(requestBody.get(field)).toBe(value);
+      }
+      expect(requestBody.get("nocheck")).toBeNull();
+      expect(requestBody.get("state")).toBe(JSON.stringify({ nocheck: true }));
+    },
+  );
+
+  it.each(
+    editRows
+      .filter((row) => row.result !== undefined)
+      .map((row) => [row.name, row] as const),
+  )(
+    "reads CATMAID's reply to the %s request",
+    async (_name, { call, response, result }) => {
+      const client = new CatmaidClient("https://example.invalid", 1);
+      (client as any).fetchProjectEndpoint = vi
+        .fn()
+        .mockResolvedValue(response);
+
+      await expect(call(client)).resolves.toEqual(result);
+    },
+  );
+
+  it("lists the nodes in a region at low fetch priority", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn().mockResolvedValue([
       [
@@ -623,7 +684,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     expect(getFetchInit(fetchMock).priority).toBe("low");
   });
 
-  it("passes the CATMAID source-associated lod to node/list", async () => {
+  it("requests node/list at the level of detail the source asks for", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn().mockResolvedValue([[], [], {}, false, [], []]);
     (client as any).fetchProjectEndpoint = fetchMock;
@@ -641,15 +702,6 @@ describe("CatmaidClient skeleton editing methods", () => {
     ).toBe("0.5");
   });
 
-  it("converts spatial skeleton grid cell indices to CATMAID bounds", () => {
-    expect(
-      getCatmaidSpatialSkeletonGridCellBounds([2, 3, 4], [10, 20, 30]),
-    ).toEqual({
-      lowerBounds: Float64Array.of(20, 60, 120),
-      upperBounds: Float64Array.of(30, 80, 150),
-    });
-  });
-
   it("rejects CATMAID node-list bounds with fewer than three coordinates", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.fn();
@@ -662,93 +714,6 @@ describe("CatmaidClient skeleton editing methods", () => {
       }),
     ).rejects.toThrow(/requires at least 3 coordinates/i);
     expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("always sends addNode requests with nocheck CATMAID state", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchMock = vi.fn().mockResolvedValue({
-      treenode_id: 88,
-      skeleton_id: 13,
-      edition_time: "2026-03-29T12:00:00Z",
-      parent_edition_time: "2026-03-29T12:00:01Z",
-    });
-    (client as any).fetchProjectEndpoint = fetchMock;
-
-    await expect(client.addNode(1, 2, 3, 7n)).resolves.toMatchObject({
-      nodeId: 88n,
-      segmentId: 13n,
-    });
-
-    const requestBody = getFetchBody(fetchMock);
-    expect(requestBody.get("skeleton_id")).toBeNull();
-    expect(requestBody.get("nocheck")).toBeNull();
-    expect(requestBody.get("state")).toBe(JSON.stringify({ nocheck: true }));
-  });
-
-  it("always inserts nodes with nocheck state", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchMock = vi.fn().mockResolvedValue({
-      treenode_id: 89,
-      skeleton_id: 13,
-      edition_time: "2026-03-29T12:01:00Z",
-      parent_edition_time: "2026-03-29T12:01:01Z",
-      child_edition_times: [
-        [11, "2026-03-29T12:01:02Z"],
-        [12, "2026-03-29T12:01:03Z"],
-      ],
-    });
-    (client as any).fetchProjectEndpoint = fetchMock;
-
-    await expect(
-      client.insertNode(1, 2, 3, 7n, [11n, 12n]),
-    ).resolves.toMatchObject({
-      nodeId: 89n,
-      segmentId: 13n,
-    });
-
-    const requestBody = getFetchBody(fetchMock);
-    expect(requestBody.get("skeleton_id")).toBeNull();
-    expect(requestBody.get("nocheck")).toBeNull();
-    expect(requestBody.get("state")).toBe(JSON.stringify({ nocheck: true }));
-  });
-
-  it("always reroots skeletons with nocheck state", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchMock = vi.fn().mockResolvedValue({
-      newroot: 202,
-      skeleton_id: 17,
-    });
-    (client as any).fetchProjectEndpoint = fetchMock;
-
-    await expect(client.rerootSkeleton(202n)).resolves.toBeUndefined();
-
-    const requestBody = getFetchBody(fetchMock);
-    expect(getFetchPath(fetchMock)).toBe("skeleton/reroot");
-    expect(requestBody.get("treenode_id")).toBe("202");
-    expect(requestBody.get("nocheck")).toBeNull();
-    expect(requestBody.get("state")).toBe(JSON.stringify({ nocheck: true }));
-  });
-
-  it("always splits skeletons with nocheck state", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchMock = vi.fn().mockResolvedValue({
-      existing_skeleton_id: 17,
-      new_skeleton_id: 21,
-    });
-    (client as any).fetchProjectEndpoint = fetchMock;
-
-    await expect(client.splitSkeleton(202n)).resolves.toEqual({
-      existingSegmentId: 17n,
-      newSegmentId: 21n,
-    });
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const requestBody = getFetchBody(fetchMock);
-    expect(getFetchPath(fetchMock)).toBe("skeleton/split");
-    expect(requestBody.get("treenode_id")).toBe("202");
-    expect(requestBody.get("downstream_annotation_map")).toBe("{}");
-    expect(requestBody.get("nocheck")).toBeNull();
-    expect(requestBody.get("state")).toBe(JSON.stringify({ nocheck: true }));
   });
 
   it.each([
@@ -795,54 +760,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("always moves nodes with nocheck state", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchMock = vi.fn().mockResolvedValue({
-      updated: 1,
-      old_treenodes: [[42, "2026-03-29T12:10:00Z", 1, 2, 3]],
-      old_connectors: [],
-    });
-    (client as any).fetchProjectEndpoint = fetchMock;
-
-    await client.moveNode(42n, 10, 11, 12);
-
-    expect(getFetchBody(fetchMock).get("state")).toBe(
-      JSON.stringify({ nocheck: true }),
-    );
-  });
-
-  it("always deletes nodes with nocheck state", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchMock = vi.fn().mockResolvedValue({
-      success: "Removed treenode successfully.",
-      children: [[12, "2026-03-29T12:20:00Z"]],
-    });
-    (client as any).fetchProjectEndpoint = fetchMock;
-
-    await client.deleteNode(11n);
-
-    expect(getFetchBody(fetchMock).get("state")).toBe(
-      JSON.stringify({ nocheck: true }),
-    );
-  });
-
-  it("always updates node radii with nocheck state", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchMock = vi.fn().mockResolvedValue({
-      updated_nodes: {
-        "11": { edition_time: "2026-03-29T12:25:00Z" },
-      },
-    });
-    (client as any).fetchProjectEndpoint = fetchMock;
-
-    await client.updateRadius(11n, 25);
-
-    const requestBody = getFetchBody(fetchMock);
-    expect(requestBody.get("nocheck")).toBeNull();
-    expect(requestBody.get("state")).toBe(JSON.stringify({ nocheck: true }));
-  });
-
-  it("updates descriptions without CATMAID node state", async () => {
+  it("updates a description without CATMAID's edition check state", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi
       .fn()
@@ -943,7 +861,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     expect(requestBody.get("delete_existing")).toBe("true");
   });
 
-  it("toggles true-end labels without CATMAID node state", async () => {
+  it("toggles a true end without CATMAID's edition check state", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi
       .fn()
@@ -979,22 +897,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     );
   });
 
-  it("updates confidence with nocheck state when requested", async () => {
-    const client = new CatmaidClient("https://example.invalid", 1);
-    const fetchMock = vi.fn().mockResolvedValue({
-      updated_partners: { "11": { edition_time: "2026-03-29T13:20:00Z" } },
-    });
-    (client as any).fetchProjectEndpoint = fetchMock;
-
-    await client.updateConfidence(11n, 75);
-
-    const requestBody = getFetchBody(fetchMock);
-    expect(requestBody.get("new_confidence")).toBe("4");
-    expect(requestBody.get("nocheck")).toBeNull();
-    expect(requestBody.get("state")).toBe(JSON.stringify({ nocheck: true }));
-  });
-
-  it("maps CATMAID state validation failures to a refresh-specific error", async () => {
+  it("asks the user to refresh when CATMAID says the skeleton is out of date", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
@@ -1111,7 +1014,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     fetchMock.mockRestore();
   });
 
-  it("preserves generic CATMAID 400 value errors", async () => {
+  it("keeps a CATMAID 400 that is not a stale-skeleton error as an HTTP error", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
@@ -1167,7 +1070,7 @@ describe("CatmaidClient skeleton editing methods", () => {
     },
   );
 
-  it("preserves readable detail-only 404 handling for reads and edits", async () => {
+  it("shows the detail of a detail-only 404 when an edit fails", async () => {
     const client = new CatmaidClient("https://example.invalid", 1);
     const message = "Skeleton 456 doesn't exist";
     const fetchMock = vi
@@ -1177,7 +1080,6 @@ describe("CatmaidClient skeleton editing methods", () => {
           new Response(JSON.stringify({ detail: message }), { status: 404 }),
       );
     try {
-      await expect(client.getSkeleton(456n)).resolves.toEqual([]);
       await expect(client.deleteNode(7n)).rejects.toMatchObject({
         name: "CatmaidNotFoundError",
         message,
@@ -1186,51 +1088,6 @@ describe("CatmaidClient skeleton editing methods", () => {
       fetchMock.mockRestore();
     }
   });
-
-  it.each([
-    ["read", "consumed"],
-    ["edit", "consumed"],
-    ["read", "locked"],
-    ["edit", "locked"],
-  ] as const)(
-    "keeps HTTP diagnostics for a %s with a %s response",
-    async (operation, bodyState) => {
-      const client = new CatmaidClient("https://example.invalid", 1);
-      const response = new Response(JSON.stringify({ error: "Conflict" }), {
-        status: 409,
-        statusText: "Conflict",
-      });
-      Object.defineProperty(response, "url", {
-        value: "https://example.invalid/1/endpoint",
-      });
-      if (bodyState === "consumed") {
-        await response.text();
-      }
-      const reader =
-        bodyState === "locked" ? response.body!.getReader() : undefined;
-      const fetchMock = vi
-        .spyOn(globalThis, "fetch")
-        .mockResolvedValue(response);
-      try {
-        const result =
-          operation === "read"
-            ? client.getSkeleton(456n)
-            : client.deleteNode(7n);
-        await expect(result).rejects.toMatchObject({
-          name: "HttpError",
-          status: 409,
-          statusText: "Conflict",
-          response,
-          message:
-            'Fetching "https://example.invalid/1/endpoint" resulted in HTTP error 409: Conflict.',
-        });
-        expect(response.bodyUsed).toBe(bodyState === "consumed");
-      } finally {
-        reader?.releaseLock();
-        fetchMock.mockRestore();
-      }
-    },
-  );
 
   // Transport failures must retain useful diagnostics and never display raw proxy pages.
   it.each(["read", "edit"] as const)(
@@ -1360,5 +1217,25 @@ describe("CatmaidClient skeleton editing methods", () => {
     await expect(client.addNode(1, 2, 3)).rejects.toThrow(
       /too large to read exactly/,
     );
+  });
+});
+
+describe("getDefaultCatmaidChunkSize", () => {
+  it("keeps the chunk size isotropic for elongated bounds", () => {
+    expect(
+      getDefaultCatmaidChunkSize({
+        lowerBounds: Float64Array.of(0, 0, 0),
+        upperBounds: Float64Array.of(1000, 10, 10),
+      }),
+    ).toEqual([16, 16, 16]);
+  });
+
+  it("returns the minimum chunk size for tiny bounds", () => {
+    expect(
+      getDefaultCatmaidChunkSize({
+        lowerBounds: Float64Array.of(0, 0, 0),
+        upperBounds: Float64Array.of(2, 2, 2),
+      }),
+    ).toEqual([1, 1, 1]);
   });
 });

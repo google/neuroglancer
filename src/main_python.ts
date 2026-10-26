@@ -34,7 +34,6 @@ import { RemoteActionHandler } from "#src/python_integration/remote_actions.js";
 import { TrackableBasedStatusMessages } from "#src/python_integration/remote_status_messages.js";
 import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { VolumeRequestHandler } from "#src/python_integration/volume.js";
-import { SkeletonNodeCommands } from "#src/skeleton/node_commands.js";
 import { TrackableValue } from "#src/trackable_value.js";
 import { bindCommandPalette } from "#src/ui/command_palette.js";
 import {
@@ -44,6 +43,7 @@ import {
 import { registerDefaultCommands } from "#src/ui/default_commands.js";
 import { setDefaultInputEventBindings } from "#src/ui/default_input_event_bindings.js";
 import { makeDefaultViewer } from "#src/ui/default_viewer.js";
+import { bindSkeletonNodeCommands } from "#src/ui/skeleton_node_commands.js";
 import { bindTitle } from "#src/ui/title.js";
 import { UrlHashBinding } from "#src/ui/url_hash_binding.js";
 import { parseFixedLengthArray, verifyInt } from "#src/util/json.js";
@@ -232,6 +232,6 @@ volumeHandler.sendVolumeChunkResponseRequested.add((requestId, info) =>
 bindDefaultCopyHandler(viewer);
 bindDefaultPasteHandler(viewer);
 registerDefaultCommands(viewer.commandRegistry);
-viewer.registerDisposer(new SkeletonNodeCommands(viewer));
+bindSkeletonNodeCommands(viewer);
 bindCommandPalette(viewer);
 viewer.registerDisposer(bindTitle(viewer.title));

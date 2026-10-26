@@ -15,6 +15,7 @@
  */
 
 import type { SkeletonNode } from "#src/skeleton/api.js";
+import type { SpatialSkeletonPendingEdit } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   getFlatListNodeIds,
   type SkeletonNavigationGraph,
@@ -176,4 +177,167 @@ export function buildSkeletonSegmentRenderState(
     branchCount,
     rows,
   };
+}
+
+const PROVISIONAL_NODE_ID_TOOLTIP =
+  "Preview node. The skeleton source has not yet confirmed its permanent node ID.";
+const SKELETON_DETAILS_UNAVAILABLE_LIST_MESSAGE =
+  "To view this skeleton's nodes, show it in Seg, then allow it to finish loading.";
+const PICKABLE_SKELETON_DETAILS_UNAVAILABLE_LIST_MESSAGE =
+  "To view this skeleton's nodes, show it in Seg or double-click one of its nodes, then allow its details to finish loading.";
+export const PREPARATION_PENDING_LIST_MESSAGE =
+  "Preparing the complete skeleton preview…";
+
+export function getSkeletonNodeIdPresentation(
+  nodeId: bigint,
+  provisionalNodeIds: readonly bigint[],
+) {
+  return provisionalNodeIds.includes(nodeId)
+    ? {
+        label: "Preview",
+        tooltip: PROVISIONAL_NODE_ID_TOOLTIP,
+        provisional: true,
+      }
+    : { label: String(nodeId), tooltip: undefined, provisional: false };
+}
+
+const PREPARATION_ACTION_LABELS: Record<
+  SpatialSkeletonPendingEdit["kind"],
+  string
+> = {
+  merge: "merge",
+  split: "split",
+  delete: "node deletion",
+  restore: "node restoration",
+  reroot: "reroot",
+};
+
+export interface SpatialSkeletonDetailsPreparationState {
+  readonly preparation: SpatialSkeletonPendingEdit;
+  readonly statusText: string;
+  readonly detailText: string;
+  readonly controlsDisabledReason: string;
+  readonly laterEditCount: number;
+}
+
+function getPreparationStatusText(preparation: SpatialSkeletonPendingEdit) {
+  const action = PREPARATION_ACTION_LABELS[preparation.kind];
+  switch (preparation.direction) {
+    case "undo":
+      return `Preparing Undo preview for ${action}…`;
+    case "redo":
+      return `Preparing Redo preview for ${action}…`;
+    default:
+      return `Preparing ${action} preview…`;
+  }
+}
+
+function getPreparationControlsDisabledReason(
+  preparation: SpatialSkeletonPendingEdit,
+) {
+  const action = PREPARATION_ACTION_LABELS[preparation.kind];
+  return `Available after the exact ${action} preview finishes preparing.`;
+}
+
+// Status text names no segment ID, because IDs may be temporary during remapping.
+export function getSpatialSkeletonDetailsPreparationState(options: {
+  preparations: readonly SpatialSkeletonPendingEdit[];
+  selectedSegmentId: bigint | undefined;
+  selectedSegmentStableId?: string;
+  hasExactTopology: boolean;
+}): SpatialSkeletonDetailsPreparationState | undefined {
+  const { selectedSegmentId, selectedSegmentStableId, hasExactTopology } =
+    options;
+  if (selectedSegmentId === undefined) return undefined;
+  const overlapping = options.preparations
+    .filter(
+      (preparation) =>
+        preparation.segmentIds.includes(selectedSegmentId) ||
+        (selectedSegmentStableId !== undefined &&
+          preparation.stableSegmentHandles?.some(
+            (handle) => handle.stableId === selectedSegmentStableId,
+          )),
+    )
+    .sort((a, b) => a.sequence - b.sequence);
+  const preparation = overlapping[0];
+  if (preparation === undefined) return undefined;
+  return {
+    preparation,
+    statusText: getPreparationStatusText(preparation),
+    detailText: hasExactTopology
+      ? "The last complete skeleton is shown below while the requested preview is prepared."
+      : PREPARATION_PENDING_LIST_MESSAGE,
+    controlsDisabledReason: getPreparationControlsDisabledReason(preparation),
+    laterEditCount: overlapping.length - 1,
+  };
+}
+
+export type SegmentDisplayState = SkeletonSegmentRenderState & {
+  segmentLabel: string | undefined;
+};
+
+export type SkeletonListItem =
+  | { kind: "segment"; segmentState: SegmentDisplayState }
+  | { kind: "node"; row: SkeletonSegmentRenderRow }
+  | { kind: "empty"; text: string };
+
+export function buildSkeletonVirtualListItems(
+  segmentState: SegmentDisplayState | undefined,
+  emptyText: string,
+) {
+  const items: SkeletonListItem[] = [];
+  const listIndexByNodeId = new Map<bigint, number>();
+  if (segmentState !== undefined && segmentState.displayedNodeCount > 0) {
+    items.push({ kind: "segment", segmentState });
+    for (const row of segmentState.rows) {
+      listIndexByNodeId.set(row.node.nodeId, items.length);
+      items.push({ kind: "node", row });
+    }
+  } else {
+    items.push({ kind: "empty", text: emptyText });
+  }
+  return { items, listIndexByNodeId };
+}
+
+export function getSkeletonEmptyListText(options: {
+  activeSegmentId: bigint | undefined;
+  selectedSegmentDetailsUnavailable: boolean;
+  segmentState: SegmentDisplayState | undefined;
+  filterText: string;
+  nodeFilterType: SkeletonNodeFilterType;
+  preparationActive?: boolean;
+  hasPickableNodes: boolean;
+}): string {
+  const {
+    activeSegmentId,
+    selectedSegmentDetailsUnavailable,
+    segmentState,
+    filterText,
+    nodeFilterType,
+    preparationActive = false,
+    hasPickableNodes,
+  } = options;
+  if (preparationActive && segmentState === undefined) {
+    return PREPARATION_PENDING_LIST_MESSAGE;
+  }
+  if (activeSegmentId === undefined) {
+    if (selectedSegmentDetailsUnavailable) {
+      return hasPickableNodes
+        ? PICKABLE_SKELETON_DETAILS_UNAVAILABLE_LIST_MESSAGE
+        : SKELETON_DETAILS_UNAVAILABLE_LIST_MESSAGE;
+    }
+    return hasPickableNodes
+      ? "Hover over or select a skeleton node to view its skeleton's nodes."
+      : "Select a skeleton to view its nodes.";
+  }
+  if (
+    segmentState === undefined ||
+    segmentState.totalNodeCount === 0 ||
+    (filterText.length === 0 &&
+      (nodeFilterType === SkeletonNodeFilterType.DEFAULT ||
+        nodeFilterType === SkeletonNodeFilterType.NONE))
+  ) {
+    return "No loaded nodes.";
+  }
+  return "No matching nodes.";
 }

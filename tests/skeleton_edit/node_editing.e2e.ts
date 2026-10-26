@@ -17,21 +17,27 @@
 import { expect } from "@playwright/test";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { Viewer } from "#src/viewer.js";
-import { test, change, model, remap, type ModelNode } from "./real_test.js";
+import {
+  test,
+  change,
+  model,
+  remap,
+  type ModelNode,
+} from "./harness/real_test.js";
 import {
   readGraph,
   readQueue,
   readRenderedNodeIds,
-} from "./skeleton_edit_page.js";
+} from "./harness/skeleton_edit_page.js";
 
-for (const [index, field] of [
+for (const field of [
   "move",
   "radius",
   "confidence",
   "description",
   "true-end",
-].entries()) {
-  test(`[E2E-${String(index + 1).padStart(2, "0")}] ${field}: preview, Undo/Redo and persistence`, async ({
+]) {
+  test(`${field}: the edit shows at once, Undo and Redo work, and it stays after reload`, async ({
     real,
   }, testInfo) => {
     const { ui, ids, original, transport } = real;
@@ -56,7 +62,9 @@ for (const [index, field] of [
                 window as unknown as { viewer: Viewer }
               ).viewer.layerManager.getLayerByName("Skeletons")!
                 .layer as SegmentationUserLayer;
-              return Array.from(layer.spatialSkeletonState.getPendingNodeIds());
+              return Array.from(
+                layer.spatialSkeletonEditSession.getPendingNodeIds(),
+              );
             });
           await ui.selectNode(id);
           const center = await ui.panelCenter();
@@ -240,7 +248,7 @@ for (const [index, field] of [
 
 test.describe("creation", () => {
   test.use({ preset: "empty" });
-  test("[E2E-06] pending root and child chain remap IDs through full Undo/Redo", async ({
+  test("children and a move added while a new root is saving use CATMAID's IDs, through full Undo and Redo", async ({
     real,
   }, testInfo) => {
     const { ui, transport } = real;
@@ -438,7 +446,7 @@ test.describe("creation", () => {
           ).viewer.layerManager.getLayerByName("Skeletons")!
             .layer as SegmentationUserLayer;
           return Array.from(
-            layer.spatialSkeletonState.getPendingNodePosition(id) ?? [],
+            layer.spatialSkeletonEditSession.getPendingNodePosition(id) ?? [],
           );
         }, id);
       await ui.page.mouse.move(start.x, start.y);
@@ -603,7 +611,7 @@ test.describe("creation", () => {
   });
 });
 
-test("[E2E-07] adding children branches an existing tree without changing its original nodes", async ({
+test("adding children branches an existing tree without changing its original nodes", async ({
   real,
 }) => {
   const { ui, ids, original, transport } = real;
@@ -659,15 +667,14 @@ test("[E2E-07] adding children branches an existing tree without changing its or
 });
 
 const deletions = [
-  { number: 8, name: "leaf", preset: "chain", target: "Aleaf" },
+  { name: "leaf", preset: "chain", target: "Aleaf" },
   {
-    number: 9,
     name: "internal chain node",
     preset: "chain",
     target: "Amiddle",
   },
-  { number: 10, name: "branch node", preset: "branch", target: "Amiddle" },
-  { number: 12, name: "singleton", preset: "singleton", target: "Aroot" },
+  { name: "branch node", preset: "branch", target: "Amiddle" },
+  { name: "singleton", preset: "singleton", target: "Aroot" },
 ] as const;
 for (const item of deletions)
   test.describe(item.name, () => {
@@ -682,7 +689,7 @@ for (const item of deletions)
         },
       },
     });
-    test(`[E2E-${String(item.number).padStart(2, "0")}] delete and restore ${item.name} with replacement IDs`, async ({
+    test(`Undo of deleting a ${item.name} restores it with its properties under a new ID`, async ({
       real,
     }, testInfo) => {
       const { ui, original, ids, transport } = real;
@@ -780,7 +787,7 @@ test.describe("root with one child", () => {
       Amiddle: { confidence: 75 },
     },
   });
-  test("[E2E-11] reroot then delete the former root and restore the original tree", async ({
+  test("reroot then delete the former root and restore the original tree", async ({
     real,
   }, testInfo) => {
     const { ui, original, ids, transport } = real;

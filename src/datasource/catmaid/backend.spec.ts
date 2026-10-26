@@ -19,7 +19,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CatmaidSpatiallyIndexedSkeletonSourceBackend } from "#src/datasource/catmaid/backend.js";
 
 describe("CatmaidSpatiallyIndexedSkeletonSourceBackend", () => {
-  it("passes the source-associated CATMAID lod to node/list downloads", async () => {
+  it("downloads a chunk's region at the source's level of detail", async () => {
     const signal = new AbortController().signal;
     const fetchNodes = vi.fn().mockResolvedValue([]);
     const source = Object.create(

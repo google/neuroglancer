@@ -15,6 +15,10 @@
  */
 
 import type { SkeletonNode } from "#src/skeleton/api.js";
+import { TrackableValue } from "#src/trackable_value.js";
+import { verifyString } from "#src/util/json.js";
+import { CompoundTrackable } from "#src/util/trackable.js";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
 
 export enum SkeletonDisplayNodeType {
   ROOT = "root",
@@ -66,6 +70,47 @@ export function getSkeletonNodeFilterLabel(filterType: SkeletonNodeFilterType) {
       return "True end";
     case SkeletonNodeFilterType.HAS_DESCRIPTION:
       return "Has description";
+  }
+}
+
+const SKELETON_NODE_TYPE_LABELS: Record<SkeletonDisplayNodeType, string> = {
+  [SkeletonDisplayNodeType.ROOT]: "Root",
+  [SkeletonDisplayNodeType.BRANCH_START]: "Branch point",
+  [SkeletonDisplayNodeType.REGULAR]: "Node",
+  [SkeletonDisplayNodeType.VIRTUAL_END]: "Virtual end",
+};
+
+export function getSkeletonNodeTypeLabel(
+  nodeType: SkeletonDisplayNodeType,
+  nodeIsTrueEnd: boolean,
+): string {
+  return nodeIsTrueEnd ? "True end" : SKELETON_NODE_TYPE_LABELS[nodeType];
+}
+
+export class SkeletonBrowseState extends CompoundTrackable {
+  readonly nodeQuery = new TrackableValue<string>("", verifyString);
+  readonly nodeFilter = new TrackableEnum<SkeletonNodeFilterType>(
+    SkeletonNodeFilterType,
+    SkeletonNodeFilterType.DEFAULT,
+  );
+
+  constructor() {
+    super();
+    this.add("nodeQuery", this.nodeQuery);
+    this.add("nodeFilter", this.nodeFilter);
+  }
+
+  restoreState(obj: unknown) {
+    if (obj === undefined) return;
+    super.restoreState(obj);
+  }
+
+  toJSON(): any {
+    const obj = super.toJSON();
+    for (const value of Object.values(obj)) {
+      if (value !== undefined) return obj;
+    }
+    return undefined;
   }
 }
 
