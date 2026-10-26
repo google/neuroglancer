@@ -25,6 +25,7 @@ import {
 } from "#src/layer/voxel_annotation/controls.js";
 import { VoxelEditingTab } from "#src/layer/voxel_annotation/draw_tab.js";
 import { getVoxelEditingIncompatibility } from "#src/layer/voxel_annotation/eligibility.js";
+import { PanelOverlay } from "#src/layer/voxel_annotation/panel_overlay.js";
 import type {
   ChunkTransformParameters,
   RenderLayerTransformOrError,
@@ -33,7 +34,6 @@ import {
   getChunkPositionFromCombinedGlobalLocalPositions,
   getChunkTransformParameters,
 } from "#src/render_coordinate_transform.js";
-import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import type { SliceViewSourceOptions } from "#src/sliceview/base.js";
 import { DataType } from "#src/sliceview/base.js";
 import { SliceViewPanel } from "#src/sliceview/panel.js";
@@ -516,10 +516,8 @@ export function UserLayerWithVoxelEditingMixin<
     }
 
     scheduleOverlayRedraw = () => {
-      for (const panel of this.manager.root.display.panels) {
-        if (panel instanceof SliceViewPanel) {
-          panel.scheduleOverlayRedraw();
-        }
+      for (const overlay of this.panelOverlays.values()) {
+        overlay.scheduleRedraw();
       }
     };
 
@@ -550,37 +548,34 @@ export function UserLayerWithVoxelEditingMixin<
 
       context.registerDisposer(() => {
         removePendingListener?.();
-        for (const cleanup of this.boundPanelCleanups.values()) cleanup();
-        this.boundPanelCleanups.clear();
-        redraw();
+        for (const overlay of this.panelOverlays.values()) overlay.dispose();
+        this.panelOverlays.clear();
       });
       redraw();
     }
 
-    private boundPanelCleanups = new Map<RenderedDataPanel, () => void>();
+    private panelOverlays = new Map<SliceViewPanel, PanelOverlay>();
     private bindOverlayToPanels() {
-      for (const panel of this.manager.root.display.panels) {
-        if (
-          panel instanceof SliceViewPanel &&
-          !this.boundPanelCleanups.has(panel)
-        ) {
-          const rm = panel.overlayDraw.add((ctx, _w, _h, p) =>
-            this.handleOverlayDraw(ctx, p),
+      const { panels } = this.manager.root.display;
+      for (const panel of panels) {
+        if (panel instanceof SliceViewPanel && !this.panelOverlays.has(panel)) {
+          this.panelOverlays.set(
+            panel,
+            new PanelOverlay(panel, (ctx, p) => this.handleOverlayDraw(ctx, p)),
           );
-          this.boundPanelCleanups.set(panel, rm);
         }
       }
-      for (const [panel, cleanup] of this.boundPanelCleanups) {
-        if (!this.manager.root.display.panels.has(panel)) {
-          cleanup();
-          this.boundPanelCleanups.delete(panel);
+      for (const [panel, overlay] of this.panelOverlays) {
+        if (!panels.has(panel)) {
+          overlay.dispose();
+          this.panelOverlays.delete(panel);
         }
       }
     }
 
     private handleOverlayDraw(
       ctx: CanvasRenderingContext2D,
-      panel: RenderedDataPanel,
+      panel: SliceViewPanel,
     ) {
       if (
         panel.mouseX < 0 ||

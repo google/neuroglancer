@@ -194,13 +194,7 @@ const TOOL_SPECIFIC_CONTROLS: LayerControlDefinition<UserLayerWithVoxelEditing>[
             originalActivateTool(activation, controlContext as RangeWidget);
 
             const layer = activation.tool.layer as UserLayerWithVoxelEditing;
-            const trigger = () => {
-              for (const panel of layer.manager.root.display.panels) {
-                if (panel instanceof SliceViewPanel) {
-                  panel.scheduleOverlayRedraw();
-                }
-              }
-            };
+            const trigger = layer.scheduleOverlayRedraw;
 
             trigger();
             activation.registerDisposer(
