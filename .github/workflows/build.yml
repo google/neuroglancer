@@ -130,6 +130,8 @@ jobs:
   # Windows, this only runs tests that do not require a browser, since a working
   # headless WebGL2 implementation is not available on Github actions.
   python-tests:
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     strategy:
       matrix:
         python-version:
