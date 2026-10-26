@@ -841,7 +841,7 @@ const CATMAID_OPTIMISTIC_OPERATION_NOUNS = Object.freeze({
   Record<CatmaidSpatialSkeletonCommandPayload["kind"], string>
 >;
 
-export function getCatmaidAuthorityLabels(
+function getCatmaidAuthorityLabels(
   kind: CatmaidSpatialSkeletonCommandPayload["kind"],
 ): SpatialSkeletonAuthorityLabels {
   return Object.freeze({

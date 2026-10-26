@@ -153,25 +153,24 @@ describe("real CATMAID timing transport", () => {
 });
 
 describe("owned project lifetime", () => {
-  it.each([
-    "normal",
-    "fixture failure",
-    "test failure",
-    "browser cleanup failure",
-  ])("removes the project after %s", async (phase) => {
-    const close = vi.fn(async () => {});
-    const createProject = vi.fn(async () => ({ config, close }));
-    const result = withCatmaidProject(
-      { createProject },
-      phase,
-      async (actual) => {
-        expect(actual).toBe(config);
-        if (phase !== "normal") throw new Error(phase);
-        return "finished";
-      },
-    );
-    if (phase === "normal") await expect(result).resolves.toBe("finished");
-    else await expect(result).rejects.toThrow(phase);
-    expect(close).toHaveBeenCalledTimes(1);
-  });
+  it.each(["finishes", "throws"])(
+    "removes the project when the test body %s",
+    async (outcome) => {
+      const close = vi.fn(async () => {});
+      const createProject = vi.fn(async () => ({ config, close }));
+      const result = withCatmaidProject(
+        { createProject },
+        outcome,
+        async (actual) => {
+          expect(actual).toBe(config);
+          if (outcome === "throws") throw new Error("test body failed");
+          return "finished";
+        },
+      );
+      if (outcome === "throws")
+        await expect(result).rejects.toThrow("test body failed");
+      else await expect(result).resolves.toBe("finished");
+      expect(close).toHaveBeenCalledTimes(1);
+    },
+  );
 });

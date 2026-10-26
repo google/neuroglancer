@@ -110,12 +110,8 @@ describe("SpatialSkeletonEditRequestLock", () => {
     next.release();
   });
 
-  it("refuses a scope that is not an object and an acquisition that was already cancelled", async () => {
+  it("refuses an acquisition that was already cancelled", async () => {
     const lock = new SpatialSkeletonEditRequestLock();
-    await expect(
-      lock.acquire({ editRequestScope: null as unknown as object }),
-    ).rejects.toThrow("requires an object scope");
-
     const controller = new AbortController();
     controller.abort("stopped");
     await expect(

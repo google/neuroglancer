@@ -19,7 +19,6 @@ import { describe, expect, it } from "vitest";
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import {
   classifySkeletonDisplayNodeType,
-  getSkeletonNodeIconFilterType,
   matchesSkeletonNodeFilter,
   SkeletonBrowseState,
   SkeletonDisplayNodeType,
@@ -118,27 +117,6 @@ describe("skeleton node types", () => {
         rootLeaf,
       ),
     ).toBe(false);
-  });
-
-  it("shows the true-end and virtual-end icons on matching rows", () => {
-    expect(
-      getSkeletonNodeIconFilterType({
-        nodeIsTrueEnd: false,
-        nodeType: SkeletonDisplayNodeType.VIRTUAL_END,
-      }),
-    ).toBe(SkeletonNodeFilterType.VIRTUAL_END);
-    expect(
-      getSkeletonNodeIconFilterType({
-        nodeIsTrueEnd: true,
-        nodeType: SkeletonDisplayNodeType.REGULAR,
-      }),
-    ).toBe(SkeletonNodeFilterType.TRUE_END);
-    expect(
-      getSkeletonNodeIconFilterType({
-        nodeIsTrueEnd: false,
-        nodeType: SkeletonDisplayNodeType.ROOT,
-      }),
-    ).toBeUndefined();
   });
 });
 

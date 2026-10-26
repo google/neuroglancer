@@ -528,13 +528,6 @@ export function getParentNode(graph: SkeletonNavigationGraph, nodeId: bigint) {
     : getNodeTarget(graph, parentNodeId);
 }
 
-export function getChildNode(graph: SkeletonNavigationGraph, nodeId: bigint) {
-  const childNodeId = getFlatListOrderedChildNodeIds(graph, nodeId)[0];
-  return childNodeId === undefined
-    ? undefined
-    : getNodeTarget(graph, childNodeId);
-}
-
 /**
  * Finds a shortest path between two nodes, treating parent/child links as
  * undirected edges.
