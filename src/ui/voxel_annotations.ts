@@ -26,6 +26,7 @@ import type {
   VoxelEditingContext,
 } from "#src/layer/voxel_annotation/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
+import { SliceViewPanel } from "#src/sliceview/panel.js";
 import { StatusMessage } from "#src/status.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { linkWatchableValue } from "#src/trackable_value.js";
@@ -81,6 +82,19 @@ function getFloodFillCursor(erase: boolean) {
   return `url('data:image/svg+xml;utf8,${encodeURIComponent(floodFillSVG)}') 24 24, crosshair`;
 }
 
+// The normal of the slice under the mouse; undefined over a 3D panel.
+function getHoveredSliceNormal(
+  layer: UserLayerWithVoxelEditing,
+): vec3 | undefined {
+  for (const panel of layer.manager.root.display.panels) {
+    if (panel instanceof SliceViewPanel && panel.mouseX >= 0) {
+      return panel.sliceView.projectionParameters.value
+        .viewportNormalInCanonicalCoordinates;
+    }
+  }
+  return undefined;
+}
+
 abstract class VoxelEditingTool extends LayerTool<UserLayerWithVoxelEditing> {
   protected latestMouseState: MouseSelectionState | null = null;
   private lastNormal: vec3 | undefined = undefined;
@@ -93,10 +107,9 @@ abstract class VoxelEditingTool extends LayerTool<UserLayerWithVoxelEditing> {
       | Float32Array
       | undefined;
     if (!mouseState?.active || !voxel) return undefined;
-    if (!mouseState.planeNormal) return;
-    this.lastNormal = editContext.transformGlobalToVoxelNormal(
-      mouseState.planeNormal,
-    );
+    const normal = getHoveredSliceNormal(this.layer);
+    if (normal === undefined) return undefined;
+    this.lastNormal = editContext.transformGlobalToVoxelNormal(normal);
     const CHUNK_POSITION_EPSILON = 1e-3;
     const shiftedVoxel = new Float32Array(3);
     for (let i = 0; i < 3; ++i) {
