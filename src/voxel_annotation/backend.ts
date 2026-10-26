@@ -31,7 +31,6 @@ import {
   EMPTY_VOXEL_VALUE,
   VOXEL_EDITING_STAMINA,
   VOXEL_EDITING_BACKEND_RPC_ID,
-  VOXEL_EDITING_COMMIT_VOXELS_RPC_ID,
   VOXEL_EDITING_CHUNK_RELOAD_RPC_ID,
   VOXEL_EDITING_CASCADE_DONE_RPC_ID,
   VOXEL_EDITING_FAILURE_RPC_ID,
@@ -53,7 +52,6 @@ import type { RPC } from "#src/worker_rpc.js";
 import {
   registerPromiseRPC,
   SharedObject,
-  registerRPC,
   registerSharedObject,
   initializeSharedObjectCounterpart,
 } from "#src/worker_rpc.js";
@@ -1748,11 +1746,6 @@ export class VoxelEditingController extends SharedObject {
     return Array.from(indicesByLodChunkKey.keys());
   }
 }
-
-registerRPC(VOXEL_EDITING_COMMIT_VOXELS_RPC_ID, function (x: any) {
-  const obj = this.get(x.rpcId) as VoxelEditingController;
-  obj.commitVoxels(Array.isArray(x.edits) ? x.edits : []);
-});
 
 registerPromiseRPC(
   VOXEL_EDITING_UNDO_RPC_ID,
