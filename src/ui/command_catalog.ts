@@ -29,6 +29,7 @@ import {
   type GlobalToolBinder,
   type LocalToolBinder,
 } from "#src/ui/tool.js";
+import type { MultiToolPaletteState } from "#src/ui/tool_palette.js";
 import { parseToolQuery } from "#src/ui/tool_query.js";
 import type { DebouncedFunction } from "#src/util/animation_frame_debounce.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
@@ -36,9 +37,10 @@ import { RefCounted } from "#src/util/disposable.js";
 import type {
   ActionIdentifier,
   EventAction,
+  EventActionMap,
   NormalizedEventIdentifier,
 } from "#src/util/event_action_map.js";
-import { friendlyEventIdentifier } from "#src/util/event_action_map.js";
+import { pressedEventIdentifier } from "#src/util/event_action_map.js";
 import { rankedMatches } from "#src/util/ranked_matches.js";
 import { Signal } from "#src/util/signal.js";
 import type { InputEventBindings } from "#src/viewer.js";
@@ -53,6 +55,7 @@ export interface CommandCatalogContext {
   readonly toolBinder: LocalToolBinder;
   readonly layerManager: LayerManager;
   readonly selectedLayer: SelectedLayerState;
+  readonly toolPalettes: MultiToolPaletteState;
   readonly inputEventBindings: InputEventBindings;
   /**
    * Primary source of the flat command set. Registered commands are enumerated
@@ -66,6 +69,7 @@ export interface CommandCatalogContext {
 export interface ActionBinding {
   readonly actionId: ActionIdentifier;
   readonly eventAction: EventAction;
+  readonly pressedEventIdentifier: string;
 }
 
 export type CommandSource = "registered" | "derived";
@@ -204,27 +208,30 @@ function activateUnboundTool(
 export function collectActionBindings(
   inputEventBindings: InputEventBindings,
 ): readonly ActionBinding[] {
-  const seenBindings = new Map<ActionIdentifier, EventAction>();
+  const seenBindings = new Map<ActionIdentifier, ActionBinding>();
 
-  const collect = (
-    bindings: Iterable<[NormalizedEventIdentifier, EventAction]>,
-  ) => {
-    for (const [normalizedId, eventAction] of bindings) {
+  const collect = (eventMap: EventActionMap) => {
+    for (const [normalizedId, eventAction] of eventMap.entries()) {
       if (!isKeyboardEvent(normalizedId)) continue;
       if (!seenBindings.has(eventAction.action)) {
-        seenBindings.set(eventAction.action, eventAction);
+        seenBindings.set(eventAction.action, {
+          actionId: eventAction.action,
+          eventAction,
+          pressedEventIdentifier: pressedEventIdentifier(
+            eventMap,
+            normalizedId,
+            eventAction,
+          ),
+        });
       }
     }
   };
 
-  collect(inputEventBindings.global.entries());
-  collect(inputEventBindings.sliceView.entries());
-  collect(inputEventBindings.perspectiveView.entries());
+  collect(inputEventBindings.global);
+  collect(inputEventBindings.sliceView);
+  collect(inputEventBindings.perspectiveView);
 
-  return Array.from(seenBindings.entries(), ([actionId, eventAction]) => ({
-    actionId,
-    eventAction,
-  }));
+  return Array.from(seenBindings.values());
 }
 
 export class CommandCatalog extends RefCounted {
@@ -232,6 +239,7 @@ export class CommandCatalog extends RefCounted {
   groups: readonly CommandGroup[] = [];
   readonly changed = new Signal();
   private readonly debouncedRebuild: DebouncedFunction;
+  private paletteNameDisposers: Array<() => void> = [];
 
   constructor(private readonly context: CommandCatalogContext) {
     super();
@@ -250,7 +258,16 @@ export class CommandCatalog extends RefCounted {
     this.registerDisposer(
       context.commandRegistry.changed.add(debouncedRebuild),
     );
+    this.registerDisposer(
+      context.toolPalettes.changedShallow.add(debouncedRebuild),
+    );
+    this.registerDisposer(() => this.disposePaletteNameListeners());
     this.rebuild();
+  }
+
+  private disposePaletteNameListeners() {
+    for (const dispose of this.paletteNameDisposers) dispose();
+    this.paletteNameDisposers = [];
   }
 
   public rebuild() {
@@ -260,22 +277,34 @@ export class CommandCatalog extends RefCounted {
       selectedLayer,
       inputEventBindings,
       commandRegistry,
+      toolPalettes,
     } = this.context;
     const commands: CommandEntry[] = [];
 
     const layers = layerManager?.managedLayers ?? [];
 
+    const bindings = collectActionBindings(inputEventBindings);
+    const shortcutByAction = new Map<ActionIdentifier, string>();
+    for (const { actionId, pressedEventIdentifier } of bindings) {
+      shortcutByAction.set(actionId, formatKeyStroke(pressedEventIdentifier));
+    }
+
+    const layerRangeShortcut = (actionPrefix: string) => {
+      const shortcut = shortcutByAction.get(`${actionPrefix}-1`);
+      return shortcut === undefined ? "" : `${shortcut}–9`;
+    };
+
     const toggleLayerGroup: CommandGroup = {
       label: "Toggle Layer Visibility",
-      shortcut: "1–9",
+      shortcut: layerRangeShortcut("toggle-layer"),
     };
     const selectLayerGroup: CommandGroup = {
       label: "Select Layer",
-      shortcut: "Ctrl+1–9",
+      shortcut: layerRangeShortcut("select-layer"),
     };
     const togglePickLayerGroup: CommandGroup = {
       label: "Toggle Layer Picking",
-      shortcut: "Alt+1–9",
+      shortcut: layerRangeShortcut("toggle-pick-layer"),
     };
 
     let nonArchivedIndex = -1;
@@ -297,7 +326,7 @@ export class CommandCatalog extends RefCounted {
         command.enabled = enabled;
         commands.push({
           ...commonObject,
-          shortcut: nonArchivedIndex < 9 ? String(nonArchivedIndex + 1) : "",
+          shortcut: shortcutByAction.get(command.id) ?? "",
           group: toggleLayerGroup,
           command,
         });
@@ -316,7 +345,7 @@ export class CommandCatalog extends RefCounted {
         command.enabled = enabled;
         commands.push({
           ...commonObject,
-          shortcut: nonArchivedIndex < 9 ? `Ctrl+${nonArchivedIndex + 1}` : "",
+          shortcut: shortcutByAction.get(command.id) ?? "",
           group: selectLayerGroup,
           command,
         });
@@ -334,7 +363,7 @@ export class CommandCatalog extends RefCounted {
         command.enabled = enabled;
         commands.push({
           label: layer.name,
-          shortcut: nonArchivedIndex < 9 ? `Alt+${nonArchivedIndex + 1}` : "",
+          shortcut: shortcutByAction.get(command.id) ?? "",
           source: "derived",
           group: togglePickLayerGroup,
           command,
@@ -342,15 +371,31 @@ export class CommandCatalog extends RefCounted {
       }
     }
 
-    const bindings = collectActionBindings(inputEventBindings);
-    const shortcutByAction = new Map<ActionIdentifier, string>();
-    for (const { actionId, eventAction } of bindings) {
-      shortcutByAction.set(
-        actionId,
-        formatKeyStroke(
-          friendlyEventIdentifier(eventAction.originalEventIdentifier ?? ""),
-        ),
+    // A palette rename changes the label, but `changedShallow` only reports
+    // added and removed palettes.
+    this.disposePaletteNameListeners();
+    const toggleToolPaletteGroup: CommandGroup = {
+      label: "Toggle Tool Palette",
+      shortcut: "",
+    };
+    for (const palette of toolPalettes.palettes) {
+      this.paletteNameDisposers.push(
+        palette.name.changed.add(this.debouncedRebuild),
       );
+      const name = palette.name.value;
+      commands.push({
+        label: name,
+        shortcut: "",
+        source: "derived",
+        group: toggleToolPaletteGroup,
+        command: new CallbackCommand(
+          `toggle-tool-palette-${name}`,
+          `Show/hide ${name}`,
+          () => {
+            palette.location.visible = !palette.location.visible;
+          },
+        ),
+      });
     }
 
     // Registered commands come first. A command's shortcut is whatever binding

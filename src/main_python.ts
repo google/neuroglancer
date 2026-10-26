@@ -43,7 +43,9 @@ import {
 import { registerDefaultCommands } from "#src/ui/default_commands.js";
 import { setDefaultInputEventBindings } from "#src/ui/default_input_event_bindings.js";
 import { makeDefaultViewer } from "#src/ui/default_viewer.js";
+import { bindScreenshotDialog } from "#src/ui/screenshot_menu.js";
 import { bindSkeletonNodeCommands } from "#src/ui/skeleton_node_commands.js";
+import { bindStateEditor } from "#src/ui/state_editor.js";
 import { bindTitle } from "#src/ui/title.js";
 import { UrlHashBinding } from "#src/ui/url_hash_binding.js";
 import { parseFixedLengthArray, verifyInt } from "#src/util/json.js";
@@ -234,4 +236,6 @@ bindDefaultPasteHandler(viewer);
 registerDefaultCommands(viewer.commandRegistry);
 bindSkeletonNodeCommands(viewer);
 bindCommandPalette(viewer);
+bindStateEditor(viewer);
+bindScreenshotDialog(viewer);
 viewer.registerDisposer(bindTitle(viewer.title));

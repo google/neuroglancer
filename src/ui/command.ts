@@ -25,6 +25,7 @@
  */
 
 import type { ActionIdentifier } from "#src/util/event_action_map.js";
+import { isMacPlatform } from "#src/util/platform.js";
 import { NullarySignal } from "#src/util/signal.js";
 
 /**
@@ -137,7 +138,19 @@ export function formatKeyName(name: string) {
   return name;
 }
 
+const MAC_MODIFIER_SYMBOLS: Partial<Record<string, string>> = {
+  control: "⌃",
+  meta: "⌘",
+  alt: "⌥",
+  shift: "⇧",
+};
+
 export function formatKeyStroke(stroke: string) {
   const parts = stroke.split("+");
-  return parts.map(formatKeyName).join("+");
+  if (!isMacPlatform()) return parts.map(formatKeyName).join("+");
+  const formatted = parts.map(
+    (part) => MAC_MODIFIER_SYMBOLS[part] ?? formatKeyName(part),
+  );
+  const keyName = formatted[formatted.length - 1];
+  return formatted.join(keyName.length === 1 ? "" : "+");
 }

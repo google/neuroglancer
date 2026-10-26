@@ -101,6 +101,7 @@ import {
   parseShaderUiControls,
   setControlsInShader,
   ShaderControlState,
+  stripComments,
 } from "#src/webgl/shader_ui_controls.js";
 import {
   computeTextureFormat,
@@ -1169,7 +1170,13 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   }
 
   get isTransparent() {
-    return this.base.displayState.objectAlpha.value < 1.0;
+    const { displayState } = this.base;
+    return (
+      displayState.objectAlpha.value < 1.0 ||
+      stripComments(
+        displayState.skeletonRenderingOptions.shader.value,
+      ).includes("emitRGBA")
+    );
   }
 
   draw(

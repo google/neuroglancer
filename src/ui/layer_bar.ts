@@ -37,6 +37,11 @@ import {
 import { RefCounted } from "#src/util/disposable.js";
 import { removeFromParent } from "#src/util/dom.js";
 import { preventDrag } from "#src/util/drag_and_drop.js";
+import {
+  altModifierLabel,
+  commandOrControlLabel,
+  hasCommandOrControl,
+} from "#src/util/platform.js";
 import { makeCloseButton } from "#src/widget/close_button.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
@@ -159,7 +164,7 @@ class LayerWidget extends RefCounted {
       event.stopPropagation();
     });
     element.addEventListener("click", (event: MouseEvent) => {
-      if (event.ctrlKey) {
+      if (hasCommandOrControl(event)) {
         panel.selectedLayer.toggle(layer);
       } else if (event.altKey) {
         layer.pickEnabled = !layer.pickEnabled;
@@ -230,9 +235,9 @@ class LayerWidget extends RefCounted {
     element.dataset.selected = (layer === panel.selectedLayer.layer).toString();
     let title = `Click to ${
       layer.visible ? "hide" : "show"
-    }, control+click to show side panel`;
+    }, ${commandOrControlLabel()}+click to show side panel`;
     if (layer.supportsPickOption) {
-      title += `, alt+click to ${
+      title += `, ${altModifierLabel()}+click to ${
         layer.pickEnabled ? "disable" : "enable"
       } spatial object selection`;
     }
@@ -332,7 +337,8 @@ export class LayerBar extends RefCounted {
     const addButton = makeIcon({
       svg: svg_plus,
       title:
-        "Click to add layer, control+click/right click/⌘+click to add local annotation layer.",
+        `Click to add layer, ${commandOrControlLabel()}+click` +
+        "/right click to add local annotation layer.",
     });
     addButton.classList.add("neuroglancer-layer-add-button");
 
@@ -340,7 +346,7 @@ export class LayerBar extends RefCounted {
     dropZone.className = "neuroglancer-layer-panel-drop-zone";
 
     const addLayer = (event: MouseEvent) => {
-      if (event.ctrlKey || event.metaKey || event.type === "contextmenu") {
+      if (hasCommandOrControl(event) || event.type === "contextmenu") {
         const layer = makeLayer(this.manager, "annotation", {
           type: "annotation",
           source: "local://annotations",

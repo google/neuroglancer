@@ -24,6 +24,12 @@ export function edgeColorPathsGlsl(path: SkeletonColorPath): string {
 vec4 segmentColor() {
   return getSegmentAppearance(uint64_t(vSegmentId));
 }
+void emitRGBA(vec4 color) {
+  vec4 baseColor = segmentColor();
+  highp float alpha = color.a * baseColor.a * getLineAlpha() * getCrossSectionFade();
+  if (alpha <= 0.0) discard;
+  emit(vec4(color.rgb * alpha, alpha), vPickID);
+}
 void emitRGB(vec3 color) {
   vec4 baseColor = segmentColor();
   highp float alpha = baseColor.a * getLineAlpha() * getCrossSectionFade();
@@ -41,6 +47,10 @@ void emitDefault() {
   return `
 vec4 segmentColor() {
   return uColor;
+}
+void emitRGBA(vec4 color) {
+  color.a *= uColor.a;
+  emit(vec4(color.rgb * color.a, color.a * getLineAlpha() * getCrossSectionFade()), vPickID);
 }
 void emitRGB(vec3 color) {
   emit(vec4(color * uColor.a, uColor.a * getLineAlpha() * getCrossSectionFade()), vPickID);
@@ -78,13 +88,15 @@ vec4 segmentColor() {
   return uColor;
 }
 void emitRGBA(vec4 color) {
+  color.a *= uColor.a;
+  color.rgb *= color.a;
   emit(getCircleColor(color, color), vPickID);
 }
 void emitRGB(vec3 color) {
   emitRGBA(vec4(color, 1.0));
 }
 void emitDefault() {
-  emitRGBA(uColor);
+  emit(getCircleColor(uColor, uColor), vPickID);
 }
 `;
 }

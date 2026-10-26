@@ -21,6 +21,7 @@ import svg_help from "ikonate/icons/help.svg?raw";
 import { throttle } from "lodash-es";
 import { FramedDialog } from "#src/overlay.js";
 import { StatusMessage } from "#src/status.js";
+import { ActionCommand } from "#src/ui/command.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import type {
   ScreenshotLoadStatistics,
@@ -38,6 +39,7 @@ import {
   getViewerLayerResolutions,
   getViewerPanelResolutions,
 } from "#src/util/viewer_resolution_stats.js";
+import type { Viewer } from "#src/viewer.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 
@@ -913,4 +915,17 @@ export class ScreenshotDialog extends FramedDialog {
   get screenshotMode() {
     return this.screenshotManager.screenshotMode;
   }
+}
+
+export function bindScreenshotDialog(viewer: Viewer): void {
+  viewer.registerDisposer(
+    viewer.commandRegistry.register(
+      new ActionCommand(
+        "screenshot",
+        "Screenshot",
+        "Capture a screenshot of the current view.",
+      ),
+    ),
+  );
+  viewer.bindAction("screenshot", () => viewer.showScreenshotDialog());
 }
