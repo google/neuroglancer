@@ -90,113 +90,120 @@ export class SelectionDetailsPanel extends SidePanel {
     this.addBody(body);
     body.appendChild(
       this.registerDisposer(
-        new DependentViewWidget(state, (stateValue, parent, context) => {
-          if (!state.location.visible) return;
-          backButton.style.visibility = state.canGoBack()
-            ? "visible"
-            : "hidden";
-          forwardButton.style.visibility = state.canGoForward()
-            ? "visible"
-            : "hidden";
-          if (stateValue === undefined) return;
+        new DependentViewWidget(
+          state,
+          (stateValue, parent, context) => {
+            if (!state.location.visible) return;
+            backButton.style.visibility = state.canGoBack()
+              ? "visible"
+              : "hidden";
+            forwardButton.style.visibility = state.canGoForward()
+              ? "visible"
+              : "hidden";
+            if (stateValue === undefined) return;
 
-          // Add position
-          const { position } = stateValue;
-          if (position !== undefined) {
-            const positionElement = document.createElement("div");
-            positionElement.classList.add(
-              "neuroglancer-selection-details-position",
-            );
-            const copyButton = makeCopyButton({
-              title: "Copy position",
-              onClick: () => copySelectionPositionToClipboard(state),
-            });
-            positionElement.appendChild(copyButton);
-            const {
-              coordinateSpace: { rank, names },
-              position,
-            } = stateValue;
-            for (let i = 0; i < rank; ++i) {
-              const dimElement = document.createElement("span");
-              dimElement.classList.add(
-                "neuroglancer-selection-details-position-dimension",
+            // Add position
+            const { position } = stateValue;
+            if (position !== undefined) {
+              const positionElement = document.createElement("div");
+              positionElement.classList.add(
+                "neuroglancer-selection-details-position",
               );
-              const nameElement = document.createElement("span");
-              nameElement.classList.add(
-                "neuroglancer-selection-details-position-dimension-name",
-              );
-              nameElement.textContent = names[i];
-              const coordinateElement = document.createElement("span");
-              coordinateElement.classList.add(
-                "neuroglancer-selection-details-position-dimension-coordinate",
-              );
-              coordinateElement.textContent = Math.floor(
-                position![i],
-              ).toString();
-              dimElement.appendChild(nameElement);
-              dimElement.appendChild(coordinateElement);
-              positionElement.appendChild(dimElement);
+              const copyButton = makeCopyButton({
+                title: "Copy position",
+                onClick: () => copySelectionPositionToClipboard(state),
+              });
+              positionElement.appendChild(copyButton);
+              const {
+                coordinateSpace: { rank, names },
+                position,
+              } = stateValue;
+              for (let i = 0; i < rank; ++i) {
+                const dimElement = document.createElement("span");
+                dimElement.classList.add(
+                  "neuroglancer-selection-details-position-dimension",
+                );
+                const nameElement = document.createElement("span");
+                nameElement.classList.add(
+                  "neuroglancer-selection-details-position-dimension-name",
+                );
+                nameElement.textContent = names[i];
+                const coordinateElement = document.createElement("span");
+                coordinateElement.classList.add(
+                  "neuroglancer-selection-details-position-dimension-coordinate",
+                );
+                coordinateElement.textContent = Math.floor(
+                  position![i],
+                ).toString();
+                dimElement.appendChild(nameElement);
+                dimElement.appendChild(coordinateElement);
+                positionElement.appendChild(dimElement);
+              }
+              const moveToButton = makeMoveToButton({
+                title: "Move to position",
+                onClick: () => {
+                  this.manager.globalPosition.value = position!;
+                },
+              });
+              positionElement.appendChild(moveToButton);
+              parent.appendChild(positionElement);
             }
-            const moveToButton = makeMoveToButton({
-              title: "Move to position",
-              onClick: () => {
-                this.manager.globalPosition.value = position!;
-              },
-            });
-            positionElement.appendChild(moveToButton);
-            parent.appendChild(positionElement);
-          }
 
-          for (const layerData of stateValue.layers) {
-            const { layer } = layerData;
-            parent.appendChild(
-              context.registerDisposer(
-                new DependentViewWidget(
-                  {
-                    value: undefined,
-                    changed: layer.managedLayer.layerChanged,
-                  },
-                  (_, parent, context) => {
-                    if (layer.wasDisposed) return;
-                    if (!layer.isReady) {
-                      return;
-                    }
-                    const layerBody = document.createElement("div");
-                    layerBody.classList.add(
-                      "neuroglancer-selection-details-layer-body",
-                    );
-                    if (
-                      !layer.displaySelectionState(
-                        layerData.state,
-                        layerBody,
-                        context,
-                      )
-                    ) {
-                      return;
-                    }
-                    const layerElement = document.createElement("div");
-                    parent.appendChild(layerElement);
-                    layerElement.classList.add(
-                      "neuroglancer-selection-details-layer",
-                    );
-                    const layerTitle = document.createElement("div");
-                    layerTitle.classList.add(
-                      "neuroglancer-selection-details-layer-title",
-                    );
-                    layerTitle.textContent = layer.managedLayer.name;
-                    layerTitle.addEventListener("click", () => {
-                      this.selectedLayer.layer = layer.managedLayer;
-                      this.selectedLayer.visible = true;
-                    });
-                    layerTitle.title = "Click to show layer side panel";
-                    layerElement.appendChild(layerTitle);
-                    layerElement.appendChild(layerBody);
-                  },
-                ),
-              ).element,
-            );
-          }
-        }),
+            for (const layerData of stateValue.layers) {
+              const { layer } = layerData;
+              parent.appendChild(
+                context.registerDisposer(
+                  new DependentViewWidget(
+                    {
+                      value: undefined,
+                      changed: layer.managedLayer.layerChanged,
+                    },
+                    (_, parent, context) => {
+                      if (layer.wasDisposed) return;
+                      if (!layer.isReady) {
+                        return;
+                      }
+                      const layerBody = document.createElement("div");
+                      layerBody.classList.add(
+                        "neuroglancer-selection-details-layer-body",
+                      );
+                      if (
+                        !layer.displaySelectionState(
+                          layerData.state,
+                          layerBody,
+                          context,
+                        )
+                      ) {
+                        return;
+                      }
+                      const layerElement = document.createElement("div");
+                      parent.appendChild(layerElement);
+                      layerElement.classList.add(
+                        "neuroglancer-selection-details-layer",
+                      );
+                      const layerTitle = document.createElement("div");
+                      layerTitle.classList.add(
+                        "neuroglancer-selection-details-layer-title",
+                      );
+                      layerTitle.textContent = layer.managedLayer.name;
+                      layerTitle.addEventListener("click", () => {
+                        this.selectedLayer.layer = layer.managedLayer;
+                        this.selectedLayer.visible = true;
+                      });
+                      layerTitle.title = "Click to show layer side panel";
+                      layerElement.appendChild(layerTitle);
+                      layerElement.appendChild(layerBody);
+                    },
+                    undefined,
+                    { deferRebuildWhileInteracting: true },
+                  ),
+                ).element,
+              );
+            }
+          },
+          undefined,
+          { deferRebuildWhileInteracting: true },
+        ),
       ).element,
     );
   }

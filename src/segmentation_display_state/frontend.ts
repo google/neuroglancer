@@ -27,6 +27,7 @@ import type { SegmentColorHash } from "#src/segment_color.js";
 import { getCssColor } from "#src/segment_color.js";
 import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.js";
 import {
+  Uint64MapEntry,
   forEachVisibleSegment,
   onTemporaryVisibleSegmentsStateChanged,
   onVisibleSegmentsStateChanged,
@@ -72,25 +73,7 @@ const SEGMENT_LIST_COLOR_WIDGET_ENABLED =
   typeof NEUROGLANCER_SEGMENT_LIST_COLOR_WIDGET !== "undefined" &&
   NEUROGLANCER_SEGMENT_LIST_COLOR_WIDGET === true;
 
-export class Uint64MapEntry {
-  constructor(
-    public key: bigint,
-    public value?: bigint,
-    public label?: string | undefined,
-  ) {}
-  toString() {
-    const { key, value, label } = this;
-    let baseString: string;
-    if (value === undefined) {
-      baseString = `${key}`;
-    } else {
-      baseString = `${key}→${value}`;
-    }
-    if (label === undefined) return baseString;
-    return `${baseString} ${label}`;
-  }
-}
-
+export { Uint64MapEntry };
 export class SegmentSelectionState extends RefCounted {
   selectedSegment = 0n;
   baseSelectedSegment = 0n;

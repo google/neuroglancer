@@ -608,6 +608,12 @@ export class UserLayer extends RefCounted {
     return value;
   }
 
+  getMissingAnnotationToolMessage(): string {
+    return `The selected layer (${JSON.stringify(
+      this.managedLayer.name,
+    )}) does not have an active annotation tool.`;
+  }
+
   toJSON(): any {
     return {
       type: this.type,
@@ -1115,10 +1121,17 @@ export class LayerManager extends RefCounted {
   }
 }
 
+export interface PickedSpatialSkeletonState {
+  nodeId?: bigint;
+  segmentId?: bigint;
+  position?: Float32Array;
+}
+
 export interface PickState {
   pickedRenderLayer: RenderLayer | null;
   pickedValue: bigint;
   pickedOffset: number;
+  pickedSpatialSkeleton: PickedSpatialSkeletonState | undefined;
   pickedAnnotationLayer: AnnotationLayerState | undefined;
   pickedAnnotationId: string | undefined;
   pickedAnnotationBuffer: ArrayBuffer | undefined;
@@ -1140,6 +1153,7 @@ export class MouseSelectionState implements PickState {
   pickedRenderLayer: RenderLayer | null = null;
   pickedValue = 0n;
   pickedOffset = 0;
+  pickedSpatialSkeleton: PickedSpatialSkeletonState | undefined = undefined;
   pickedAnnotationLayer: AnnotationLayerState | undefined = undefined;
   pickedAnnotationId: string | undefined = undefined;
   pickedAnnotationBuffer: ArrayBuffer | undefined = undefined;

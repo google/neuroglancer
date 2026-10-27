@@ -37,6 +37,7 @@ import type { ToolActivation } from "#src/ui/tool.js";
 import {
   LayerTool,
   makeToolActivationStatusMessageWithHeader,
+  makeToolStatusChip,
   registerTool,
 } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
@@ -450,28 +451,6 @@ export abstract class AnnotationPropertyEntryTool extends LayerTool<AnnotationUs
   get description() {
     return `${this.modeVerb.toLowerCase()} ${this.propertyIdentifier}`;
   }
-
-  protected appendChip(
-    container: HTMLElement,
-    key: string,
-    label: string,
-    active: boolean,
-  ) {
-    const chip = document.createElement("div");
-    chip.classList.add("neuroglancer-annotation-entry-tool-chip");
-    if (active) {
-      chip.classList.add("neuroglancer-annotation-entry-tool-chip-active");
-    }
-    const keyElement = document.createElement("span");
-    keyElement.classList.add("neuroglancer-annotation-entry-tool-chip-key");
-    keyElement.textContent = key;
-    const labelElement = document.createElement("span");
-    labelElement.classList.add("neuroglancer-annotation-entry-tool-chip-label");
-    labelElement.textContent = label;
-    chip.appendChild(keyElement);
-    chip.appendChild(labelElement);
-    container.appendChild(chip);
-  }
 }
 
 export class EnumPropertyEntryTool extends AnnotationPropertyEntryTool {
@@ -556,13 +535,14 @@ export class EnumPropertyEntryTool extends AnnotationPropertyEntryTool {
     const useNumberEntry = this.useNumberEntry;
     // Ten options fit 1-9 and 0; larger enums use buffered 1-based entry.
     enumValues.forEach((value, index) => {
-      this.appendChip(
-        valueContainer,
-        useNumberEntry
-          ? String(index + 1)
-          : (keyForEnumOptionIndex(index) ?? String(index + 1)),
-        enumLabels[index] ?? String(value),
-        value === currentValue,
+      valueContainer.appendChild(
+        makeToolStatusChip(
+          useNumberEntry
+            ? String(index + 1)
+            : (keyForEnumOptionIndex(index) ?? String(index + 1)),
+          enumLabels[index] ?? String(value),
+          value === currentValue,
+        ),
       );
     });
     if (useNumberEntry) this.entry.render(entrySlot);

@@ -159,6 +159,10 @@ export class SliceViewPanel extends RenderedDataPanel {
     return this.sliceView.navigationState;
   }
 
+  get projectionParameters() {
+    return this.sliceView.projectionParameters;
+  }
+
   constructor(
     context: Borrowed<DisplayContext>,
     element: HTMLElement,

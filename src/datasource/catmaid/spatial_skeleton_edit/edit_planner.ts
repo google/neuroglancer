@@ -1,0 +1,2211 @@
+/**
+ * @license
+ * Copyright 2026 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * @file Turns each CATMAID Execute, Undo or Redo intent into a preview and a
+ * plan, builds the edit request for each step, and reads CATMAID's results into
+ * confirmed IDs.
+ */
+
+import { toCatmaidPositionInModelSpace } from "#src/datasource/catmaid/api.js";
+import type { CatmaidSpatialSkeletonCommandPayload } from "#src/datasource/catmaid/spatial_skeleton_edit/command_payloads.js";
+import type {
+  CatmaidAttributeSemantic,
+  CatmaidCapturedSegment,
+  CatmaidCreatedNodeSemantic,
+  CatmaidDeleteNodeSemantic,
+  CatmaidMergeSemantic,
+  CatmaidMoveNodeSemantic,
+  CatmaidRerootSemantic,
+  CatmaidRetainedNode,
+  CatmaidCapturedEdit,
+  CatmaidSplitSemantic,
+  CatmaidEditPlan,
+  CatmaidEditPlanStep,
+} from "#src/datasource/catmaid/spatial_skeleton_edit/edit_plan.js";
+import {
+  makeSteps,
+  requirePositiveId,
+} from "#src/datasource/catmaid/spatial_skeleton_edit/edit_plan.js";
+import type {
+  CatmaidEditRequest,
+  CatmaidEditRequestResult,
+} from "#src/datasource/catmaid/spatial_skeleton_edit/edit_requests.js";
+import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
+import type {
+  SpatialSkeletonAction,
+  SpatialSkeletonEditCommand,
+} from "#src/skeleton/edit_commands.js";
+import type {
+  SpatialSkeletonIntentCreationContext,
+  SpatialSkeletonEditPlanner,
+  SpatialSkeletonIntentPlan,
+  SpatialSkeletonEditPlanContext,
+  SpatialSkeletonIdentityService,
+  SpatialSkeletonPendingEditDescriptor,
+  SpatialSkeletonProvisionalNumericIdPolicy,
+  SpatialSkeletonProvisionalNumericIdService,
+} from "#src/skeleton/edit_queue/api.js";
+import type { CompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
+import type {
+  SpatialSkeletonEditDelta,
+  SpatialSkeletonEditInverseDelta,
+} from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
+import { getSkeletonNodeChanges } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
+import type { SpatialSkeletonIntentResource } from "#src/skeleton/edit_queue/edit_intent_journal.js";
+import type {
+  SpatialSkeletonAuthoritativeReconciliation,
+  SpatialSkeletonPreviewInspectionSeed,
+  SpatialSkeletonPreviewIntentDelta,
+} from "#src/skeleton/edit_queue/preview.js";
+import type { SpatialSkeletonPreviewUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
+import type { SpatialSkeletonQueueInput } from "#src/skeleton/edit_queue/queue_input.js";
+import type {
+  SpatialSkeletonStableNodeHandle,
+  SpatialSkeletonStableResourceHandle,
+  SpatialSkeletonStableSegmentHandle,
+} from "#src/skeleton/edit_queue/stable_id_handles.js";
+import {
+  getSpatialSkeletonStableResourceKey,
+  spatialSkeletonStableNode,
+  spatialSkeletonStableSegment,
+} from "#src/skeleton/edit_queue/stable_id_handles.js";
+import type { SpatialSkeletonAuthorityLabels } from "#src/skeleton/edit_queue/types.js";
+import {
+  getSkeletonNodeConfidence,
+  getSkeletonNodeRadius,
+  isSkeletonNodeTrueEnd,
+} from "#src/skeleton/node_attributes.js";
+
+export type { CatmaidEditPlan } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_plan.js";
+
+/** Immutable queue input returned by CATMAID command factories. */
+export interface CatmaidSpatialSkeletonCommandDescriptor
+  extends SpatialSkeletonEditCommand {
+  readonly action: SpatialSkeletonAction;
+  readonly payload: CatmaidSpatialSkeletonCommandPayload;
+}
+
+interface CatmaidMaterializationContext {
+  readonly direction: "forward" | "inverse";
+  readonly localNodeBindings: ReadonlyMap<string, bigint>;
+  readonly localSegmentBindings: ReadonlyMap<string, bigint>;
+}
+
+type CatmaidEditPlanContext = SpatialSkeletonEditPlanContext<
+  CatmaidEditRequest,
+  CatmaidEditRequestResult
+>;
+
+/** CATMAID authority half of the generic edit planner. */
+abstract class CatmaidEditPlanCommitBase {
+  constructor(protected readonly identity: SpatialSkeletonIdentityService) {}
+
+  protected segmentHandle(segmentId: bigint) {
+    return this.identity.getOrCreateSegmentHandle(segmentId);
+  }
+
+  nextAttempt(plan: CatmaidEditPlan, context: CatmaidEditPlanContext) {
+    const steps = makeSteps(plan.semantic, plan.direction);
+    const step = steps[context.committedAttempts.length];
+    if (step === undefined) return undefined;
+    const { committedAttempts } = context;
+    return Object.freeze({
+      materializeEditRequest: () =>
+        this.makeEditRequest(
+          this.createMaterializationContext(plan, committedAttempts),
+          step,
+        ),
+    });
+  }
+
+  createReconciliation(plan: CatmaidEditPlan, context: CatmaidEditPlanContext) {
+    return this.reconcile(plan, context);
+  }
+
+  private createMaterializationContext(
+    plan: CatmaidEditPlan,
+    attempts: CatmaidEditPlanContext["committedAttempts"],
+  ): CatmaidMaterializationContext {
+    const localNodeBindings = new Map<string, bigint>();
+    const localSegmentBindings = new Map<string, bigint>();
+    const steps = makeSteps(plan.semantic, plan.direction);
+    for (let index = 0; index < attempts.length; ++index) {
+      const attempt = attempts[index];
+      const step = steps[index]!;
+      if (step.kind === "add-node" || step.kind === "insert-node") {
+        const result = attempt.result as {
+          readonly nodeId?: bigint;
+          readonly segmentId?: bigint;
+        };
+        localNodeBindings.set(
+          step.semantic.node.stableId,
+          requirePositiveId(result.nodeId, "created node result"),
+        );
+        localSegmentBindings.set(
+          step.semantic.segment.stableId,
+          requirePositiveId(result.segmentId, "created skeleton result"),
+        );
+      } else if (step.kind === "split") {
+        const result = attempt.result as {
+          readonly existingSegmentId?: bigint;
+          readonly newSegmentId?: bigint;
+        };
+        const existingId = requirePositiveId(
+          result.existingSegmentId,
+          "split existing skeleton",
+        );
+        const newId = requirePositiveId(
+          result.newSegmentId,
+          "split result skeleton",
+        );
+        if (step.semantic.kind === "split") {
+          localSegmentBindings.set(
+            step.semantic.sourceSegment.stableId,
+            existingId,
+          );
+          localSegmentBindings.set(
+            step.semantic.downstreamSegment.stableId,
+            newId,
+          );
+        } else {
+          const existingSegment =
+            step.semantic.inverseOrientation === "second-from-first"
+              ? step.semantic.firstSegment
+              : step.semantic.secondSegment;
+          const restoredSegment =
+            step.semantic.inverseOrientation === "second-from-first"
+              ? step.semantic.secondSegment
+              : step.semantic.firstSegment;
+          localSegmentBindings.set(existingSegment.stableId, existingId);
+          localSegmentBindings.set(restoredSegment.stableId, newId);
+        }
+      } else if (step.kind === "merge") {
+        const resultId = requirePositiveId(
+          (attempt.result as { readonly resultSegmentId?: bigint })
+            .resultSegmentId,
+          "merge result skeleton",
+        );
+        if (step.semantic.kind === "split") {
+          localSegmentBindings.set(
+            step.semantic.sourceSegment.stableId,
+            resultId,
+          );
+          localSegmentBindings.set(
+            step.semantic.downstreamSegment.stableId,
+            resultId,
+          );
+        } else {
+          localSegmentBindings.set(
+            step.semantic.firstSegment.stableId,
+            resultId,
+          );
+          localSegmentBindings.set(
+            step.semantic.secondSegment.stableId,
+            resultId,
+          );
+          localSegmentBindings.set(
+            step.semantic.mergedSegment.stableId,
+            resultId,
+          );
+        }
+      }
+    }
+    return Object.freeze({
+      direction: plan.direction,
+      localNodeBindings,
+      localSegmentBindings,
+    });
+  }
+
+  private resolveNode(
+    context: CatmaidMaterializationContext,
+    handle: SpatialSkeletonStableNodeHandle,
+  ) {
+    const local = context.localNodeBindings.get(handle.stableId);
+    if (local !== undefined) return local;
+    const physicalId = this.identity.resolveAuthoritativeNode(handle);
+    if (physicalId === undefined) {
+      const target = this.identity.resolveNodeTarget(handle);
+      throw new Error(
+        `CATMAID plan requires authoritative node ${handle.stableId}; it is ${target.state}.`,
+      );
+    }
+    return physicalId;
+  }
+
+  private resolveSegment(
+    context: CatmaidMaterializationContext,
+    handle: SpatialSkeletonStableSegmentHandle,
+  ) {
+    const local = context.localSegmentBindings.get(handle.stableId);
+    if (local !== undefined) return local;
+    const physicalId = this.identity.resolveAuthoritativeSegment(handle);
+    if (physicalId === undefined) {
+      const target = this.identity.resolveSegmentTarget(handle);
+      throw new Error(
+        `CATMAID plan requires authoritative skeleton ${handle.stableId}; it is ${target.state}.`,
+      );
+    }
+    return physicalId;
+  }
+
+  private makeEditRequest(
+    context: CatmaidMaterializationContext,
+    step: CatmaidEditPlanStep,
+  ): CatmaidEditRequest {
+    switch (step.kind) {
+      case "add-node": {
+        const semantic = step.semantic as
+          | CatmaidCreatedNodeSemantic
+          | CatmaidDeleteNodeSemantic;
+        const { parent } = semantic;
+        return {
+          kind: "add-node",
+          request: {
+            position:
+              semantic.kind === "delete-node"
+                ? semantic.deletedSnapshot.position
+                : semantic.position,
+            parentNodeId:
+              parent === undefined
+                ? undefined
+                : this.resolveNode(context, parent),
+          },
+        };
+      }
+      case "insert-node": {
+        const { semantic } = step;
+        if (semantic.parent === undefined) {
+          throw new Error("CATMAID insert plan is missing its parent.");
+        }
+        return {
+          kind: "insert-node",
+          request: {
+            position:
+              semantic.kind === "delete-node"
+                ? semantic.deletedSnapshot.position
+                : semantic.position,
+            parentNodeId: this.resolveNode(context, semantic.parent),
+            childNodeIds: (semantic.children ?? []).map((handle) =>
+              this.resolveNode(context, handle),
+            ),
+          },
+        };
+      }
+      case "delete-node": {
+        const semantic = step.semantic as
+          | CatmaidCreatedNodeSemantic
+          | CatmaidDeleteNodeSemantic;
+        return {
+          kind: "delete-node",
+          request: { nodeId: this.resolveNode(context, semantic.node) },
+        };
+      }
+      case "move-node": {
+        const semantic = step.semantic as CatmaidMoveNodeSemantic;
+        return {
+          kind: "move-node",
+          request: {
+            nodeId: this.resolveNode(context, semantic.node),
+            position:
+              context.direction === "forward"
+                ? semantic.after
+                : semantic.before,
+          },
+        };
+      }
+      case "description": {
+        const semantic = step.semantic as
+          | CatmaidAttributeSemantic
+          | CatmaidDeleteNodeSemantic;
+        const value = this.getAttributeValue(context, semantic, "description");
+        return {
+          kind: "description",
+          request: {
+            nodeId: this.resolveNode(context, semantic.node),
+            description: typeof value === "string" ? value : "",
+            isTrueEnd:
+              semantic.kind === "delete-node"
+                ? isSkeletonNodeTrueEnd(semantic.deletedSnapshot)
+                : isSkeletonNodeTrueEnd(semantic.nodeSnapshot),
+          },
+        };
+      }
+      case "true-end": {
+        const semantic = step.semantic as
+          | CatmaidAttributeSemantic
+          | CatmaidDeleteNodeSemantic;
+        return {
+          kind: "true-end",
+          request: {
+            nodeId: this.resolveNode(context, semantic.node),
+            isTrueEnd: Boolean(
+              this.getAttributeValue(context, semantic, "true-end"),
+            ),
+          },
+        };
+      }
+      case "radius": {
+        const semantic = step.semantic as
+          | CatmaidAttributeSemantic
+          | CatmaidDeleteNodeSemantic;
+        return {
+          kind: "radius",
+          request: {
+            nodeId: this.resolveNode(context, semantic.node),
+            radius: Number(this.getAttributeValue(context, semantic, "radius")),
+          },
+        };
+      }
+      case "restore-confidence":
+        return {
+          kind: "confidence",
+          request: {
+            nodeId: this.resolveNode(context, step.node),
+            confidence: step.confidence,
+          },
+        };
+      case "confidence": {
+        const semantic = step.semantic as
+          | CatmaidAttributeSemantic
+          | CatmaidDeleteNodeSemantic;
+        return {
+          kind: "confidence",
+          request: {
+            nodeId: this.resolveNode(context, semantic.node),
+            confidence: Number(
+              this.getAttributeValue(context, semantic, "confidence"),
+            ),
+          },
+        };
+      }
+      case "reroot": {
+        const semantic = step.semantic as
+          | CatmaidRerootSemantic
+          | CatmaidMergeSemantic;
+        const target =
+          semantic.kind === "reroot" && context.direction === "forward"
+            ? semantic.node
+            : semantic.originalRoot;
+        return {
+          kind: "reroot",
+          request: { nodeId: this.resolveNode(context, target) },
+        };
+      }
+      case "split": {
+        const semantic = step.semantic as
+          | CatmaidSplitSemantic
+          | CatmaidMergeSemantic;
+        const target =
+          semantic.kind === "split"
+            ? semantic.node
+            : semantic.inverseOrientation === "second-from-first"
+              ? semantic.secondNode
+              : semantic.firstNode;
+        return {
+          kind: "split",
+          request: { nodeId: this.resolveNode(context, target) },
+        };
+      }
+      case "merge": {
+        const semantic = step.semantic as
+          | CatmaidSplitSemantic
+          | CatmaidMergeSemantic;
+        const firstHandle =
+          semantic.kind === "split"
+            ? semantic.formerParent
+            : semantic.inverseOrientation === "second-from-first"
+              ? semantic.firstNode
+              : semantic.secondNode;
+        const secondHandle =
+          semantic.kind === "split"
+            ? semantic.node
+            : semantic.inverseOrientation === "second-from-first"
+              ? semantic.secondNode
+              : semantic.firstNode;
+        const inputSegmentIds: readonly [bigint, bigint] = Object.freeze(
+          semantic.kind === "split"
+            ? [
+                this.resolveSegment(context, semantic.sourceSegment),
+                this.resolveSegment(context, semantic.downstreamSegment),
+              ]
+            : [
+                this.resolveSegment(context, semantic.firstSegment),
+                this.resolveSegment(context, semantic.secondSegment),
+              ],
+        );
+        const editRequest: CatmaidEditRequest<"merge"> = Object.freeze({
+          kind: "merge",
+          request: Object.freeze({
+            fromNodeId: this.resolveNode(context, firstHandle),
+            toNodeId: this.resolveNode(context, secondHandle),
+          }),
+          inputSegmentIds,
+        });
+        return editRequest;
+      }
+    }
+  }
+
+  private getAttributeValue(
+    context: CatmaidMaterializationContext,
+    semantic: CatmaidAttributeSemantic | CatmaidDeleteNodeSemantic,
+    kind: "description" | "true-end" | "radius" | "confidence",
+  ) {
+    if (semantic.kind === "delete-node") {
+      switch (kind) {
+        case "description":
+          return semantic.deletedSnapshot.description;
+        case "true-end":
+          return isSkeletonNodeTrueEnd(semantic.deletedSnapshot);
+        case "radius":
+          return getSkeletonNodeRadius(semantic.deletedSnapshot) ?? 0;
+        case "confidence":
+          return getSkeletonNodeConfidence(semantic.deletedSnapshot) ?? 0;
+      }
+    }
+    return context.direction === "forward" ? semantic.after : semantic.before;
+  }
+
+  private reconcile(
+    plan: CatmaidEditPlan,
+    context: CatmaidEditPlanContext,
+  ): SpatialSkeletonAuthoritativeReconciliation {
+    const materialization = this.createMaterializationContext(
+      plan,
+      context.committedAttempts,
+    );
+    const nodeBindings: Array<
+      readonly [SpatialSkeletonStableNodeHandle, bigint]
+    > = [];
+    const segmentBindings: Array<
+      readonly [SpatialSkeletonStableSegmentHandle, bigint]
+    > = [];
+    const retired = new Map<string, SpatialSkeletonStableResourceHandle>();
+    const retiredSegmentIds = new Set<bigint>();
+    let finalizedPreviewDelta: SpatialSkeletonEditDelta | undefined;
+
+    const steps = makeSteps(plan.semantic, plan.direction);
+    const attempts = context.committedAttempts;
+    for (let index = 0; index < attempts.length; ++index) {
+      const committed = attempts[index];
+      const step = steps[index]!;
+      switch (step.kind) {
+        case "add-node":
+        case "insert-node": {
+          const result = committed.result as {
+            nodeId: bigint;
+            segmentId: bigint;
+          };
+          nodeBindings.push([step.semantic.node, result.nodeId]);
+          segmentBindings.push([step.semantic.segment, result.segmentId]);
+          break;
+        }
+        case "description": {
+          const result = committed.result as {
+            description?: string;
+          };
+          if (
+            step.semantic.kind === "description" &&
+            result.description !==
+              this.getAttributeValue(
+                materialization,
+                step.semantic,
+                "description",
+              )
+          ) {
+            finalizedPreviewDelta = {
+              kind: "node-attributes",
+              segment: step.semantic.segment,
+              node: step.semantic.node,
+              changes: { description: result.description },
+            };
+          }
+          break;
+        }
+        case "delete-node": {
+          retired.set(
+            getSpatialSkeletonStableResourceKey(step.semantic.node),
+            step.semantic.node,
+          );
+          if (
+            (step.semantic.kind === "add-node" &&
+              step.semantic.createsSegment) ||
+            (step.semantic.kind === "delete-node" && step.semantic.wasSoleRoot)
+          ) {
+            retired.set(
+              getSpatialSkeletonStableResourceKey(step.semantic.segment),
+              step.semantic.segment,
+            );
+          }
+          break;
+        }
+        case "split": {
+          const result = committed.result as {
+            existingSegmentId?: bigint;
+            newSegmentId?: bigint;
+          };
+          const existingId = requirePositiveId(
+            result.existingSegmentId,
+            "split existing skeleton",
+          );
+          const newId = requirePositiveId(
+            result.newSegmentId,
+            "split result skeleton",
+          );
+          if (step.semantic.kind === "split") {
+            segmentBindings.push([step.semantic.sourceSegment, existingId]);
+            segmentBindings.push([step.semantic.downstreamSegment, newId]);
+          } else {
+            const existingSegment =
+              step.semantic.inverseOrientation === "second-from-first"
+                ? step.semantic.firstSegment
+                : step.semantic.secondSegment;
+            const restoredSegment =
+              step.semantic.inverseOrientation === "second-from-first"
+                ? step.semantic.secondSegment
+                : step.semantic.firstSegment;
+            segmentBindings.push([existingSegment, existingId]);
+            segmentBindings.push([restoredSegment, newId]);
+          }
+          break;
+        }
+        case "merge": {
+          const result = committed.result as {
+            resultSegmentId?: bigint;
+            deletedSegmentId?: bigint;
+            directionAdjusted?: boolean;
+          };
+          const resultId = requirePositiveId(
+            result.resultSegmentId,
+            "merge result skeleton",
+          );
+          const deletedId = requirePositiveId(
+            result.deletedSegmentId,
+            "merge deleted skeleton",
+          );
+          if (step.semantic.kind === "split") {
+            if (result.directionAdjusted === true) {
+              throw new Error(
+                "CATMAID reversed the merge used to undo a split; reload is required to reconcile the committed topology.",
+              );
+            }
+            const [sourceId, downstreamId] = this.requireMergeInputSegmentIds(
+              committed.editRequest,
+            );
+            if (resultId !== sourceId || deletedId !== downstreamId) {
+              throw new Error(
+                "CATMAID split Undo merge result does not match its retained input skeletons.",
+              );
+            }
+            segmentBindings.push(
+              [step.semantic.sourceSegment, resultId],
+              [step.semantic.downstreamSegment, resultId],
+            );
+          } else {
+            const mergeSemantic = step.semantic;
+            const requestedOrientation = mergeSemantic.inverseOrientation;
+            const [firstId, secondId] = this.requireMergeInputSegmentIds(
+              committed.editRequest,
+            );
+            if (
+              !(
+                (resultId === firstId && deletedId === secondId) ||
+                (resultId === secondId && deletedId === firstId)
+              )
+            ) {
+              throw new Error(
+                "CATMAID merge result does not match either retained input skeleton.",
+              );
+            }
+            const actualOrientation = result.directionAdjusted
+              ? requestedOrientation === "second-from-first"
+                ? ("first-from-second" as const)
+                : ("second-from-first" as const)
+              : requestedOrientation;
+            const expectedResultId =
+              actualOrientation === "second-from-first" ? firstId : secondId;
+            const expectedDeletedId =
+              actualOrientation === "second-from-first" ? secondId : firstId;
+            if (
+              resultId !== expectedResultId ||
+              deletedId !== expectedDeletedId
+            ) {
+              throw new Error(
+                "CATMAID merge result conflicts with its reported orientation.",
+              );
+            }
+            // Keep both semantic identities bound to the source-wide survivor.
+            // Later previewed edits and history recipes may refer to either;
+            // Undo overlays the restored loser with its fresh split id.
+            segmentBindings.push(
+              [step.semantic.firstSegment, resultId],
+              [step.semantic.secondSegment, resultId],
+              [step.semantic.mergedSegment, resultId],
+            );
+            if (actualOrientation !== requestedOrientation) {
+              finalizedPreviewDelta = {
+                kind: "merge",
+                firstSegment:
+                  actualOrientation === "second-from-first"
+                    ? step.semantic.firstSegment
+                    : step.semantic.secondSegment,
+                secondSegment:
+                  actualOrientation === "second-from-first"
+                    ? step.semantic.secondSegment
+                    : step.semantic.firstSegment,
+                resultSegment: step.semantic.mergedSegment,
+                firstNode:
+                  actualOrientation === "second-from-first"
+                    ? step.semantic.firstNode
+                    : step.semantic.secondNode,
+                secondNode:
+                  actualOrientation === "second-from-first"
+                    ? step.semantic.secondNode
+                    : step.semantic.firstNode,
+              };
+            }
+          }
+          retiredSegmentIds.add(deletedId);
+          break;
+        }
+      }
+    }
+
+    return Object.freeze({
+      bindings: Object.freeze({
+        nodes: Object.freeze(nodeBindings),
+        segments: Object.freeze(segmentBindings),
+      }),
+      retiredResources: Object.freeze([...retired.values()]),
+      ...(retiredSegmentIds.size === 0
+        ? {}
+        : { retiredSegmentIds: Object.freeze([...retiredSegmentIds]) }),
+      ...(finalizedPreviewDelta === undefined ? {} : { finalizedPreviewDelta }),
+    });
+  }
+
+  private requireMergeInputSegmentIds(
+    editRequest: CatmaidEditRequest,
+  ): readonly [bigint, bigint] {
+    if (editRequest.kind !== "merge") {
+      throw new Error("CATMAID merge reconciliation lost its edit request.");
+    }
+    return editRequest.inputSegmentIds;
+  }
+}
+
+/** Resolve a queued user intent against the complete, ordered input bundle. */
+function resolveCatmaidPreparedCommand(
+  command: CatmaidSpatialSkeletonCommandDescriptor,
+  queueInput: SpatialSkeletonQueueInput,
+  identity: SpatialSkeletonIdentityService,
+): CatmaidSpatialSkeletonCommandDescriptor {
+  const resolveNode = <T extends { nodeId: bigint; segmentId: bigint }>(
+    node: T,
+  ): T => {
+    const nodeId =
+      identity.resolveNode(identity.getOrCreateNodeHandle(node.nodeId)) ??
+      node.nodeId;
+    const current = queueInput.segments
+      .map(({ snapshot }) => snapshot.getNode(nodeId))
+      .find((node) => node !== undefined);
+    const segmentId =
+      current?.segmentId ??
+      identity.resolveSegment(
+        identity.getOrCreateSegmentHandle(node.segmentId),
+      ) ??
+      node.segmentId;
+    return Object.freeze({ ...node, nodeId, segmentId });
+  };
+  const { payload } = command;
+  let resolved: CatmaidSpatialSkeletonCommandPayload;
+  switch (payload.kind) {
+    case "merge":
+      resolved = {
+        ...payload,
+        options: {
+          ...payload.options,
+          firstNode: resolveNode(payload.options.firstNode),
+          secondNode: resolveNode(payload.options.secondNode),
+        },
+      };
+      break;
+    case "add-node": {
+      const { options } = payload;
+      if (options.parentNodeId === undefined) return command;
+      const parent = resolveNode({
+        nodeId: options.parentNodeId,
+        segmentId: options.skeletonId,
+      });
+      resolved = {
+        ...payload,
+        options: {
+          ...options,
+          parentNodeId: parent.nodeId,
+          skeletonId: parent.segmentId,
+        },
+      };
+      break;
+    }
+    case "delete-node":
+      resolved = { ...payload, node: resolveNode(payload.node) };
+      break;
+    case "reroot":
+      resolved = { ...payload, node: resolveNode(payload.node) };
+      break;
+    case "split":
+      resolved = { ...payload, node: resolveNode(payload.node) };
+      break;
+    case "move-node":
+      resolved = {
+        ...payload,
+        options: {
+          ...payload.options,
+          node: resolveNode(payload.options.node),
+        },
+      };
+      break;
+    case "description":
+      resolved = {
+        ...payload,
+        options: {
+          ...payload.options,
+          node: resolveNode(payload.options.node),
+        },
+      };
+      break;
+    case "true-end":
+      resolved = {
+        ...payload,
+        options: {
+          ...payload.options,
+          node: resolveNode(payload.options.node),
+        },
+      };
+      break;
+    case "radius":
+      resolved = {
+        ...payload,
+        options: {
+          ...payload.options,
+          node: resolveNode(payload.options.node),
+        },
+      };
+      break;
+    case "confidence":
+      resolved = {
+        ...payload,
+        options: {
+          ...payload.options,
+          node: resolveNode(payload.options.node),
+        },
+      };
+      break;
+  }
+  return Object.freeze({ ...command, payload: Object.freeze(resolved) });
+}
+
+// Match CATMAID creation defaults so later history captures complete values.
+const CATMAID_CREATED_NODE_ATTRIBUTES = Object.freeze({
+  radius: 0,
+  confidence: 0,
+  isTrueEnd: false,
+});
+
+const CATMAID_OPTIMISTIC_STALLED_WARNING = Object.freeze({
+  delayMs: 30_000,
+  message:
+    "CATMAID has not confirmed the optimistic skeleton edit yet. The server edit request lane is stalled, but you may continue previewing independent edits while the request remains in order.",
+});
+
+const CATMAID_OPTIMISTIC_OPERATION_NOUNS = Object.freeze({
+  "add-node": "node creation",
+  "move-node": "node movement",
+  "delete-node": "node deletion",
+  reroot: "skeleton rerooting",
+  split: "skeleton splitting",
+  merge: "skeleton merging",
+  description: "node description editing",
+  "true-end": "node true-end editing",
+  radius: "node radius editing",
+  confidence: "node confidence editing",
+}) satisfies Readonly<
+  Record<CatmaidSpatialSkeletonCommandPayload["kind"], string>
+>;
+
+function getCatmaidAuthorityLabels(
+  kind: CatmaidSpatialSkeletonCommandPayload["kind"],
+): SpatialSkeletonAuthorityLabels {
+  return Object.freeze({
+    authorityLabel: "CATMAID",
+    operationNoun: CATMAID_OPTIMISTIC_OPERATION_NOUNS[kind],
+    stalledWarning: CATMAID_OPTIMISTIC_STALLED_WARNING,
+  });
+}
+
+function copyVector(value: ArrayLike<number>): SkeletonVector {
+  return Object.freeze(Array.from(value));
+}
+
+function uniqueResources(
+  handles: readonly SpatialSkeletonStableResourceHandle[],
+) {
+  const resources = new Map<string, SpatialSkeletonIntentResource>();
+  for (const handle of handles) {
+    resources.set(getSpatialSkeletonStableResourceKey(handle), {
+      handle,
+      access: "write",
+    });
+  }
+  return Object.freeze([...resources.values()]);
+}
+
+function freezeNode(node: SkeletonNode) {
+  return Object.freeze({
+    nodeId: node.nodeId,
+    segmentId: node.segmentId,
+    position: toCatmaidPositionInModelSpace(node.position, "node position"),
+    parentNodeId: node.parentNodeId,
+    attributes: node.attributes,
+    description: node.description,
+  });
+}
+
+function makeRetainedNode(
+  capturedNodeId: bigint,
+  handle: SpatialSkeletonStableNodeHandle,
+): CatmaidRetainedNode {
+  return Object.freeze({
+    capturedNodeId,
+    handle,
+    get kind() {
+      return handle.kind;
+    },
+    get stableId() {
+      return handle.stableId;
+    },
+  });
+}
+
+function getDirection(
+  intent: "execute" | "undo" | "redo",
+): "forward" | "inverse" {
+  return intent === "undo" ? "inverse" : "forward";
+}
+
+// CATMAID IDs are Postgres int8, so an ID from 2^63 is never a real one.
+const CATMAID_FIRST_PROVISIONAL_ID = 2n ** 63n;
+
+/** Deterministic, state-free policy; the generic identity service owns use. */
+export const CATMAID_PROVISIONAL_NUMERIC_ID_POLICY: SpatialSkeletonProvisionalNumericIdPolicy =
+  Object.freeze({
+    allocateNodeId(intentId: number) {
+      return CATMAID_FIRST_PROVISIONAL_ID + BigInt(intentId);
+    },
+    allocateSegmentId(intentId: number) {
+      return CATMAID_FIRST_PROVISIONAL_ID + BigInt(intentId);
+    },
+  });
+
+export class CatmaidEditPlanner
+  extends CatmaidEditPlanCommitBase
+  implements
+    SpatialSkeletonEditPlanner<
+      CatmaidSpatialSkeletonCommandDescriptor,
+      CatmaidEditPlan,
+      SpatialSkeletonPreviewIntentDelta,
+      CatmaidEditRequest,
+      CatmaidEditRequestResult,
+      SpatialSkeletonAuthoritativeReconciliation,
+      SpatialSkeletonEditInverseDelta
+    >
+{
+  constructor(
+    identity: SpatialSkeletonIdentityService,
+    private readonly provisionalIds: SpatialSkeletonProvisionalNumericIdService,
+  ) {
+    super(identity);
+  }
+
+  describeIntent(input: CatmaidSpatialSkeletonCommandDescriptor) {
+    const { payload } = input;
+    return Object.freeze({
+      kind: this.getQueueKind(payload.kind),
+      commandLabel: input.label,
+      authorityLabels: getCatmaidAuthorityLabels(payload.kind),
+      ...(payload.kind === "merge"
+        ? {
+            pendingEdit: Object.freeze({
+              kind: "merge" as const,
+              segmentIds: Object.freeze([
+                payload.options.firstNode.segmentId,
+                payload.options.secondNode.segmentId,
+              ]),
+              endpointNodeIds: Object.freeze([
+                payload.options.firstNode.nodeId,
+                payload.options.secondNode.nodeId,
+              ]),
+              lastKnownPositions: Object.freeze(
+                [payload.options.firstNode, payload.options.secondNode].flatMap(
+                  (node) =>
+                    node.position === undefined
+                      ? []
+                      : [
+                          Object.freeze({
+                            nodeId: node.nodeId,
+                            position: node.position,
+                          }),
+                        ],
+                ),
+              ),
+            }),
+          }
+        : {}),
+    });
+  }
+
+  planIntent(
+    input: CatmaidSpatialSkeletonCommandDescriptor,
+    context: SpatialSkeletonIntentCreationContext<
+      CatmaidEditPlan,
+      SpatialSkeletonPreviewIntentDelta,
+      SpatialSkeletonEditInverseDelta
+    >,
+  ): SpatialSkeletonIntentPlan<
+    CatmaidEditPlan,
+    SpatialSkeletonPreviewIntentDelta
+  > {
+    const direction = getDirection(context.intent);
+    let semantic: CatmaidCapturedEdit;
+    let delta: SpatialSkeletonEditDelta;
+    if (context.intent === "execute") {
+      semantic = this.createSemanticRecipe(
+        input,
+        context.intentId,
+        context.queueInput,
+      );
+      delta = this.makeForwardDelta(semantic);
+    } else {
+      const prior = context.recipe;
+      semantic = this.prepareHistorySemantic(
+        prior.plan.semantic,
+        prior.preview.delta,
+        prior.inversePreview,
+      );
+      if (context.intent === "undo") {
+        if (prior.inversePreview === undefined) {
+          throw new Error("CATMAID Undo is missing its canonical inverse.");
+        }
+        delta = prior.inversePreview;
+      } else {
+        delta = this.makeForwardDelta(semantic);
+      }
+    }
+
+    const preview = this.makePreview(
+      semantic,
+      delta,
+      context.intent,
+      context.intentId,
+      context.intent === "execute",
+    );
+    const plan = Object.freeze({
+      kind: semantic.kind,
+      direction,
+      semantic,
+    }) as CatmaidEditPlan;
+    return {
+      kind: this.getQueueKind(semantic.kind),
+      commandLabel: input.label,
+      authorityLabels: getCatmaidAuthorityLabels(semantic.kind),
+      stableResources: this.getStableResources(semantic),
+      pendingEdit: this.makePendingEditDescriptor(semantic),
+      preview,
+      plan,
+    };
+  }
+
+  private createSemanticRecipe(
+    command: CatmaidSpatialSkeletonCommandDescriptor,
+    intentId: number,
+    queueInput: SpatialSkeletonQueueInput,
+  ): CatmaidCapturedEdit {
+    command = resolveCatmaidPreparedCommand(command, queueInput, this.identity);
+    switch (command.payload.kind) {
+      case "add-node":
+        return this.createAddSemantic(command, intentId, queueInput);
+      case "move-node":
+        return this.createMoveSemantic(command, queueInput);
+      case "delete-node":
+        return this.createDeleteSemantic(command, queueInput);
+      case "reroot":
+        return this.createRerootSemantic(command, queueInput);
+      case "description":
+      case "true-end":
+      case "radius":
+      case "confidence":
+        return this.createAttributeSemantic(command, queueInput);
+      case "split":
+        return this.createSplitSemantic(command, intentId, queueInput);
+      case "merge":
+        return this.createMergeSemantic(command, intentId, queueInput);
+    }
+  }
+
+  /** History follows the engine's finalized canonical preview artifacts. */
+  private prepareHistorySemantic(
+    semantic: CatmaidCapturedEdit,
+    forwardPreview: SpatialSkeletonEditDelta,
+    inversePreview: SpatialSkeletonEditInverseDelta | undefined,
+  ): CatmaidCapturedEdit {
+    if (semantic.kind === "reroot" && inversePreview !== undefined) {
+      if (inversePreview.kind !== "restore-topology") {
+        throw new Error(
+          "CATMAID reroot history has an invalid canonical inverse.",
+        );
+      }
+      const root = inversePreview.patches.find(({ parent }) => parent === null);
+      if (root === undefined) {
+        throw new Error("CATMAID canonical reroot inverse lost its root.");
+      }
+      return Object.freeze({
+        ...semantic,
+        originalRoot: this.retainHistoryNode(root.node),
+        originalRootConfidence: root.confidence,
+      });
+    }
+    if (semantic.kind === "description") {
+      if (
+        forwardPreview.kind !== "node-attributes" ||
+        forwardPreview.segment.stableId !== semantic.segment.stableId ||
+        forwardPreview.node.stableId !== semantic.node.stableId ||
+        !("description" in forwardPreview.changes)
+      ) {
+        throw new Error(
+          "CATMAID description history has an invalid canonical preview.",
+        );
+      }
+      const after = forwardPreview.changes.description;
+      return after === semantic.after
+        ? semantic
+        : Object.freeze({ ...semantic, after });
+    }
+    if (semantic.kind === "confidence" && inversePreview !== undefined) {
+      if (
+        inversePreview.kind !== "node-attributes" ||
+        inversePreview.node.stableId !== semantic.node.stableId ||
+        !("confidence" in inversePreview.changes)
+      ) {
+        throw new Error(
+          "CATMAID confidence history has an invalid canonical inverse.",
+        );
+      }
+      return Object.freeze({
+        ...semantic,
+        before: inversePreview.changes.confidence ?? 0,
+      });
+    }
+    if (semantic.kind === "split" && inversePreview !== undefined) {
+      if (inversePreview.kind !== "join-split") {
+        throw new Error(
+          "CATMAID split history has an invalid canonical inverse.",
+        );
+      }
+      return Object.freeze({
+        ...semantic,
+        formerParent: this.retainHistoryNode(inversePreview.formerParent),
+      });
+    }
+    if (semantic.kind === "delete-node" && inversePreview !== undefined) {
+      if (inversePreview.kind !== "restore-delete") {
+        throw new Error(
+          "CATMAID delete history has an invalid canonical inverse.",
+        );
+      }
+      const { snapshot, children } = inversePreview;
+      const parent =
+        snapshot.parent === null
+          ? undefined
+          : this.retainHistoryNode(snapshot.parent);
+      return Object.freeze({
+        ...semantic,
+        parent,
+        children: Object.freeze(
+          children.map((node) => this.retainHistoryNode(node)),
+        ),
+        deletedSnapshot: freezeNode({
+          ...semantic.deletedSnapshot,
+          ...getSkeletonNodeChanges(
+            semantic.deletedSnapshot,
+            snapshot.attributes,
+          ),
+          position: snapshot.position,
+          parentNodeId: parent?.capturedNodeId,
+        }),
+        wasSoleRoot: parent === undefined && children.length === 0,
+      });
+    }
+    if (semantic.kind !== "merge") return semantic;
+    if (inversePreview === undefined) return semantic;
+    if (inversePreview.kind !== "unmerge") {
+      throw new Error(
+        "CATMAID merge history has an invalid canonical inverse.",
+      );
+    }
+    const inverseOrientation =
+      inversePreview.firstNode.stableId === semantic.firstNode.stableId &&
+      inversePreview.secondNode.stableId === semantic.secondNode.stableId
+        ? ("second-from-first" as const)
+        : inversePreview.firstNode.stableId === semantic.secondNode.stableId &&
+            inversePreview.secondNode.stableId === semantic.firstNode.stableId
+          ? ("first-from-second" as const)
+          : undefined;
+    if (inverseOrientation === undefined)
+      throw new Error("CATMAID canonical merge inverse lost its endpoints.");
+    const originalRoot = inversePreview.formerSecondTopology.find(
+      ({ parent }) => parent === null,
+    );
+    if (originalRoot === undefined)
+      throw new Error("CATMAID canonical merge inverse lost its root.");
+    return Object.freeze({
+      ...semantic,
+      inverseOrientation,
+      originalRoot: this.retainHistoryNode(originalRoot.node),
+      originalRootConfidence: originalRoot.confidence,
+    });
+  }
+
+  private retainHistoryNode(handle: SpatialSkeletonStableNodeHandle) {
+    const nodeId = this.identity.resolveNode(handle);
+    if (nodeId === undefined) {
+      throw new Error(
+        "CATMAID canonical history node has no numeric identity.",
+      );
+    }
+    return makeRetainedNode(nodeId, handle);
+  }
+
+  private makeForwardDelta(
+    semantic: CatmaidCapturedEdit,
+  ): SpatialSkeletonEditDelta {
+    switch (semantic.kind) {
+      case "add-node":
+        if (semantic.children?.length) {
+          return Object.freeze({
+            kind: "restore-delete",
+            segment: semantic.segment,
+            snapshot: Object.freeze({
+              node: semantic.node,
+              parent: semantic.parent ?? null,
+              position: semantic.position,
+              attributes: semantic.attributes,
+            }),
+            children: semantic.children,
+          });
+        }
+        return Object.freeze({
+          kind: "add",
+          segment: semantic.segment,
+          node: semantic.node,
+          parent: semantic.parent,
+          position: semantic.position,
+          attributes: semantic.attributes,
+        });
+      case "move-node":
+        return Object.freeze({
+          kind: "move",
+          segment: semantic.segment,
+          node: semantic.node,
+          position: semantic.after,
+        });
+      case "delete-node":
+        return Object.freeze({
+          kind: "delete",
+          segment: semantic.segment,
+          node: semantic.node,
+        });
+      case "description":
+        return Object.freeze({
+          kind: "node-attributes",
+          segment: semantic.segment,
+          node: semantic.node,
+          changes: Object.freeze({
+            description: semantic.after as string | undefined,
+          }),
+        });
+      case "true-end":
+        return Object.freeze({
+          kind: "node-attributes",
+          segment: semantic.segment,
+          node: semantic.node,
+          changes: Object.freeze({
+            isTrueEnd: semantic.after as boolean | undefined,
+          }),
+        });
+      case "radius":
+        return Object.freeze({
+          kind: "node-attributes",
+          segment: semantic.segment,
+          node: semantic.node,
+          changes: Object.freeze({
+            radius: semantic.after as number | undefined,
+          }),
+        });
+      case "confidence":
+        return Object.freeze({
+          kind: "node-attributes",
+          segment: semantic.segment,
+          node: semantic.node,
+          changes: Object.freeze({
+            confidence: semantic.after as number | undefined,
+          }),
+        });
+      case "reroot":
+        return Object.freeze({
+          kind: "reroot",
+          segment: semantic.segment,
+          node: semantic.node,
+        });
+      case "split":
+        return Object.freeze({
+          kind: "split",
+          sourceSegment: semantic.sourceSegment,
+          downstreamSegment: semantic.downstreamSegment,
+          node: semantic.node,
+        });
+      case "merge":
+        return semantic.inverseOrientation === "second-from-first"
+          ? Object.freeze({
+              kind: "merge" as const,
+              firstSegment: semantic.firstSegment,
+              secondSegment: semantic.secondSegment,
+              resultSegment: semantic.mergedSegment,
+              firstNode: semantic.firstNode,
+              secondNode: semantic.secondNode,
+            })
+          : Object.freeze({
+              kind: "merge" as const,
+              firstSegment: semantic.secondSegment,
+              secondSegment: semantic.firstSegment,
+              resultSegment: semantic.mergedSegment,
+              firstNode: semantic.secondNode,
+              secondNode: semantic.firstNode,
+            });
+    }
+  }
+
+  private getStableResources(
+    semantic: CatmaidCapturedEdit,
+  ): readonly SpatialSkeletonIntentResource[] {
+    switch (semantic.kind) {
+      case "add-node":
+      case "delete-node":
+      case "move-node":
+      case "description":
+      case "true-end":
+      case "radius":
+      case "confidence":
+      case "reroot":
+        return uniqueResources([semantic.segment]);
+      case "split":
+        return uniqueResources([
+          semantic.sourceSegment,
+          semantic.downstreamSegment,
+        ]);
+      case "merge":
+        return uniqueResources([
+          semantic.firstSegment,
+          semantic.secondSegment,
+          semantic.mergedSegment,
+        ]);
+    }
+  }
+
+  private makePendingEditDescriptor(
+    semantic: CatmaidCapturedEdit,
+  ): SpatialSkeletonPendingEditDescriptor | undefined {
+    switch (semantic.kind) {
+      case "delete-node":
+        return Object.freeze({
+          kind: "delete",
+          stableNodeHandles: Object.freeze([semantic.node]),
+          stableSegmentHandles: Object.freeze([semantic.segment]),
+          segmentIds: Object.freeze(
+            semantic.capturedSegments.map(({ physicalId }) => physicalId),
+          ),
+          nodeId: semantic.node.capturedNodeId,
+          lastKnownPositions: Object.freeze([
+            {
+              nodeId: semantic.deletedSnapshot.nodeId,
+              position: semantic.deletedSnapshot.position,
+            },
+          ]),
+        });
+      case "reroot":
+        return Object.freeze({
+          kind: "reroot",
+          stableNodeHandles: Object.freeze([
+            semantic.node,
+            semantic.originalRoot,
+          ]),
+          stableSegmentHandles: Object.freeze([semantic.segment]),
+          segmentIds: Object.freeze(
+            semantic.capturedSegments.map(({ physicalId }) => physicalId),
+          ),
+          nodeId: semantic.node.capturedNodeId,
+          rootNodeId: semantic.originalRoot.capturedNodeId,
+        });
+      case "split":
+        return Object.freeze({
+          kind: "split",
+          stableNodeHandles: Object.freeze([
+            semantic.node,
+            semantic.formerParent,
+          ]),
+          stableSegmentHandles: Object.freeze([
+            semantic.sourceSegment,
+            semantic.downstreamSegment,
+          ]),
+          segmentIds: Object.freeze(
+            semantic.capturedSegments.map(({ physicalId }) => physicalId),
+          ),
+          cutNodeId: semantic.node.capturedNodeId,
+          cutParentNodeId: semantic.formerParent.capturedNodeId,
+        });
+      case "merge":
+        return Object.freeze({
+          kind: "merge",
+          stableNodeHandles: Object.freeze([
+            semantic.firstNode,
+            semantic.secondNode,
+          ]),
+          stableSegmentHandles: Object.freeze([
+            semantic.firstSegment,
+            semantic.secondSegment,
+            semantic.mergedSegment,
+          ]),
+          segmentIds: Object.freeze(
+            semantic.capturedSegments.map(({ physicalId }) => physicalId),
+          ),
+          endpointNodeIds: Object.freeze([
+            semantic.firstNode.capturedNodeId,
+            semantic.secondNode.capturedNodeId,
+          ]),
+        });
+      default:
+        return undefined;
+    }
+  }
+
+  private captureSegments(
+    queueInput: SpatialSkeletonQueueInput,
+    segmentIds: readonly bigint[],
+    eagerNodeIds: readonly bigint[],
+  ) {
+    const captured: CatmaidCapturedSegment[] = [];
+    for (const segmentId of new Set(segmentIds)) {
+      const entry = this.requireQueueInputSegment(queueInput, segmentId);
+      const segment = this.segmentHandle(segmentId);
+      captured.push(
+        Object.freeze({
+          segment,
+          physicalId: segmentId,
+          snapshot: entry.snapshot,
+          cacheRevision: entry.cacheRevision,
+        }),
+      );
+    }
+    const requestedNodeIds = [...new Set(eagerNodeIds)];
+    for (const nodeId of requestedNodeIds) {
+      if (
+        !captured.some(({ snapshot }) => snapshot.getNode(nodeId) !== undefined)
+      ) {
+        throw new Error(`CATMAID queue input is missing node ${nodeId}.`);
+      }
+    }
+    const handles = this.identity.getOrCreateNodeHandles(requestedNodeIds);
+    return {
+      capturedSegments: Object.freeze(captured),
+      retainedNodes: new Map(
+        requestedNodeIds.map(
+          (nodeId) =>
+            [nodeId, makeRetainedNode(nodeId, handles.get(nodeId)!)] as const,
+        ),
+      ),
+    };
+  }
+
+  private getRetainedNode(
+    capture: {
+      readonly retainedNodes: ReadonlyMap<bigint, CatmaidRetainedNode>;
+    },
+    nodeId: bigint,
+  ) {
+    return capture.retainedNodes.get(nodeId)!;
+  }
+
+  private requireQueueInputSegment(
+    queueInput: SpatialSkeletonQueueInput,
+    segmentId: bigint,
+  ) {
+    const entry = queueInput.segments.find(
+      (candidate) => candidate.segmentId === segmentId,
+    );
+    if (entry === undefined) {
+      throw new Error(
+        `CATMAID edit requires admitted complete skeleton ${segmentId}.`,
+      );
+    }
+    return entry;
+  }
+
+  private getPathToRoot(snapshot: CompleteSkeleton, targetNodeId: bigint) {
+    const path: SkeletonNode[] = [];
+    const seen = new Set<bigint>();
+    let current = snapshot.getNode(targetNodeId);
+    if (current === undefined) {
+      throw new Error(`CATMAID queue input is missing node ${targetNodeId}.`);
+    }
+    while (current !== undefined) {
+      if (seen.has(current.nodeId)) {
+        throw new Error("CATMAID retained path to root is cyclic.");
+      }
+      seen.add(current.nodeId);
+      path.push(current);
+      if (current.parentNodeId === undefined) break;
+      const parent = snapshot.getNode(current.parentNodeId);
+      if (parent === undefined) {
+        throw new Error(
+          `CATMAID retained path is missing parent ${current.parentNodeId}.`,
+        );
+      }
+      current = parent;
+    }
+    return Object.freeze(path);
+  }
+
+  private requireCapturedNode(
+    capture: ReturnType<CatmaidEditPlanner["captureSegments"]>,
+    nodeId: bigint,
+  ) {
+    for (const { snapshot } of capture.capturedSegments) {
+      const node = snapshot.getNode(nodeId);
+      if (node !== undefined) return freezeNode(node);
+    }
+    throw new Error(`CATMAID queue input is missing node ${nodeId}.`);
+  }
+
+  private createAddSemantic(
+    command: CatmaidSpatialSkeletonCommandDescriptor,
+    intentId: number,
+    queueInput: SpatialSkeletonQueueInput,
+  ): CatmaidCreatedNodeSemantic {
+    if (command.payload.kind !== "add-node")
+      throw new Error("Invalid add recipe.");
+    const { options } = command.payload;
+    const capture =
+      options.parentNodeId === undefined
+        ? {
+            capturedSegments: Object.freeze([]),
+            retainedNodes: new Map<bigint, CatmaidRetainedNode>(),
+          }
+        : this.captureSegments(
+            queueInput,
+            [options.skeletonId],
+            [options.parentNodeId, ...(options.childNodeIds ?? [])],
+          );
+    const parent =
+      options.parentNodeId === undefined
+        ? undefined
+        : this.getRetainedNode(capture, options.parentNodeId);
+    const children = Object.freeze(
+      (options.childNodeIds ?? []).map((nodeId) => {
+        const child = this.requireCapturedNode(capture, nodeId);
+        if (
+          child.parentNodeId !== options.parentNodeId ||
+          child.segmentId !== options.skeletonId
+        ) {
+          throw new Error(
+            `Node ${nodeId} is not a child of node ${options.parentNodeId}.`,
+          );
+        }
+        return this.getRetainedNode(capture, nodeId);
+      }),
+    );
+    const node = spatialSkeletonStableNode(`intent:${intentId}:created-node`);
+    const createsSegment = parent === undefined;
+    const segment = createsSegment
+      ? spatialSkeletonStableSegment(`intent:${intentId}:created-segment`)
+      : this.segmentHandle(options.skeletonId);
+    const position = copyVector(options.positionInModelSpace);
+    return Object.freeze({
+      kind: "add-node",
+      ...capture,
+      node,
+      segment,
+      parent,
+      position,
+      attributes: CATMAID_CREATED_NODE_ATTRIBUTES,
+      createsSegment,
+      children,
+    });
+  }
+
+  private createMoveSemantic(
+    command: CatmaidSpatialSkeletonCommandDescriptor,
+    queueInput: SpatialSkeletonQueueInput,
+  ): CatmaidMoveNodeSemantic {
+    if (command.payload.kind !== "move-node")
+      throw new Error("Invalid move recipe.");
+    const { options } = command.payload;
+    const capture = this.captureSegments(
+      queueInput,
+      [options.node.segmentId],
+      [options.node.nodeId],
+    );
+    const nodeSnapshot = this.requireCapturedNode(capture, options.node.nodeId);
+    const node = this.getRetainedNode(capture, nodeSnapshot.nodeId)!;
+    const segment = this.segmentHandle(nodeSnapshot.segmentId);
+    const before = copyVector(nodeSnapshot.position);
+    const after = copyVector(options.nextPositionInModelSpace);
+    return Object.freeze({
+      kind: "move-node",
+      ...capture,
+      node,
+      segment,
+      before,
+      after,
+    });
+  }
+
+  private createDeleteSemantic(
+    command: CatmaidSpatialSkeletonCommandDescriptor,
+    queueInput: SpatialSkeletonQueueInput,
+  ): CatmaidDeleteNodeSemantic {
+    if (command.payload.kind !== "delete-node") {
+      throw new Error("Invalid delete recipe.");
+    }
+    const { segmentId } = command.payload.node;
+    const entry = this.requireQueueInputSegment(queueInput, segmentId);
+    const rawDeleted = entry.snapshot.getNode(command.payload.node.nodeId);
+    if (rawDeleted === undefined) {
+      throw new Error(
+        `CATMAID queue input is missing node ${command.payload.node.nodeId}.`,
+      );
+    }
+    const childIds: bigint[] = [];
+    entry.snapshot.forEachNode((candidate) => {
+      if (candidate.parentNodeId === rawDeleted.nodeId) {
+        childIds.push(candidate.nodeId);
+      }
+    });
+    if (rawDeleted.parentNodeId === undefined && childIds.length !== 0) {
+      throw new Error(
+        "Deleting a root node with children is blocked. Reroot the skeleton manually before deleting it.",
+      );
+    }
+    const eagerNodeIds = [
+      rawDeleted.nodeId,
+      ...(rawDeleted.parentNodeId === undefined
+        ? []
+        : [rawDeleted.parentNodeId]),
+      ...childIds,
+    ];
+    const capture = this.captureSegments(queueInput, [segmentId], eagerNodeIds);
+    const deletedSnapshot = freezeNode(rawDeleted);
+    const children = childIds.map(
+      (nodeId) => this.getRetainedNode(capture, nodeId)!,
+    );
+    const node = this.getRetainedNode(capture, deletedSnapshot.nodeId)!;
+    const parent =
+      deletedSnapshot.parentNodeId === undefined
+        ? undefined
+        : this.getRetainedNode(capture, deletedSnapshot.parentNodeId);
+    const segment = capture.capturedSegments[0].segment;
+    return Object.freeze({
+      kind: "delete-node",
+      ...capture,
+      node,
+      segment,
+      parent,
+      children: Object.freeze(children),
+      deletedSnapshot,
+      wasSoleRoot: entry.snapshot.nodeCount === 1,
+    });
+  }
+
+  private createAttributeSemantic(
+    command: CatmaidSpatialSkeletonCommandDescriptor,
+    queueInput: SpatialSkeletonQueueInput,
+  ): CatmaidAttributeSemantic {
+    const { payload } = command;
+    if (
+      payload.kind !== "description" &&
+      payload.kind !== "true-end" &&
+      payload.kind !== "radius" &&
+      payload.kind !== "confidence"
+    ) {
+      throw new Error("Invalid CATMAID attribute recipe.");
+    }
+    const { options } = payload;
+    const capture = this.captureSegments(
+      queueInput,
+      [options.node.segmentId],
+      [options.node.nodeId],
+    );
+    const nodeSnapshot = this.requireCapturedNode(capture, options.node.nodeId);
+    const node = this.getRetainedNode(capture, nodeSnapshot.nodeId)!;
+    const segment = capture.capturedSegments[0].segment;
+    let before: string | boolean | number | undefined;
+    let after: string | boolean | number | undefined;
+    switch (payload.kind) {
+      case "description":
+        before = nodeSnapshot.description;
+        after = payload.options.nextDescription;
+        break;
+      case "true-end":
+        before = isSkeletonNodeTrueEnd(nodeSnapshot);
+        after = payload.options.nextIsTrueEnd;
+        if (after) {
+          if (nodeSnapshot.parentNodeId === undefined) {
+            throw new Error("Cannot set the root node as a true end.");
+          }
+          let hasChild = false;
+          capture.capturedSegments[0].snapshot.forEachNode((candidate) => {
+            if (candidate.parentNodeId === nodeSnapshot.nodeId) hasChild = true;
+          });
+          if (hasChild) {
+            throw new Error("Only leaf nodes can be marked as true ends.");
+          }
+        }
+        break;
+      case "radius":
+        before = getSkeletonNodeRadius(nodeSnapshot) ?? 0;
+        after = payload.options.nextRadius;
+        break;
+      case "confidence":
+        before = getSkeletonNodeConfidence(nodeSnapshot) ?? 0;
+        after = payload.options.nextConfidence;
+        break;
+    }
+    return Object.freeze({
+      kind: payload.kind,
+      ...capture,
+      node,
+      segment,
+      nodeSnapshot,
+      before,
+      after,
+    });
+  }
+
+  private createRerootSemantic(
+    command: CatmaidSpatialSkeletonCommandDescriptor,
+    queueInput: SpatialSkeletonQueueInput,
+  ): CatmaidRerootSemantic {
+    if (command.payload.kind !== "reroot")
+      throw new Error("Invalid reroot recipe.");
+    const { segmentId } = command.payload.node;
+    const entry = this.requireQueueInputSegment(queueInput, segmentId);
+    const path = this.getPathToRoot(
+      entry.snapshot,
+      command.payload.node.nodeId,
+    );
+    const capture = this.captureSegments(
+      queueInput,
+      [segmentId],
+      path.map(({ nodeId }) => nodeId),
+    );
+    const target = path[0];
+    const root = path.at(-1)!;
+    const node = this.getRetainedNode(capture, target.nodeId)!;
+    const originalRoot = this.getRetainedNode(capture, root.nodeId)!;
+    const segment = capture.capturedSegments[0].segment;
+    return Object.freeze({
+      kind: "reroot",
+      ...capture,
+      node,
+      originalRoot,
+      originalRootConfidence: getSkeletonNodeConfidence(root),
+      segment,
+    });
+  }
+
+  private createSplitSemantic(
+    command: CatmaidSpatialSkeletonCommandDescriptor,
+    intentId: number,
+    queueInput: SpatialSkeletonQueueInput,
+  ): CatmaidSplitSemantic {
+    if (command.payload.kind !== "split")
+      throw new Error("Invalid split recipe.");
+    const { segmentId } = command.payload.node;
+    const entry = this.requireQueueInputSegment(queueInput, segmentId);
+    const target = entry.snapshot.getNode(command.payload.node.nodeId);
+    if (target === undefined) {
+      throw new Error(
+        `CATMAID queue input is missing node ${command.payload.node.nodeId}.`,
+      );
+    }
+    if (target.parentNodeId === undefined)
+      throw new Error("Cannot split at the root node.");
+    const capture = this.captureSegments(
+      queueInput,
+      [segmentId],
+      [target.nodeId, target.parentNodeId],
+    );
+    const sourceSegment = capture.capturedSegments[0].segment;
+    const downstreamSegment = spatialSkeletonStableSegment(
+      `intent:${intentId}:split-output`,
+    );
+    const node = this.getRetainedNode(capture, target.nodeId)!;
+    const formerParent = this.getRetainedNode(capture, target.parentNodeId)!;
+    return Object.freeze({
+      kind: "split",
+      ...capture,
+      sourceSegment,
+      downstreamSegment,
+      node,
+      formerParent,
+    });
+  }
+
+  private createMergeSemantic(
+    command: CatmaidSpatialSkeletonCommandDescriptor,
+    intentId: number,
+    queueInput: SpatialSkeletonQueueInput,
+  ): CatmaidMergeSemantic {
+    if (command.payload.kind !== "merge")
+      throw new Error("Invalid merge recipe.");
+    const { firstNode, secondNode } = command.payload.options;
+    if (firstNode.segmentId === secondNode.segmentId) {
+      throw new Error("Cannot merge nodes from the same skeleton.");
+    }
+    const firstEntry = this.requireQueueInputSegment(
+      queueInput,
+      firstNode.segmentId,
+    );
+    const secondEntry = this.requireQueueInputSegment(
+      queueInput,
+      secondNode.segmentId,
+    );
+    const firstPath = this.getPathToRoot(firstEntry.snapshot, firstNode.nodeId);
+    const secondPath = this.getPathToRoot(
+      secondEntry.snapshot,
+      secondNode.nodeId,
+    );
+    const capture = this.captureSegments(
+      queueInput,
+      [firstNode.segmentId, secondNode.segmentId],
+      [
+        ...firstPath.map(({ nodeId }) => nodeId),
+        ...secondPath.map(({ nodeId }) => nodeId),
+      ],
+    );
+    const first = this.requireCapturedNode(capture, firstNode.nodeId);
+    const second = this.requireCapturedNode(capture, secondNode.nodeId);
+    const secondRoot = secondPath.at(-1)!;
+    const firstSegment = this.segmentHandle(first.segmentId);
+    const secondSegment = this.segmentHandle(second.segmentId);
+    const mergedSegment = spatialSkeletonStableSegment(
+      `intent:${intentId}:merge-output`,
+    );
+    const firstHandle = this.getRetainedNode(capture, first.nodeId)!;
+    const secondHandle = this.getRetainedNode(capture, second.nodeId)!;
+    return Object.freeze({
+      kind: "merge",
+      ...capture,
+      firstSegment,
+      secondSegment,
+      mergedSegment,
+      firstNode: firstHandle,
+      secondNode: secondHandle,
+      originalRoot: this.getRetainedNode(capture, secondRoot.nodeId)!,
+      originalRootConfidence: getSkeletonNodeConfidence(secondRoot),
+      inverseOrientation: "second-from-first",
+    });
+  }
+
+  private getCapturedNodeForHint(
+    semantic: CatmaidCapturedEdit,
+    retained: CatmaidRetainedNode,
+  ) {
+    for (const { snapshot } of semantic.capturedSegments) {
+      const node = snapshot.getNode(retained.capturedNodeId);
+      if (node !== undefined) return node;
+    }
+    return undefined;
+  }
+
+  /**
+   * CATMAID describes user intent with logical handles; the generic runtime
+   * resolves and applies these wishes after its model adoption. Nothing here
+   * owns selection, visibility, or remapping state.
+   */
+  private makeUiHints(
+    semantic: CatmaidCapturedEdit,
+    direction: "forward" | "inverse",
+    intent: "execute" | "undo" | "redo",
+    allowNavigation = true,
+  ): SpatialSkeletonPreviewUiHints {
+    const segmentVisibility: Array<
+      NonNullable<SpatialSkeletonPreviewUiHints["segmentVisibility"]>[number]
+    > = [];
+    const segmentMembershipRemaps: Array<
+      NonNullable<
+        SpatialSkeletonPreviewUiHints["segmentMembershipRemaps"]
+      >[number]
+    > = [];
+    const retainSegments: SpatialSkeletonStableSegmentHandle[] = [];
+    let selectedNode: SpatialSkeletonPreviewUiHints["selectedNode"];
+    const select = (
+      node: SpatialSkeletonStableNodeHandle,
+      segment: SpatialSkeletonStableSegmentHandle,
+      position?: ArrayLike<number>,
+      moveView = false,
+    ) => {
+      selectedNode = Object.freeze({
+        kind: "select" as const,
+        node,
+        segment,
+        ...(position === undefined
+          ? {}
+          : { position: Object.freeze(Array.from(position, Number)) }),
+        pin: "preserve" as const,
+        moveView: allowNavigation && moveView,
+      });
+    };
+    const show = (
+      segment: SpatialSkeletonStableSegmentHandle,
+      selection?: "preserve" | "pin" | "unpin",
+    ) => {
+      segmentVisibility.push(
+        Object.freeze({
+          segment,
+          visible: true,
+          ...(selection === undefined ? {} : { select: selection }),
+        }),
+      );
+    };
+    const hide = (segment: SpatialSkeletonStableSegmentHandle) => {
+      segmentVisibility.push(
+        Object.freeze({ segment, visible: false, deselect: true }),
+      );
+    };
+
+    switch (semantic.kind) {
+      case "add-node":
+        if (direction === "forward") {
+          show(semantic.segment, intent === "execute" ? "pin" : "preserve");
+          select(
+            semantic.node,
+            semantic.segment,
+            semantic.position,
+            intent === "execute",
+          );
+          retainSegments.push(semantic.segment);
+        } else {
+          if (semantic.createsSegment) hide(semantic.segment);
+          if (semantic.parent === undefined) {
+            selectedNode = Object.freeze({ kind: "clear" });
+          } else {
+            const parent = this.getCapturedNodeForHint(
+              semantic,
+              semantic.parent,
+            );
+            select(semantic.parent, semantic.segment, parent?.position, false);
+            retainSegments.push(semantic.segment);
+          }
+        }
+        break;
+      case "delete-node":
+        if (direction === "forward") {
+          if (semantic.wasSoleRoot) hide(semantic.segment);
+          if (semantic.parent === undefined) {
+            selectedNode = Object.freeze({ kind: "clear" });
+          } else {
+            const parent = this.getCapturedNodeForHint(
+              semantic,
+              semantic.parent,
+            );
+            select(
+              semantic.parent,
+              semantic.segment,
+              parent?.position,
+              intent === "execute",
+            );
+            retainSegments.push(semantic.segment);
+          }
+        } else {
+          show(semantic.segment, "preserve");
+          select(
+            semantic.node,
+            semantic.segment,
+            semantic.deletedSnapshot.position,
+          );
+          retainSegments.push(semantic.segment);
+        }
+        break;
+      case "move-node":
+        selectedNode = Object.freeze({
+          kind: "refresh-if-selected",
+          node: semantic.node,
+          segment: semantic.segment,
+          position: direction === "forward" ? semantic.after : semantic.before,
+        });
+        retainSegments.push(semantic.segment);
+        break;
+      case "description":
+      case "true-end":
+      case "radius":
+      case "confidence":
+        retainSegments.push(semantic.segment);
+        break;
+      case "reroot": {
+        const target =
+          direction === "forward" ? semantic.node : semantic.originalRoot;
+        const snapshot = this.getCapturedNodeForHint(semantic, target);
+        show(semantic.segment);
+        select(target, semantic.segment, snapshot?.position);
+        retainSegments.push(semantic.segment);
+        break;
+      }
+      case "split":
+        if (direction === "forward") {
+          show(semantic.sourceSegment);
+          show(semantic.downstreamSegment, "pin");
+          select(semantic.node, semantic.downstreamSegment);
+          retainSegments.push(
+            semantic.sourceSegment,
+            semantic.downstreamSegment,
+          );
+        } else {
+          segmentMembershipRemaps.push(
+            Object.freeze({
+              from: semantic.downstreamSegment,
+              to: semantic.sourceSegment,
+            }),
+          );
+          show(semantic.sourceSegment);
+          hide(semantic.downstreamSegment);
+          select(semantic.node, semantic.sourceSegment);
+          retainSegments.push(semantic.sourceSegment);
+        }
+        break;
+      case "merge": {
+        const forwardFirstSegment =
+          semantic.inverseOrientation === "second-from-first"
+            ? semantic.firstSegment
+            : semantic.secondSegment;
+        const forwardSecondSegment =
+          semantic.inverseOrientation === "second-from-first"
+            ? semantic.secondSegment
+            : semantic.firstSegment;
+        const forwardSecondNode =
+          semantic.inverseOrientation === "second-from-first"
+            ? semantic.secondNode
+            : semantic.firstNode;
+        if (direction === "forward") {
+          segmentMembershipRemaps.push(
+            Object.freeze({
+              from: semantic.firstSegment,
+              to: semantic.mergedSegment,
+            }),
+            Object.freeze({
+              from: semantic.secondSegment,
+              to: semantic.mergedSegment,
+            }),
+          );
+          show(semantic.mergedSegment, "preserve");
+          hide(forwardSecondSegment);
+          select(forwardSecondNode, semantic.mergedSegment);
+          retainSegments.push(semantic.mergedSegment);
+        } else {
+          show(forwardFirstSegment);
+          show(forwardSecondSegment);
+          select(forwardSecondNode, forwardSecondSegment);
+          retainSegments.push(forwardFirstSegment, forwardSecondSegment);
+        }
+        break;
+      }
+    }
+
+    return Object.freeze({
+      segmentMembershipRemaps: Object.freeze(segmentMembershipRemaps),
+      segmentVisibility: Object.freeze(segmentVisibility),
+      ...(selectedNode === undefined ? {} : { selectedNode }),
+      retainSegments: Object.freeze(retainSegments),
+    });
+  }
+
+  private makePreview(
+    semantic: CatmaidCapturedEdit,
+    delta: SpatialSkeletonEditDelta,
+    intent: "execute" | "undo" | "redo",
+    intentId: number,
+    includeInspectionSeed: boolean,
+  ): SpatialSkeletonPreviewIntentDelta {
+    const direction = getDirection(intent);
+    const seed = includeInspectionSeed
+      ? this.captureRetainedInspectionSeed(semantic)
+      : undefined;
+    const nodeBindings: Array<
+      readonly [SpatialSkeletonStableNodeHandle, bigint]
+    > = [];
+    const segmentBindings: Array<
+      readonly [SpatialSkeletonStableSegmentHandle, bigint]
+    > = [];
+    if (semantic.kind === "add-node" && direction === "forward") {
+      nodeBindings.push([
+        semantic.node,
+        this.provisionalIds.allocateNodeId(intentId),
+      ]);
+      if (semantic.createsSegment) {
+        segmentBindings.push([
+          semantic.segment,
+          this.provisionalIds.allocateSegmentId(intentId),
+        ]);
+      }
+    } else if (semantic.kind === "delete-node" && direction === "inverse") {
+      nodeBindings.push([
+        semantic.node,
+        this.provisionalIds.allocateNodeId(intentId),
+      ]);
+      if (semantic.wasSoleRoot) {
+        segmentBindings.push([
+          semantic.segment,
+          this.provisionalIds.allocateSegmentId(intentId),
+        ]);
+      }
+    } else if (semantic.kind === "split" && direction === "forward") {
+      segmentBindings.push([
+        semantic.downstreamSegment,
+        this.provisionalIds.allocateSegmentId(intentId),
+      ]);
+    } else if (semantic.kind === "merge" && direction === "forward") {
+      // The result has its own logical identity. Borrowing an input's current
+      // ID would leave it stale if that input saves under a different ID.
+      segmentBindings.push([
+        semantic.mergedSegment,
+        this.provisionalIds.allocateSegmentId(intentId),
+      ]);
+    } else if (semantic.kind === "merge" && direction === "inverse") {
+      const restoredSegment =
+        delta.kind === "unmerge" ? delta.secondSegment : semantic.secondSegment;
+      segmentBindings.push([
+        restoredSegment,
+        this.provisionalIds.allocateSegmentId(intentId),
+      ]);
+    }
+    return Object.freeze({
+      delta,
+      ...(seed === undefined ? {} : { inspectionSeed: seed }),
+      ...(nodeBindings.length === 0 && segmentBindings.length === 0
+        ? {}
+        : {
+            provisionalBindings: Object.freeze({
+              nodes: Object.freeze(nodeBindings),
+              segments: Object.freeze(segmentBindings),
+            }),
+          }),
+      uiHints: this.makeUiHints(semantic, direction, intent),
+      rollbackUiHints: this.makeUiHints(
+        semantic,
+        direction === "forward" ? "inverse" : "forward",
+        intent,
+        false,
+      ),
+      pendingEditIntentId: intentId,
+    });
+  }
+
+  private captureRetainedInspectionSeed(
+    semantic: CatmaidCapturedEdit,
+  ): SpatialSkeletonPreviewInspectionSeed {
+    const segments: Array<{
+      readonly segment: SpatialSkeletonStableSegmentHandle;
+      readonly snapshot: CompleteSkeleton;
+    }> = [];
+    const nodeBindings: Array<
+      readonly [SpatialSkeletonStableNodeHandle, bigint]
+    > = [];
+    const segmentBindings: Array<
+      readonly [SpatialSkeletonStableSegmentHandle, bigint]
+    > = [];
+    const expectedCacheRevisions = new Map<bigint, number>();
+    const seenNodes = new Set<string>();
+    const seenSegments = new Set<string>();
+    for (const captured of semantic.capturedSegments) {
+      const resourceHandle = captured.segment;
+      const target = this.identity.resolveSegmentTarget(resourceHandle);
+      const segmentId = captured.physicalId;
+      if (!seenSegments.has(resourceHandle.stableId)) {
+        segments.push({ segment: resourceHandle, snapshot: captured.snapshot });
+        seenSegments.add(resourceHandle.stableId);
+      }
+      expectedCacheRevisions.set(segmentId, captured.cacheRevision);
+      if (target.state !== "provisional") {
+        segmentBindings.push([resourceHandle, segmentId]);
+      }
+    }
+    for (const {
+      capturedNodeId: nodeId,
+      handle,
+    } of semantic.retainedNodes.values()) {
+      if (seenNodes.has(handle.stableId)) continue;
+      const nodeTarget = this.identity.resolveNodeTarget(handle);
+      if (nodeTarget.state !== "provisional") {
+        nodeBindings.push([handle, nodeId]);
+      }
+      seenNodes.add(handle.stableId);
+    }
+
+    return Object.freeze({
+      segments: Object.freeze(segments),
+      authoritativeBindings: Object.freeze({
+        nodes: Object.freeze(nodeBindings),
+        segments: Object.freeze(segmentBindings),
+      }),
+      expectedCacheRevisions,
+    });
+  }
+
+  private getQueueKind(kind: CatmaidCapturedEdit["kind"]) {
+    switch (kind) {
+      case "add-node":
+        return "addNode";
+      case "move-node":
+        return "moveNode";
+      case "delete-node":
+        return "deleteNode";
+      case "reroot":
+        return "rerootSkeleton";
+      case "description":
+        return "editDescription";
+      case "true-end":
+        return "editTrueEnd";
+      case "radius":
+        return "editRadius";
+      case "confidence":
+        return "editConfidence";
+      case "split":
+        return "splitSkeleton";
+      case "merge":
+        return "mergeSkeletons";
+    }
+  }
+}

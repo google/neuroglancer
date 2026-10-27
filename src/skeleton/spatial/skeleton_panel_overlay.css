@@ -1,0 +1,53 @@
+/**
+ * @license
+ * Copyright 2026 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-skeleton-panel-overlay-primitive {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+
+.neuroglancer-skeleton-panel-overlay-primitive:is(
+  [data-kind="marker"],
+  [data-kind="preparationMarker"]
+) {
+  box-sizing: border-box;
+  width: var(--ring-diameter);
+  height: var(--ring-diameter);
+  border-radius: 50%;
+  border: var(--ring-border-width) solid var(--ring-color);
+  box-shadow:
+    0 0 0 1px var(--ring-outline-color),
+    inset 0 0 0 1px var(--ring-outline-color);
+}
+
+.neuroglancer-skeleton-panel-overlay-primitive[data-kind="preparationMarker"] {
+  --ring-color: #ffcc33;
+  --ring-outline-color: rgba(0, 0, 0, 0.8);
+  border-style: dashed;
+  color: var(--ring-color);
+  font-weight: bold;
+  font-size: max(8px, calc(var(--ring-diameter) * 0.55));
+  line-height: calc(var(--ring-diameter) - 2 * var(--ring-border-width));
+  text-align: center;
+}
+
+.neuroglancer-skeleton-panel-overlay-primitive[data-kind="preparationConnector"] {
+  width: var(--connector-length);
+  border-top: var(--connector-width) dashed #ffcc33;
+  transform-origin: 0 50%;
+}

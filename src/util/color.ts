@@ -172,6 +172,33 @@ export function useWhiteBackground(foregroundColor: vec3 | vec4) {
   return getRelativeLuminance(foregroundColor) <= 0.179;
 }
 
+export function getContrastRatio(colorA: vec3 | vec4, colorB: vec3 | vec4) {
+  const luminanceA = getRelativeLuminance(colorA);
+  const luminanceB = getRelativeLuminance(colorB);
+  const darker = Math.min(luminanceA, luminanceB);
+  const lighter = Math.max(luminanceA, luminanceB);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+// Returns the HSV saturation of `color`: the fraction by which its most intense
+// channel exceeds its least intense channel. 0 for greys, 1 for fully saturated colors.
+export function getSaturation(color: vec3 | vec4): number {
+  const max = Math.max(color[0], color[1], color[2]);
+  if (max <= 0) return 0;
+  const min = Math.min(color[0], color[1], color[2]);
+  return (max - min) / max;
+}
+
+// The linear luminance only approximates grey for sRGB-encoded channels.
+export function saturateColor(color: vec3 | vec4, factor: number): vec3 {
+  const luminance = getRelativeLuminance(color);
+  return vec3.fromValues(
+    Math.min(1.0, Math.max(0.0, luminance + (color[0] - luminance) * factor)),
+    Math.min(1.0, Math.max(0.0, luminance + (color[1] - luminance) * factor)),
+    Math.min(1.0, Math.max(0.0, luminance + (color[2] - luminance) * factor)),
+  );
+}
+
 export class TrackableRGB extends WatchableValue<vec3> {
   constructor(public defaultValue: vec3) {
     super(vec3.clone(defaultValue));
@@ -246,4 +273,20 @@ export function createSteppedCssGradient(colors: string[], conic = false) {
       return `${color} ${start}%, ${color} ${end}%`;
     })
     .join(", ")})`;
+}
+
+export function pickHighestContrastColor(
+  palette: readonly vec3[],
+  sourceColor: vec3,
+): vec3 {
+  let bestColor = palette[0];
+  let bestContrast = -1;
+  for (const candidate of palette) {
+    const contrast = getContrastRatio(candidate, sourceColor);
+    if (contrast > bestContrast) {
+      bestContrast = contrast;
+      bestColor = candidate;
+    }
+  }
+  return bestColor;
 }
