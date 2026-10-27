@@ -852,9 +852,7 @@ export class SegmentationUserLayer extends Base {
             x instanceof MeshLayer ||
             x instanceof MultiscaleMeshLayer ||
             x instanceof PerspectiveViewSkeletonLayer ||
-            x instanceof SliceViewPanelSkeletonLayer ||
-            x instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
-            x instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer,
+            x instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer,
         ),
       { changed: this.layersChanged, value: this.renderLayers },
     ),
@@ -866,7 +864,9 @@ export class SegmentationUserLayer extends Base {
         layers.some(
           (x) =>
             x instanceof PerspectiveViewSkeletonLayer ||
-            x instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer,
+            x instanceof SliceViewPanelSkeletonLayer ||
+            x instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
+            x instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer,
         ),
       { changed: this.layersChanged, value: this.renderLayers },
     ),
