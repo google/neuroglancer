@@ -78,6 +78,7 @@ export class PrefetchManager extends RefCounted {
 
   private makePrefetchState(state: any, priority: number) {
     const viewer = new Viewer(this.display, {
+      chrome: false,
       showLayerDialog: false,
       resetStateWhenEmpty: false,
       dataSourceProvider: this.dataSourceProvider,

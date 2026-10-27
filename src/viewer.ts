@@ -17,11 +17,6 @@
 import "#src/viewer.css";
 import "#src/ui/layer_data_sources_tab.js";
 import "#src/noselect.css";
-import svg_camera from "ikonate/icons/camera.svg?raw";
-import svg_controls_alt from "ikonate/icons/controls-alt.svg?raw";
-import svg_layers from "ikonate/icons/layers.svg?raw";
-import svg_list from "ikonate/icons/list.svg?raw";
-import svg_settings from "ikonate/icons/settings.svg?raw";
 import { debounce } from "lodash-es";
 import {
   makeCoordinateSpace,
@@ -35,13 +30,9 @@ import { DataManagementContext } from "#src/data_management_context.js";
 import { InputEventBindings as DataPanelInputEventBindings } from "#src/data_panel_layout.js";
 import { getDefaultDataSourceProvider } from "#src/datasource/default_provider.js";
 import type { DataSourceRegistry } from "#src/datasource/index.js";
-import { StateShare, stateShareEnabled } from "#src/datasource/state_share.js";
 import type { DisplayContext } from "#src/display_context.js";
 import { TrackableWindowedViewport } from "#src/display_context.js";
-import {
-  HelpPanelState,
-  InputEventBindingHelpDialog,
-} from "#src/help/input_event_bindings.js";
+import { HelpPanelState } from "#src/help/input_event_bindings.js";
 import { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import {
   addNewLayer,
@@ -73,10 +64,7 @@ import { overlaysOpen } from "#src/overlay.js";
 import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { allRenderLayerRoles, RenderLayerRole } from "#src/renderlayer.js";
 import { StatusMessage } from "#src/status.js";
-import {
-  ElementVisibilityFromTrackableBoolean,
-  TrackableBoolean,
-} from "#src/trackable_boolean.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   makeDerivedWatchableValue,
@@ -85,32 +73,18 @@ import {
 } from "#src/trackable_value.js";
 import { CommandCatalog } from "#src/ui/command_catalog.js";
 import { CommandRegistry } from "#src/ui/command_registry.js";
-import {
-  LayerArchiveCountWidget,
-  LayerListPanel,
-  LayerListPanelState,
-} from "#src/ui/layer_list_panel.js";
-import { LayerSidePanelManager } from "#src/ui/layer_side_panel.js";
+import { LayerListPanelState } from "#src/ui/layer_list_panel.js";
 import { setupPositionDropHandlers } from "#src/ui/position_drag_and_drop.js";
 import { ScreenshotDialog } from "#src/ui/screenshot_menu.js";
-import {
-  copySelectionPositionToClipboard,
-  SelectionDetailsPanel,
-} from "#src/ui/selection_details.js";
-import { SidePanelManager } from "#src/ui/side_panel.js";
+import { copySelectionPositionToClipboard } from "#src/ui/selection_details.js";
+import type { SidePanelManager } from "#src/ui/side_panel.js";
 import { StateEditorDialog } from "#src/ui/state_editor.js";
-import { StatisticsDisplayState, StatisticsPanel } from "#src/ui/statistics.js";
+import { StatisticsDisplayState } from "#src/ui/statistics.js";
 import { GlobalToolBinder, LocalToolBinder } from "#src/ui/tool.js";
-import {
-  MultiToolPaletteDropdownButton,
-  MultiToolPaletteManager,
-  MultiToolPaletteState,
-} from "#src/ui/tool_palette.js";
+import { MultiToolPaletteState } from "#src/ui/tool_palette.js";
 import { encodeStateAsFragment } from "#src/ui/url_hash_binding.js";
-import {
-  ViewerSettingsPanel,
-  ViewerSettingsPanelState,
-} from "#src/ui/viewer_settings.js";
+import { ViewerChrome } from "#src/ui/viewer_chrome.js";
+import { ViewerSettingsPanelState } from "#src/ui/viewer_settings.js";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import { TrackableRGB } from "#src/util/color.js";
@@ -144,14 +118,8 @@ import type {
   VisibilityPrioritySpecification,
 } from "#src/viewer_state.js";
 import { WatchableVisibilityPriority } from "#src/visibility_priority/frontend.js";
-import { AnnotationToolStatusWidget } from "#src/widget/annotation_tool_status.js";
-import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
-import { makeCopyUrlButton } from "#src/widget/copy_button.js";
-import { makeIcon } from "#src/widget/icon.js";
 import {
   copyPositionToClipboard,
-  MousePositionWidget,
-  PositionWidget,
   registerDimensionToolForLayerGroupViewer,
   registerDimensionToolForUserLayer,
   registerDimensionToolForViewer,
@@ -159,13 +127,6 @@ import {
 import { TrackableScaleBarOptions } from "#src/widget/scale_bar.js";
 
 declare let NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any;
-
-interface CreditLink {
-  url: string;
-  text: string;
-}
-
-declare let NEUROGLANCER_CREDIT_LINK: CreditLink | CreditLink[] | undefined;
 
 export class InputEventBindings extends DataPanelInputEventBindings {
   global = new EventActionMap();
@@ -246,6 +207,12 @@ export interface ViewerOptions
   showLayerDialog: boolean;
   inputEventBindings: InputEventBindings;
   resetStateWhenEmpty: boolean;
+  /**
+   * Attach a `ViewerChrome`: the top bar, the side panels and the tool
+   * palettes. The default is true. When false, the layout fills the viewer
+   * element. The layer bar and the panel controls keep their own options.
+   */
+  chrome: boolean;
 }
 
 const defaultViewerOptions =
@@ -540,7 +507,12 @@ export class Viewer extends RefCounted implements ViewerState {
 
   layerSpecification: TopLevelLayerListSpecification;
   layout: RootLayoutContainer;
-  sidePanelManager: SidePanelManager;
+  /** The attached chrome, or `undefined` when the `chrome` option is false. */
+  chrome: ViewerChrome | undefined;
+
+  get sidePanelManager(): SidePanelManager | undefined {
+    return this.chrome?.sidePanelManager;
+  }
 
   state: TrackableViewerState;
 
@@ -656,6 +628,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
     const optionsWithDefaults = { ...defaultViewerOptions, ...options };
     const { resetStateWhenEmpty, showLayerDialog } = optionsWithDefaults;
+    const { chrome = true } = options;
 
     // The top bar override, like the layer panel override below, may hide the
     // top bar within what the configuration permits, but can never reveal one
@@ -792,15 +765,15 @@ export class Viewer extends RefCounted implements ViewerState {
     );
 
     this.state = new TrackableViewerState(this);
-    // Subscribe here and not in `makeUI()`, because `makeUI()` runs before
-    // the state exists.
-    this.registerDisposer(
-      this.state.stateReset.add(() => this.sidePanelManager.reset()),
-    );
 
     this.registerDisposer(
       new PlaybackManager(this.display, this.position, this.velocity),
     );
+
+    // Attach the chrome last, because it subscribes to the state.
+    if (chrome) {
+      this.chrome = this.registerDisposer(new ViewerChrome(this));
+    }
   }
 
   private updateShowBorders() {
@@ -820,347 +793,11 @@ export class Viewer extends RefCounted implements ViewerState {
     gridContainer.style.display = "flex";
     gridContainer.style.flexDirection = "column";
 
-    const topRow = document.createElement("div");
-    topRow.classList.add("neuroglancer-viewer-top-row");
-    topRow.style.display = "flex";
-    topRow.style.flexDirection = "row";
-    topRow.style.alignItems = "stretch";
-
-    const positionWidget = this.registerDisposer(
-      new PositionWidget(
-        this.navigationState.position,
-        this.layerSpecification.coordinateSpaceCombiner,
-        {
-          velocity: this.velocity,
-          getToolBinder: () => this.toolBinder,
-          showAllPlotBounds: this.uiConfiguration.showAllDimensionPlotBounds,
-        },
-      ),
-    );
-    this.registerDisposer(
-      new ElementVisibilityFromTrackableBoolean(
-        this.uiControlVisibility.showLocation,
-        positionWidget.element,
-      ),
-    );
-    topRow.appendChild(positionWidget.element);
-
-    const mousePositionWidget = this.registerDisposer(
-      new MousePositionWidget(
-        document.createElement("div"),
-        this.mouseState,
-        this.navigationState.coordinateSpace,
-      ),
-    );
-    mousePositionWidget.element.style.flex = "1";
-    mousePositionWidget.element.style.alignSelf = "center";
-    this.registerDisposer(
-      new ElementVisibilityFromTrackableBoolean(
-        this.uiControlVisibility.showLocation,
-        mousePositionWidget.element,
-      ),
-    );
-    topRow.appendChild(mousePositionWidget.element);
-
-    if (typeof NEUROGLANCER_CREDIT_LINK !== "undefined") {
-      let creditInfo = NEUROGLANCER_CREDIT_LINK!;
-      if (!Array.isArray(creditInfo)) {
-        creditInfo = [creditInfo];
-      }
-      for (const { url, text } of creditInfo) {
-        const creditLink = document.createElement("a");
-        creditLink.style.marginRight = "5px";
-        creditLink.href = url;
-        creditLink.textContent = text;
-        creditLink.style.fontFamily = "sans-serif";
-        creditLink.style.color = "yellow";
-        creditLink.target = "_blank";
-        topRow.appendChild(creditLink);
-      }
-    }
-
-    const annotationToolStatus = this.registerDisposer(
-      new AnnotationToolStatusWidget(this.selectedLayer, this.globalToolBinder),
-    );
-    topRow.appendChild(annotationToolStatus.element);
-    this.registerDisposer(
-      new ElementVisibilityFromTrackableBoolean(
-        this.uiControlVisibility.showAnnotationToolStatus,
-        annotationToolStatus.element,
-      ),
-    );
-
-    if (stateShareEnabled) {
-      const stateShare = this.registerDisposer(new StateShare(this));
-      topRow.appendChild(stateShare.element);
-    }
-
-    {
-      const button = this.registerDisposer(
-        new MultiToolPaletteDropdownButton(this.toolPalettes),
-      ).element;
-
-      this.registerDisposer(
-        new ElementVisibilityFromTrackableBoolean(
-          this.uiControlVisibility.showToolPaletteButton,
-          button,
-        ),
-      );
-      topRow.appendChild(button);
-    }
-
-    {
-      const { layerListPanelState } = this;
-      const button = this.registerDisposer(
-        new CheckboxIcon(layerListPanelState.location.watchableVisible, {
-          svg: svg_layers,
-          backgroundScheme: "dark",
-          enableTitle: "Show layer list panel",
-          disableTitle: "Hide layer list panel",
-        }),
-      );
-      button.element.insertAdjacentElement(
-        "afterbegin",
-        this.registerDisposer(new LayerArchiveCountWidget(this.layerManager))
-          .element,
-      );
-      this.registerDisposer(
-        new ElementVisibilityFromTrackableBoolean(
-          this.uiControlVisibility.showLayerListPanelButton,
-          button.element,
-        ),
-      );
-      topRow.appendChild(button.element);
-    }
-
-    {
-      const { selectionDetailsState } = this;
-      const button = this.registerDisposer(
-        new CheckboxIcon(selectionDetailsState.location.watchableVisible, {
-          svg: svg_list,
-          backgroundScheme: "dark",
-          enableTitle: "Show selection details panel",
-          disableTitle: "Hide selection details panel",
-        }),
-      );
-      this.registerDisposer(
-        new ElementVisibilityFromTrackableBoolean(
-          this.uiControlVisibility.showSelectionPanelButton,
-          button.element,
-        ),
-      );
-      topRow.appendChild(button.element);
-    }
-
-    {
-      const { selectedLayer } = this;
-      const button = this.registerDisposer(
-        new CheckboxIcon(
-          {
-            get value() {
-              return selectedLayer.visible;
-            },
-            set value(visible: boolean) {
-              selectedLayer.visible = visible;
-            },
-            changed: selectedLayer.location.locationChanged,
-          },
-          {
-            svg: svg_controls_alt,
-            backgroundScheme: "dark",
-            enableTitle: "Show layer side panel",
-            disableTitle: "Hide layer side panel",
-          },
-        ),
-      );
-      this.registerDisposer(
-        new ElementVisibilityFromTrackableBoolean(
-          this.uiControlVisibility.showLayerSidePanelButton,
-          button.element,
-        ),
-      );
-      topRow.appendChild(button.element);
-    }
-
-    {
-      const button = makeIcon({ text: "{}", title: "Edit JSON state" });
-      this.registerEventListener(button, "click", () => {
-        this.editJsonState();
-      });
-      this.registerDisposer(
-        new ElementVisibilityFromTrackableBoolean(
-          this.uiControlVisibility.showEditStateButton,
-          button,
-        ),
-      );
-      topRow.appendChild(button);
-    }
-
-    {
-      const button = makeIcon({ svg: svg_camera, title: "Screenshot" });
-      this.registerEventListener(button, "click", () => {
-        this.showScreenshotDialog();
-      });
-      this.registerDisposer(
-        new ElementVisibilityFromTrackableBoolean(
-          this.uiControlVisibility.showScreenshotButton,
-          button,
-        ),
-      );
-      topRow.appendChild(button);
-    }
-    {
-      const button = makeCopyUrlButton({
-        title: "Copy URL to clipboard",
-        onClick: () => this.copyUrlToClipboard(),
-      });
-      this.registerDisposer(
-        new ElementVisibilityFromTrackableBoolean(
-          this.uiControlVisibility.showCopyUrlButton,
-          button,
-        ),
-      );
-      topRow.appendChild(button);
-    }
-    {
-      const { helpPanelState } = this;
-      const button = this.registerDisposer(
-        new CheckboxIcon(helpPanelState.location.watchableVisible, {
-          text: "?",
-          backgroundScheme: "dark",
-          enableTitle: "Show help panel",
-          disableTitle: "Hide help panel",
-        }),
-      );
-      this.registerDisposer(
-        new ElementVisibilityFromTrackableBoolean(
-          this.uiControlVisibility.showHelpButton,
-          button.element,
-        ),
-      );
-      topRow.appendChild(button.element);
-    }
-
-    {
-      const { settingsPanelState } = this;
-      const button = this.registerDisposer(
-        new CheckboxIcon(settingsPanelState.location.watchableVisible, {
-          svg: svg_settings,
-          backgroundScheme: "dark",
-          enableTitle: "Show settings panel",
-          disableTitle: "Hide settings panel",
-        }),
-      );
-      this.registerDisposer(
-        new ElementVisibilityFromTrackableBoolean(
-          this.uiControlVisibility.showSettingsButton,
-          button.element,
-        ),
-      );
-      topRow.appendChild(button.element);
-    }
-
-    this.registerDisposer(
-      new ElementVisibilityFromTrackableBoolean(
-        makeDerivedWatchableValue(
-          (...values: boolean[]) => values.reduce((a, b) => a || b, false),
-          ...VIEWER_TOP_ROW_CONFIG_OPTIONS.map(
-            (key) => this.uiControlVisibility[key],
-          ),
-        ),
-        topRow,
-      ),
-    );
-
-    gridContainer.appendChild(topRow);
-
     // Note: for new states, the actual default layout is 4panel-alt.
     this.layout = this.registerDisposer(
       new RootLayoutContainer(this, "4panel"),
     );
-    this.sidePanelManager = this.registerDisposer(
-      new SidePanelManager(this.display, this.layout.element, this.visibility),
-    );
-    this.registerDisposer(
-      this.sidePanelManager.registerPanel({
-        location: this.layerListPanelState.location,
-        makePanel: () =>
-          new LayerListPanel(
-            this.sidePanelManager,
-            this.layerSpecification,
-            this.layerListPanelState,
-            this.layerPanelVisibility,
-            this.uiControlVisibility.showLayerPanel,
-          ),
-      }),
-    );
-    this.registerDisposer(
-      new LayerSidePanelManager(
-        this.sidePanelManager,
-        this.selectedLayer.addRef(),
-      ),
-    );
-    this.registerDisposer(
-      this.sidePanelManager.registerPanel({
-        location: this.selectionDetailsState.location,
-        makePanel: () =>
-          new SelectionDetailsPanel(
-            this.sidePanelManager,
-            this.selectionDetailsState,
-            this.layerSpecification,
-            this.selectedLayer,
-          ),
-      }),
-    );
-    gridContainer.appendChild(this.sidePanelManager.element);
-
-    this.registerDisposer(
-      this.sidePanelManager.registerPanel({
-        location: this.statisticsDisplayState.location,
-        makePanel: () =>
-          new StatisticsPanel(
-            this.sidePanelManager,
-            this.chunkQueueManager,
-            this.statisticsDisplayState,
-          ),
-      }),
-    );
-
-    this.registerDisposer(
-      this.sidePanelManager.registerPanel({
-        location: this.helpPanelState.location,
-        makePanel: () => {
-          const { inputEventBindings } = this;
-          return new InputEventBindingHelpDialog(
-            this.sidePanelManager,
-            this.helpPanelState,
-            [
-              ["Global", inputEventBindings.global],
-              ["Cross section view", inputEventBindings.sliceView],
-              ["3-D projection view", inputEventBindings.perspectiveView],
-            ],
-            this.layerManager,
-            this.globalToolBinder,
-          );
-        },
-      }),
-    );
-
-    this.registerDisposer(
-      this.sidePanelManager.registerPanel({
-        location: this.settingsPanelState.location,
-        makePanel: () =>
-          new ViewerSettingsPanel(
-            this.sidePanelManager,
-            this.settingsPanelState,
-            this,
-          ),
-      }),
-    );
-
-    this.registerDisposer(
-      new MultiToolPaletteManager(this.sidePanelManager, this.toolPalettes),
-    );
+    gridContainer.appendChild(this.layout.element);
 
     const updateVisibility = () => {
       const shouldBeVisible = this.visibility.visible;
