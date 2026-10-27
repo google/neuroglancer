@@ -167,8 +167,3 @@
   .neuroglancer-segment-list-entry-color-input::-webkit-color-swatch-wrapper {
   padding: 0;
 }
-
-.neuroglancer-segment-list-entry
-  .neuroglancer-segment-list-entry-color-input::-webkit-color-swatch {
-  border: none;
-}
