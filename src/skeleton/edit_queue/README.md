@@ -742,6 +742,54 @@ not collapse both restored overlays onto the merge survivor.
 Known limits: stable-ID-map garbage collection and a bound on the
 notification-deduplication set are not implemented.
 
+## Add an editable datasource
+
+A source becomes editable when its `MultiscaleSpatiallyIndexedSkeletonSource`
+subclass returns an `EditableSkeletonSource` from `editableSource`. That object
+supplies:
+
+1. `edgeDirection`, `getSkeletonManifest` and `getSkeletonFragment`, which
+   read complete skeletons;
+2. a command factory for each action. Add, Move, Delete, Split and Merge are
+   required. Insert, Reroot, and the four node-attribute commands are optional;
+3. `editPlannerProvider.createPlanner`, which returns a planner, an edit
+   request adapter, an optional provisional-ID policy, and an optional
+   `cleanup`; and
+4. `confidenceValues`, only if the server stores a fixed set of confidence
+   values.
+
+The CATMAID files hold two kinds of code. A new datasource can copy this code,
+which has no CATMAID logic:
+
+- the payload checks in `command_payloads.ts`;
+- the queue-input requirements in `command_factories.ts`; and
+- the deltas, previews and UI hints in `CatmaidEditPlanner`
+  (`edit_planner.ts`).
+
+A new datasource must write its own version of the CATMAID-specific code:
+
+- the semantic types and the immutable plan and inverse recipe, with split,
+  merge, reroot, and compound steps, in `edit_plan.ts`. The captures in
+  `CatmaidEditPlanner` fill these types, so adapt them rather than copy them;
+- authoritative ID resolution immediately before transport, the scalar
+  request payloads, response validation, and authoritative identity mapping,
+  in `CatmaidEditPlanCommitBase` (`edit_planner.ts`);
+- the edit request scope and finite failure classification, in
+  `edit_requests.ts`; and
+- the transport: `api.ts`, with its `nocheck` state policy, and the `commit*`
+  methods of `CatmaidSpatialSkeletonEditCommands` (`command_factories.ts`).
+
+`edit_planner.ts` also holds CATMAID rules: the defaults for a new node, the
+provisional-ID range, the authority labels and messages, and the blocks on a
+delete of a root with children and on a true end at a root or any non-leaf
+node. Both `edit_planner.ts` and `command_factories.ts` cut positions to rank-3
+model space. Replace these rules in a copy.
+
+CATMAID is the first editable skeletons source, so it is possible that some
+pieces of generic code and architecture are within the CATMAID datasource. If
+adding an additional datasource, a reasonable step would be to attempt to
+pull out pieces of this generic code.
+
 ## CATMAID boundary
 
 CATMAID builds Execute plans exclusively from `queueInput`. Its planner does
@@ -755,21 +803,14 @@ data its opaque plan retains. CATMAID binds only the nodes needed by the
 action and materializes scalar endpoint arguments under the authority lease;
 another datasource may deliberately bind or materialize a complete graph.
 
-CATMAID-specific responsibilities include:
+[Add an editable datasource](#add-an-editable-datasource) lists the
+CATMAID-specific responsibilities and their files.
 
-- immutable plan/request and inverse recipe construction;
-- authoritative ID resolution immediately before transport;
-- endpoint-specific scalar payload and `nocheck` policy;
-- response validation and authoritative identity mapping;
-- split, merge, reroot, and compound plan interpretation; and
-- finite transport failure classification.
-
-Insert is an optional source command capability. CATMAID captures the parent and
-children from the admitted snapshot and uses its existing created-node plan,
-with an insert transport step and the compact `restore-delete` preview. Undo
-deletes the inserted node and reconnects its children; Redo inserts it again
-using the current authoritative identities. No separate preview operation is
-needed.
+For Insert, CATMAID captures the parent and children from the admitted snapshot
+and uses its existing created-node plan, with an insert transport step and the
+compact `restore-delete` preview. Undo deletes the inserted node and reconnects
+its children; Redo inserts it again using the current authoritative identities.
+No separate preview operation is needed.
 
 CATMAID does not implement a queue, history registry, physical-resource list,
 lease cursor, compensation plan, direct cache lookup, or Reload-required
@@ -887,6 +928,6 @@ For every operation family, verify together:
 9. node-view depth checkpoints without changes to Undo/Redo results.
 
 Keep generic modules datasource-free. Keep CATMAID endpoint policy and response
-interpretation in its edit planner and edit request files. Do not reintroduce a
-feature flag, dual runtime, provider queue, resource-overlap scheduler, recovery
-path, or compatibility mode.
+interpretation in its `spatial_skeleton_edit/` and `api.ts` files. Do not
+reintroduce a feature flag, dual runtime, provider queue, resource-overlap
+scheduler, recovery path, or compatibility mode.
