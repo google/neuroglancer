@@ -17,7 +17,7 @@
 /**
  * @file Defines the edit errors for a conflict, a required inspection and a
  * full queue, with the user-facing message for each. It must stay free of
- * main-thread imports, because it also runs on the WebWorker.
+ * main-thread imports, because it also runs on the chunk worker.
  */
 
 import type { SpatialSkeletonQueueInputRequirement } from "#src/skeleton/edit_queue/queue_input.js";

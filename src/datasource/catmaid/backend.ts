@@ -16,7 +16,7 @@
 
 /**
  * @file Downloads the CATMAID nodes of one spatial index chunk. It runs on the
- * WebWorker.
+ * chunk worker.
  */
 
 import { WithParameters } from "#src/chunk_manager/backend.js";
