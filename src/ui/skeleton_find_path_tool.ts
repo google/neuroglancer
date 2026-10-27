@@ -404,12 +404,6 @@ export class SpatialSkeletonFindPathTool extends SpatialSkeletonToolBase {
           );
           return;
         }
-        if (context.skeletonLayer !== skeletonLayer) {
-          StatusMessage.showTemporaryMessage(
-            "Find Path is only available for the first active spatial skeleton datasource in this layer.",
-          );
-          return;
-        }
         const pickedNode = this.resolvePickedNodeSelection(skeletonLayer);
         if (
           pickedNode?.segmentId === undefined ||

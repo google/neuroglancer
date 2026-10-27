@@ -89,11 +89,7 @@ export abstract class SpatialSkeletonToolBase extends LayerTool<SegmentationUser
   }
 
   protected getActiveSpatiallyIndexedSkeletonLayer() {
-    return (
-      this.layer.getSpatiallyIndexedSkeletonLayerOf(
-        this.mouseState.pickedRenderLayer,
-      ) ?? this.layer.spatiallyIndexedSkeletonLayer.value
-    );
+    return this.layer.spatiallyIndexedSkeletonLayer.value;
   }
 
   protected getPickedSpatialSkeletonNode():

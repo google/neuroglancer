@@ -876,26 +876,15 @@ export class SegmentationUserLayer extends Base {
     makeCachedLazyDerivedWatchableValue(
       (layers): SpatiallyIndexedSkeletonLayer | undefined => {
         for (const layer of layers) {
-          const skeletonLayer = this.getSpatiallyIndexedSkeletonLayerOf(layer);
-          if (skeletonLayer !== undefined) return skeletonLayer;
+          if (layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer) {
+            return layer.base;
+          }
         }
         return undefined;
       },
       { changed: this.layersChanged, value: this.renderLayers },
     ),
   );
-
-  getSpatiallyIndexedSkeletonLayerOf(
-    renderLayer: MouseSelectionState["pickedRenderLayer"],
-  ): SpatiallyIndexedSkeletonLayer | undefined {
-    if (
-      renderLayer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer ||
-      renderLayer instanceof SliceViewPanelSpatiallyIndexedSkeletonLayer
-    ) {
-      return renderLayer.base;
-    }
-    return undefined;
-  }
 
   readonly hasSpatiallyIndexedSkeletonsLayer = this.registerDisposer(
     makeCachedDerivedWatchableValue(
@@ -948,41 +937,18 @@ export class SegmentationUserLayer extends Base {
     );
   }
 
-  private getSpatialSkeletonFindPathSubsource(
-    loadedSubsources: readonly LoadedDataSubsource[],
-  ) {
-    return loadedSubsources.find((loadedSubsource) => {
-      return (
-        loadedSubsource.subsourceEntry.subsource.spatialSkeleton !==
-          undefined &&
-        loadedSubsource.loadedDataSource.dataSource.state instanceof
-          SkeletonDataSourceState
-      );
-    });
-  }
-
-  private hasEditableSpatialSkeletonSource(
-    loadedSubsources: readonly LoadedDataSubsource[],
-  ): boolean {
-    return loadedSubsources.some(({ subsourceEntry }) => {
-      return (
-        subsourceEntry.subsource.spatialSkeleton?.editableSource !== undefined
-      );
-    });
-  }
-
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
     const loadedSubsources = [...subsources];
-    this.skeletonSourceConnection.sourceChanged(
-      loadedSubsources.find(
-        ({ subsourceEntry }) =>
-          subsourceEntry.subsource.spatialSkeleton !== undefined,
-      )?.subsourceEntry.subsource.spatialSkeleton,
+    const spatialSkeletonSubsource = loadedSubsources.find(
+      ({ subsourceEntry }) =>
+        subsourceEntry.subsource.spatialSkeleton !== undefined,
     );
-    const findPathSubsource =
-      this.getSpatialSkeletonFindPathSubsource(loadedSubsources);
+    this.skeletonSourceConnection.sourceChanged(
+      spatialSkeletonSubsource?.subsourceEntry.subsource.spatialSkeleton,
+    );
     const hasEditableSpatialSkeletonSource =
-      this.hasEditableSpatialSkeletonSource(loadedSubsources);
+      spatialSkeletonSubsource?.subsourceEntry.subsource.spatialSkeleton
+        ?.editableSource !== undefined;
     const { linkedSegmentationGroup } = this.displayState;
     const linkedRoot = linkedSegmentationGroup.root.value;
     if (
@@ -1066,6 +1032,12 @@ export class SegmentationUserLayer extends Base {
           }
         }, this.displayState.segmentationGroupState.value);
       } else if (spatialSkeleton !== undefined) {
+        if (loadedSubsource !== spatialSkeletonSubsource) {
+          loadedSubsource.deactivate(
+            "Only one spatially indexed skeleton source is supported",
+          );
+          continue;
+        }
         loadedSubsource.activate(() => {
           const displayState = {
             ...this.displayState,
@@ -1076,7 +1048,11 @@ export class SegmentationUserLayer extends Base {
             loadedSubsource,
             spatialSkeleton,
             displayState,
-            { attachFindPath: loadedSubsource === findPathSubsource },
+            {
+              attachFindPath:
+                loadedSubsource.loadedDataSource.dataSource.state instanceof
+                SkeletonDataSourceState,
+            },
           );
         }, this.displayState.segmentationGroupState.value);
       } else if (segmentPropertyMap !== undefined) {

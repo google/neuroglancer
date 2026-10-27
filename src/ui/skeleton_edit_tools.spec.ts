@@ -325,7 +325,6 @@ function makeEditToolHarness(
       },
     },
     spatiallyIndexedSkeletonLayer: new WatchableValue(skeletonLayer),
-    getSpatiallyIndexedSkeletonLayerOf: () => undefined,
     selectSegment: vi.fn(),
     layersChanged: new NullarySignal(),
   };

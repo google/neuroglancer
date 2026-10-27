@@ -489,6 +489,23 @@ describe("layer/segmentation equivalences with editable skeletons", () => {
   });
 });
 
+describe("layer/segmentation spatial skeleton sources", () => {
+  it("shows only the first spatial skeleton source and reports the second as unsupported", () => {
+    const { layer } = makeEquivalencesLayer([]);
+    const firstSkeleton = makeSkeletonSubsource(undefined);
+    const secondSkeleton = makeSkeletonSubsource(undefined);
+
+    layer.activateDataSubsources([firstSkeleton, secondSkeleton]);
+
+    expect(firstSkeleton.activate).toHaveBeenCalled();
+    expect(firstSkeleton.errorMessage).toBeUndefined();
+    expect(secondSkeleton.activate).not.toHaveBeenCalled();
+    expect(secondSkeleton.errorMessage).toBe(
+      "Only one spatially indexed skeleton source is supported",
+    );
+  });
+});
+
 describe("layer/segmentation selection details", () => {
   function makeDetailsHostLayer() {
     const layer = Object.create(SegmentationUserLayer.prototype);
