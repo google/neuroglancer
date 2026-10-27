@@ -25,7 +25,6 @@ import {
   registerCodec,
 } from "#src/datasource/zarr/codec/resolve.js";
 import { parseChunkShape } from "#src/datasource/zarr/metadata/parse.js";
-import { DataType } from "#src/util/data_type.js";
 import {
   verifyEnumString,
   verifyObject,
@@ -88,7 +87,7 @@ registerCodec({
       "index_codecs",
       (value) =>
         parseCodecChainSpec(value, {
-          dataType: DataType.UINT64,
+          sourceDataType: "uint64",
           chunkShape: indexShape,
         }),
     );
@@ -102,7 +101,7 @@ registerCodec({
       "codecs",
       (value) =>
         parseCodecChainSpec(value, {
-          dataType: decodedArrayInfo.dataType,
+          sourceDataType: decodedArrayInfo.sourceDataType,
           chunkShape: subChunkShape,
         }),
     );

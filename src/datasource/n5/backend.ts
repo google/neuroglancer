@@ -28,6 +28,8 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { Endianness } from "#src/util/endian.js";
 import { decodeGzip } from "#src/util/gzip.js";
+import type { SourceDataType } from "#src/util/source_data_type.js";
+import { getSourceDataType } from "#src/util/source_data_type.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
 async function decodeChunk(
@@ -35,6 +37,7 @@ async function decodeChunk(
   signal: AbortSignal,
   response: ArrayBuffer,
   encoding: VolumeChunkEncoding,
+  sourceDataType: SourceDataType,
 ) {
   const dv = new DataView(response);
   const mode = dv.getUint16(0, /*littleEndian=*/ false);
@@ -84,6 +87,7 @@ async function decodeChunk(
     Endianness.BIG,
     buffer.byteOffset,
     buffer.byteLength,
+    sourceDataType,
   );
 }
 
@@ -115,6 +119,7 @@ export class PrecomputedVolumeChunkSource extends WithParameters(
       signal,
       await response.response.arrayBuffer(),
       parameters.encoding,
+      getSourceDataType(parameters.sourceDataType),
     );
   }
 }

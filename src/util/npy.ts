@@ -22,13 +22,9 @@
 
 import type { TypedNumberArray } from "#src/util/array.js";
 import type { DataType } from "#src/util/data_type.js";
-import {
-  DATA_TYPE_ARRAY_CONSTRUCTOR,
-  DATA_TYPE_BYTES,
-} from "#src/util/data_type.js";
-import { convertEndian } from "#src/util/endian.js";
 import { pythonLiteralParse } from "#src/util/json.js";
 import { parseNumpyDtype } from "#src/util/numpy_dtype.js";
+import { encodedByteLength } from "#src/util/source_data_type.js";
 
 export class NumpyArray {
   constructor(
@@ -80,22 +76,23 @@ export function parseNpy(x: Uint8Array<ArrayBuffer>) {
     }
     numElements *= dim;
   }
-  const { dataType, endianness } = parseNumpyDtype(dtype);
-  const bytesPerElement = DATA_TYPE_BYTES[dataType];
-  const arrayConstructor = DATA_TYPE_ARRAY_CONSTRUCTOR[dataType];
-  if (bytesPerElement * numElements + dataOffset !== x.byteLength) {
+  const { sourceDataType, endianness } = parseNumpyDtype(dtype);
+  if (sourceDataType.numComponents !== 1) {
+    throw new Error(`Unsupported numpy data type: ${JSON.stringify(dtype)}`);
+  }
+  const expectedBytes = encodedByteLength(sourceDataType, numElements);
+  if (expectedBytes + dataOffset !== x.byteLength) {
     throw new Error("Expected length does not match length of data");
   }
-  const data = new arrayConstructor(
-    x.buffer,
-    x.byteOffset + dataOffset,
+  const data = sourceDataType.decode(
+    x.subarray(dataOffset) as Uint8Array<ArrayBuffer>,
     numElements,
-  ) as TypedNumberArray<ArrayBuffer>;
-  convertEndian(data, endianness, bytesPerElement);
+    endianness,
+  );
   return new NumpyArray(
     data,
     shape,
-    dataType,
+    sourceDataType.dataType,
     headerObject.fortran_order === true,
   );
 }
