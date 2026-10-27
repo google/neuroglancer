@@ -34,8 +34,8 @@ import { bigintCompare } from "#src/util/bigint.js";
 import { HttpError } from "#src/util/http_request.js";
 import { parseUint64 } from "#src/util/json.js";
 
-const MAX_CHUNKS = 64;
-const MIN_CHUNK_SIZE = 1;
+const MAX_DEFAULT_CHUNK_COUNT = 64;
+const MIN_DEFAULT_CHUNK_SIZE = 1;
 
 function getChunkCoverageForChunkSize(
   extents: readonly number[],
@@ -47,20 +47,21 @@ function getChunkCoverageForChunkSize(
   }, 1);
 }
 
-// The smallest isotropic chunk size that covers the bounds with at most MAX_CHUNKS chunks.
+// For a stack whose metadata lists no spatial levels: the smallest isotropic
+// chunk size that covers the bounds with at most MAX_DEFAULT_CHUNK_COUNT chunks.
 export function getDefaultCatmaidChunkSize(bounds: BoundingBox): number[] {
   const extents = Array.from(bounds.lowerBounds, (lowerBound, index) =>
     Math.max(0, bounds.upperBounds[index] - lowerBound),
   );
   const maxExtent = Math.max(...extents);
   if (!(maxExtent > 0)) {
-    return extents.map(() => MIN_CHUNK_SIZE);
+    return extents.map(() => MIN_DEFAULT_CHUNK_SIZE);
   }
-  let low = MIN_CHUNK_SIZE;
-  let high = Math.max(MIN_CHUNK_SIZE, Math.ceil(maxExtent));
+  let low = MIN_DEFAULT_CHUNK_SIZE;
+  let high = Math.max(MIN_DEFAULT_CHUNK_SIZE, Math.ceil(maxExtent));
   while (low < high) {
     const mid = Math.floor((low + high) / 2);
-    if (getChunkCoverageForChunkSize(extents, mid) <= MAX_CHUNKS) {
+    if (getChunkCoverageForChunkSize(extents, mid) <= MAX_DEFAULT_CHUNK_COUNT) {
       high = mid;
     } else {
       low = mid + 1;
