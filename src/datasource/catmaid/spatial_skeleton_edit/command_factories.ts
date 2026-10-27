@@ -52,7 +52,7 @@ import type {
   CatmaidSpatialSkeletonSplitResult,
   CatmaidSpatialSkeletonTrueEndUpdateRequest,
   CatmaidSpatialSkeletonEditOperations,
-} from "#src/datasource/catmaid/spatial_skeleton_edit/edit_endpoints.js";
+} from "#src/datasource/catmaid/spatial_skeleton_edit/edit_operations.js";
 import type { CatmaidSpatialSkeletonCommandDescriptor } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_planner.js";
 import {
   CATMAID_PROVISIONAL_NUMERIC_ID_POLICY,

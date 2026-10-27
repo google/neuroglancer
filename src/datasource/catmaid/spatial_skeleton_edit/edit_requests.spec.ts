@@ -16,7 +16,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { CatmaidSpatialSkeletonEditOperations } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_endpoints.js";
+import type { CatmaidSpatialSkeletonEditOperations } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_operations.js";
 import { CatmaidEditRequests } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_requests.js";
 import type { SpatialSkeletonEditRequestContext } from "#src/skeleton/edit_queue/api.js";
 import { commitSpatialSkeletonEditRequest } from "#src/skeleton/edit_queue/api.js";
