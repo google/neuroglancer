@@ -91,10 +91,6 @@ import {
   uploadSegmentIdTexture,
   SPATIAL_SKELETON_SOURCE_OPTIONS,
 } from "#src/skeleton/spatial/frontend.js";
-import type { SkeletonNodeHighlightSelection } from "#src/skeleton/spatial/node_highlight.js";
-import { SkeletonNodeHighlight } from "#src/skeleton/spatial/node_highlight.js";
-import type { SkeletonPanelView } from "#src/skeleton/spatial/node_overlay.js";
-import { SkeletonNodeOverlay } from "#src/skeleton/spatial/node_overlay.js";
 import type {
   SkeletonOverlaySegments,
   SpatiallyIndexedSkeletonOverlayGeometry,
@@ -104,6 +100,10 @@ import {
   resolveSpatiallyIndexedSkeletonNodePick,
   resolveSpatiallyIndexedSkeletonSegmentPick,
 } from "#src/skeleton/spatial/picking.js";
+import type { SkeletonNodeHighlightSelection } from "#src/skeleton/spatial/skeleton_overlay_primitives.js";
+import { SkeletonOverlayPrimitives } from "#src/skeleton/spatial/skeleton_overlay_primitives.js";
+import type { SkeletonPanelView } from "#src/skeleton/spatial/skeleton_panel_overlay.js";
+import { SkeletonPanelOverlay } from "#src/skeleton/spatial/skeleton_panel_overlay.js";
 import { type TransformedSource } from "#src/sliceview/base.js";
 import type { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
@@ -339,7 +339,7 @@ export class SpatiallyIndexedSkeletonLayer
       readonly chunk: SkeletonOverlayChunk;
     }
   >();
-  readonly highlight: SkeletonNodeHighlight;
+  readonly overlayPrimitives: SkeletonOverlayPrimitives;
   private readonly gpuBrowseExcludedSegmentsHashTable: GPUHashTable<HashSetUint64>;
 
   getUniqueChunkSources() {
@@ -438,8 +438,8 @@ export class SpatiallyIndexedSkeletonLayer
       ),
     );
     this.overlaySegments = overlaySegments;
-    this.highlight = this.registerDisposer(
-      new SkeletonNodeHighlight({
+    this.overlayPrimitives = this.registerDisposer(
+      new SkeletonOverlayPrimitives({
         displayState,
         nodeSelection,
         editSession,
@@ -1164,7 +1164,7 @@ function makeSpatialSkeletonRenderLayerBackend(
   return backend;
 }
 
-function addSkeletonNodeOverlay(
+function addSkeletonPanelOverlay(
   attachment: VisibleLayerInfo<
     PerspectivePanel | SliceViewPanel,
     ThreeDimensionalRenderLayerAttachmentState
@@ -1181,9 +1181,9 @@ function addSkeletonNodeOverlay(
   );
   attachment.registerDisposer(
     attachment.view.addOverlay(
-      new SkeletonNodeOverlay(
+      new SkeletonPanelOverlay(
         attachment.view,
-        base.highlight,
+        base.overlayPrimitives,
         nodeDiameter,
         view,
       ),
@@ -1306,7 +1306,7 @@ gl_Position = uChunkToClip * vec4(uTranslation + boxVertex * uChunkDataSize, 1.0
   ) {
     super.attach(attachment);
     attachSpatiallyIndexedSkeletonLayer(this.base, this, attachment);
-    addSkeletonNodeOverlay(attachment, this.base, this.renderOptions, "3d");
+    addSkeletonPanelOverlay(attachment, this.base, this.renderOptions, "3d");
   }
 
   get gl() {
@@ -1505,7 +1505,7 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
   ) {
     super.attach(attachment);
     attachSpatiallyIndexedSkeletonLayer(this.base, this, attachment);
-    addSkeletonNodeOverlay(attachment, this.base, this.renderOptions, "2d");
+    addSkeletonPanelOverlay(attachment, this.base, this.renderOptions, "2d");
   }
 
   draw(

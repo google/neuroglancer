@@ -19,11 +19,11 @@
  * elements over a panel, at the projected position of each node.
  */
 
-import "#src/skeleton/spatial/node_overlay.css";
+import "#src/skeleton/spatial/skeleton_panel_overlay.css";
 
 import type { ProjectionParameters } from "#src/projection_parameters.js";
 import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
-import type { SkeletonNodeHighlight } from "#src/skeleton/spatial/node_highlight.js";
+import type { SkeletonOverlayPrimitives } from "#src/skeleton/spatial/skeleton_overlay_primitives.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { PanelOverlay } from "#src/ui/panel_overlays.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -171,7 +171,7 @@ interface PanelPoint {
   readonly opacity: number;
 }
 
-export class SkeletonNodeOverlay extends RefCounted implements PanelOverlay {
+export class SkeletonPanelOverlay extends RefCounted implements PanelOverlay {
   readonly element = document.createElement("div");
   readonly updateNeeded = new NullarySignal();
   readonly followsMouse = false;
@@ -179,16 +179,18 @@ export class SkeletonNodeOverlay extends RefCounted implements PanelOverlay {
 
   constructor(
     private readonly panel: RenderedDataPanel,
-    private readonly highlight: SkeletonNodeHighlight,
+    private readonly overlayPrimitives: SkeletonOverlayPrimitives,
     private readonly nodeDiameter: WatchableValueInterface<number>,
     private readonly view: SkeletonPanelView,
   ) {
     super();
-    this.registerDisposer(highlight.changed.add(this.updateNeeded.dispatch));
+    this.registerDisposer(
+      overlayPrimitives.changed.add(this.updateNeeded.dispatch),
+    );
   }
 
   update(): void {
-    const primitives = this.highlight.computePrimitives(
+    const primitives = this.overlayPrimitives.computePrimitives(
       getSkeletonNodeRing(this.nodeDiameter.value, this.view),
     );
     const projectionParameters = this.panel.projectionParameters.value;
@@ -216,7 +218,7 @@ export class SkeletonNodeOverlay extends RefCounted implements PanelOverlay {
     let element = this.primitiveElements[index];
     if (element === undefined) {
       element = document.createElement("div");
-      element.className = "neuroglancer-skeleton-node-overlay-primitive";
+      element.className = "neuroglancer-skeleton-panel-overlay-primitive";
       this.primitiveElements.push(element);
     }
     return element;

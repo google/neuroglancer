@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-.neuroglancer-skeleton-node-overlay-primitive {
+.neuroglancer-skeleton-panel-overlay-primitive {
   position: absolute;
   left: 0;
   top: 0;
   will-change: transform;
 }
 
-.neuroglancer-skeleton-node-overlay-primitive:is(
+.neuroglancer-skeleton-panel-overlay-primitive:is(
   [data-kind="marker"],
   [data-kind="preparationMarker"]
 ) {
@@ -35,7 +35,7 @@
     inset 0 0 0 1px var(--ring-outline-color);
 }
 
-.neuroglancer-skeleton-node-overlay-primitive[data-kind="preparationMarker"] {
+.neuroglancer-skeleton-panel-overlay-primitive[data-kind="preparationMarker"] {
   --ring-color: #ffcc33;
   --ring-outline-color: rgba(0, 0, 0, 0.8);
   border-style: dashed;
@@ -46,7 +46,7 @@
   text-align: center;
 }
 
-.neuroglancer-skeleton-node-overlay-primitive[data-kind="preparationConnector"] {
+.neuroglancer-skeleton-panel-overlay-primitive[data-kind="preparationConnector"] {
   width: var(--connector-length);
   border-top: var(--connector-width) dashed #ffcc33;
   transform-origin: 0 50%;

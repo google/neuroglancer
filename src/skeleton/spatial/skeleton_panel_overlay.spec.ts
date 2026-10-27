@@ -22,16 +22,16 @@ import {
 } from "#src/display_context.js";
 import type { ProjectionParameters } from "#src/projection_parameters.js";
 import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
-import type { SkeletonNodeHighlight } from "#src/skeleton/spatial/node_highlight.js";
+import type { SkeletonOverlayPrimitives } from "#src/skeleton/spatial/skeleton_overlay_primitives.js";
 import type {
   SkeletonPanelOverlayPrimitive,
   SkeletonPanelView,
-} from "#src/skeleton/spatial/node_overlay.js";
+} from "#src/skeleton/spatial/skeleton_panel_overlay.js";
 import {
   getSkeletonNodeRing,
   projectToViewport,
-  SkeletonNodeOverlay,
-} from "#src/skeleton/spatial/node_overlay.js";
+  SkeletonPanelOverlay,
+} from "#src/skeleton/spatial/skeleton_panel_overlay.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { mat4 } from "#src/util/geom.js";
 import { NullarySignal } from "#src/util/signal.js";
@@ -214,11 +214,11 @@ function makeOrthographicPanel() {
   } as unknown as RenderedDataPanel;
 }
 
-function makeHighlight(primitives: SkeletonPanelOverlayPrimitive[]) {
+function makeOverlayPrimitives(primitives: SkeletonPanelOverlayPrimitive[]) {
   return {
     changed: new NullarySignal(),
     computePrimitives: () => primitives,
-  } as unknown as SkeletonNodeHighlight;
+  } as unknown as SkeletonOverlayPrimitives;
 }
 
 function makeMarker(position: number[]): SkeletonPanelOverlayPrimitive {
@@ -235,9 +235,9 @@ function drawOverlay(
   primitives: SkeletonPanelOverlayPrimitive[],
   view: SkeletonPanelView = "2d",
 ) {
-  const overlay = new SkeletonNodeOverlay(
+  const overlay = new SkeletonPanelOverlay(
     makeOrthographicPanel(),
-    makeHighlight(primitives),
+    makeOverlayPrimitives(primitives),
     new WatchableValue(4),
     view,
   );
@@ -245,11 +245,11 @@ function drawOverlay(
   return overlay;
 }
 
-function getDrawnElements(overlay: SkeletonNodeOverlay) {
+function getDrawnElements(overlay: SkeletonPanelOverlay) {
   return [...overlay.element.children] as HTMLElement[];
 }
 
-describe("SkeletonNodeOverlay", () => {
+describe("SkeletonPanelOverlay", () => {
   it("centres each ring on its node in the panel", () => {
     const [ring] = getDrawnElements(drawOverlay([makeMarker([0, 0, 0])]));
 

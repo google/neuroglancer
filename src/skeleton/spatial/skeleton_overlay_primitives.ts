@@ -29,7 +29,7 @@ import type { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skel
 import type {
   SkeletonNodeRing,
   SkeletonPanelOverlayPrimitive,
-} from "#src/skeleton/spatial/node_overlay.js";
+} from "#src/skeleton/spatial/skeleton_panel_overlay.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   getSaturation,
@@ -74,14 +74,14 @@ export interface SkeletonNodeHighlightSelection {
   ): Float32Array | undefined;
 }
 
-export interface SkeletonNodeHighlightDisplayState {
+export interface SkeletonOverlayPrimitivesDisplayState {
   readonly objectAlpha: WatchableValueInterface<number>;
   readonly hiddenObjectAlpha: WatchableValueInterface<number>;
   readonly segmentationGroupState: WatchableValueInterface<VisibleSegmentsState>;
   readonly segmentSelectionState: { readonly baseValue: bigint | undefined };
 }
 
-export type SkeletonNodeHighlightEditSession = Pick<
+export type SkeletonOverlayPrimitivesEditSession = Pick<
   SpatialSkeletonEditSession,
   | "suppressSelectedNodeHighlight"
   | "spatialSkeletonDisplay"
@@ -89,17 +89,17 @@ export type SkeletonNodeHighlightEditSession = Pick<
   | "getDisplayedNode"
 >;
 
-export interface SkeletonNodeHighlightOptions {
-  readonly displayState: SkeletonNodeHighlightDisplayState;
+export interface SkeletonOverlayPrimitivesOptions {
+  readonly displayState: SkeletonOverlayPrimitivesDisplayState;
   readonly nodeSelection: SkeletonNodeHighlightSelection;
-  readonly editSession: SkeletonNodeHighlightEditSession;
+  readonly editSession: SkeletonOverlayPrimitivesEditSession;
   readonly getBaseSegmentColor: (segmentId: bigint) => vec3;
 }
 
-export class SkeletonNodeHighlight extends RefCounted {
+export class SkeletonOverlayPrimitives extends RefCounted {
   readonly changed = new NullarySignal();
 
-  constructor(private readonly options: SkeletonNodeHighlightOptions) {
+  constructor(private readonly options: SkeletonOverlayPrimitivesOptions) {
     super();
     const { nodeSelection, editSession } = options;
     for (const signal of [

@@ -18,9 +18,9 @@ import { describe, expect, it } from "vitest";
 
 import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.js";
 import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
-import type { HighlightedSkeletonNode } from "#src/skeleton/spatial/node_highlight.js";
-import { SkeletonNodeHighlight } from "#src/skeleton/spatial/node_highlight.js";
-import type { SkeletonNodeHighlightMarker } from "#src/skeleton/spatial/node_overlay.js";
+import type { HighlightedSkeletonNode } from "#src/skeleton/spatial/skeleton_overlay_primitives.js";
+import { SkeletonOverlayPrimitives } from "#src/skeleton/spatial/skeleton_overlay_primitives.js";
+import type { SkeletonNodeHighlightMarker } from "#src/skeleton/spatial/skeleton_panel_overlay.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { getContrastRatio, getSaturation } from "#src/util/color.js";
@@ -28,7 +28,7 @@ import { vec3 } from "#src/util/geom.js";
 
 const ring = { diameter: 10, borderWidth: 3 };
 
-function makeHighlight(
+function makeOverlayPrimitives(
   options: {
     visible?: readonly bigint[];
     hiddenObjectAlpha?: number;
@@ -44,7 +44,7 @@ function makeHighlight(
   const hovered = new WatchableValue<HighlightedSkeletonNode | undefined>(
     undefined,
   );
-  const highlight = new SkeletonNodeHighlight({
+  const overlayPrimitives = new SkeletonOverlayPrimitives({
     displayState: {
       objectAlpha: new WatchableValue(1),
       hiddenObjectAlpha: new WatchableValue(options.hiddenObjectAlpha ?? 0.5),
@@ -67,15 +67,15 @@ function makeHighlight(
     getBaseSegmentColor: (segmentId) =>
       options.segmentColors?.get(segmentId) ?? vec3.fromValues(0.2, 0.6, 0.9),
   });
-  return { highlight, state, selected, hovered };
+  return { overlayPrimitives, state, selected, hovered };
 }
 
 function makeNode(nodeId: bigint, segmentId: bigint, x = Number(nodeId)) {
   return { nodeId, segmentId, position: new Float32Array([x, 0, 0]) };
 }
 
-function getMarkers(highlight: SkeletonNodeHighlight) {
-  return highlight
+function getMarkers(overlayPrimitives: SkeletonOverlayPrimitives) {
+  return overlayPrimitives
     .computePrimitives(ring)
     .filter(
       (primitive): primitive is SkeletonNodeHighlightMarker =>
@@ -91,62 +91,70 @@ function parseColor(hexColor: string) {
   );
 }
 
-describe("SkeletonNodeHighlight", () => {
+describe("SkeletonOverlayPrimitives", () => {
   it("rings the selected node and the hovered node", () => {
-    const { highlight, selected, hovered } = makeHighlight({ visible: [7n] });
+    const { overlayPrimitives, selected, hovered } = makeOverlayPrimitives({
+      visible: [7n],
+    });
     selected.value = makeNode(1n, 7n);
     hovered.value = makeNode(2n, 7n);
 
-    expect(getMarkers(highlight).map((marker) => [...marker.position])).toEqual(
-      [
-        [1, 0, 0],
-        [2, 0, 0],
-      ],
-    );
+    expect(
+      getMarkers(overlayPrimitives).map((marker) => [...marker.position]),
+    ).toEqual([
+      [1, 0, 0],
+      [2, 0, 0],
+    ]);
   });
 
   it("shows one ring when the hovered node is also the selected node", () => {
-    const { highlight, selected, hovered } = makeHighlight({ visible: [7n] });
+    const { overlayPrimitives, selected, hovered } = makeOverlayPrimitives({
+      visible: [7n],
+    });
     selected.value = makeNode(1n, 7n);
     hovered.value = makeNode(1n, 7n);
 
-    expect(getMarkers(highlight)).toHaveLength(1);
+    expect(getMarkers(overlayPrimitives)).toHaveLength(1);
   });
 
   it("hides the selected node's ring while the selection highlight is suppressed", () => {
-    const { highlight, state, selected } = makeHighlight({ visible: [7n] });
+    const { overlayPrimitives, state, selected } = makeOverlayPrimitives({
+      visible: [7n],
+    });
     selected.value = makeNode(1n, 7n);
 
     state.suppressSelectedNodeHighlight.value = true;
 
-    expect(getMarkers(highlight)).toEqual([]);
+    expect(getMarkers(overlayPrimitives)).toEqual([]);
   });
 
   it("draws no ring for a node whose skeleton is fully transparent", () => {
-    const { highlight, hovered } = makeHighlight({
+    const { overlayPrimitives, hovered } = makeOverlayPrimitives({
       visible: [],
       hiddenObjectAlpha: 0,
     });
 
     hovered.value = makeNode(1n, 7n);
 
-    expect(getMarkers(highlight)).toEqual([]);
+    expect(getMarkers(overlayPrimitives)).toEqual([]);
   });
 
   it("follows a node while it is dragged to a new position", () => {
-    const { highlight, state, selected } = makeHighlight({ visible: [7n] });
+    const { overlayPrimitives, state, selected } = makeOverlayPrimitives({
+      visible: [7n],
+    });
     state.replaceCachedSegmentSnapshots([[7n, [makeNode(1n, 7n)]]]);
     selected.value = makeNode(1n, 7n);
 
     state.setPendingNodePosition(1n, [40, 5, 0]);
 
-    expect([...getMarkers(highlight)[0].position]).toEqual([40, 5, 0]);
+    expect([...getMarkers(overlayPrimitives)[0].position]).toEqual([40, 5, 0]);
   });
 
   it("gives the selected node's ring a colour that contrasts with its skeleton's colour", () => {
     const white = vec3.fromValues(1, 1, 1);
     const black = vec3.fromValues(0, 0, 0);
-    const { highlight, selected } = makeHighlight({
+    const { overlayPrimitives, selected } = makeOverlayPrimitives({
       visible: [7n, 8n],
       segmentColors: new Map([
         [7n, white],
@@ -155,9 +163,9 @@ describe("SkeletonNodeHighlight", () => {
     });
 
     selected.value = makeNode(1n, 7n);
-    const onWhite = parseColor(getMarkers(highlight)[0].color);
+    const onWhite = parseColor(getMarkers(overlayPrimitives)[0].color);
     selected.value = makeNode(2n, 8n);
-    const onBlack = parseColor(getMarkers(highlight)[0].color);
+    const onBlack = parseColor(getMarkers(overlayPrimitives)[0].color);
 
     expect(getContrastRatio(onWhite, white)).toBeGreaterThan(4);
     expect(getContrastRatio(onBlack, black)).toBeGreaterThan(4);
@@ -165,13 +173,13 @@ describe("SkeletonNodeHighlight", () => {
 
   it("tints the hovered ring with its skeleton's colour, never black or white", () => {
     const red = vec3.fromValues(1, 0, 0);
-    const { highlight, hovered } = makeHighlight({
+    const { overlayPrimitives, hovered } = makeOverlayPrimitives({
       visible: [7n],
       segmentColors: new Map([[7n, red]]),
     });
 
     hovered.value = makeNode(1n, 7n);
-    const color = parseColor(getMarkers(highlight)[0].color);
+    const color = parseColor(getMarkers(overlayPrimitives)[0].color);
 
     expect(getSaturation(color)).toBeGreaterThan(0);
     expect(color[0]).toBeGreaterThan(color[1]);
@@ -179,20 +187,24 @@ describe("SkeletonNodeHighlight", () => {
   });
 
   it("draws the ring of a provisional skeleton in the provisional colour", () => {
-    const { highlight, state, hovered } = makeHighlight({ visible: [7n] });
+    const { overlayPrimitives, state, hovered } = makeOverlayPrimitives({
+      visible: [7n],
+    });
     state.provisionalSegmentIds.add(7n);
 
     hovered.value = makeNode(1n, 7n);
 
     // A saturated red hovered ring is desaturated towards grey.
-    const color = parseColor(getMarkers(highlight)[0].color);
+    const color = parseColor(getMarkers(overlayPrimitives)[0].color);
     expect(color[0]).toBeGreaterThan(0.5);
     expect(color[1]).toBeCloseTo(color[2]);
     expect(color[1]).toBeLessThan(color[0]);
   });
 
   it("marks each queued edit on the nodes it changes", () => {
-    const { highlight, state } = makeHighlight({ visible: [7n] });
+    const { overlayPrimitives, state } = makeOverlayPrimitives({
+      visible: [7n],
+    });
     state.replaceCachedSegmentSnapshots([[7n, [makeNode(1n, 7n)]]]);
 
     state.addSpatialSkeletonPendingEdit({
@@ -205,7 +217,7 @@ describe("SkeletonNodeHighlight", () => {
       nodeId: 1n,
     });
 
-    expect(highlight.computePrimitives(ring)).toEqual([
+    expect(overlayPrimitives.computePrimitives(ring)).toEqual([
       expect.objectContaining({
         kind: "preparationMarker",
         label: "×",
