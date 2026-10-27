@@ -20,7 +20,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const commitId = "${{ github.event.workflow_run.head_commit.id }}";
+            const commitId = context.payload.workflow_run.head_commit.id;
             await github.rest.repos.createCommitStatus({
                 context: "docs-preview",
                 owner: context.repo.owner,
@@ -44,10 +44,12 @@ jobs:
         # https://github.com/orgs/community/discussions/25220#discussioncomment-7532132
         id: pr-id
         run: |
-          PR_ID=$(gh run view -R ${{ github.repository }} ${{ github.event.workflow_run.id }} | grep -oP '#[0-9]+ . ${{ github.event.workflow_run.id }}' | grep -oP '#[0-9]+' | cut -c 2-)
-          echo "pr-id=${PR_ID}" >> $GITHUB_OUTPUT
+          PR_ID=$(gh run view -R "$GH_REPO" "$WORKFLOW_RUN_ID" | grep -oP "#[0-9]+ . ${WORKFLOW_RUN_ID}" | grep -oP '#[0-9]+' | cut -c 2-)
+          echo "pr-id=${PR_ID}" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          GH_REPO: ${{ github.repository }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
       - uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0.11.0
         id: deploy
         with:
@@ -59,17 +61,20 @@ jobs:
           target: docs
       - name: "Update commit status"
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DEPLOY_EXPIRE_TIME: ${{ steps.deploy.outputs.expire_time }}
+          DEPLOY_DETAILS_URL: ${{ steps.deploy.outputs.details_url }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const expires = new Date("${{ steps.deploy.outputs.expire_time }}");
-            const commitId = "${{ github.event.workflow_run.head_commit.id }}";
+            const expires = new Date(process.env.DEPLOY_EXPIRE_TIME);
+            const commitId = context.payload.workflow_run.head_commit.id;
             await github.rest.repos.createCommitStatus({
                 context: "docs-preview",
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 sha: commitId,
                 state: "success",
-                target_url: "${{ steps.deploy.outputs.details_url }}",
+                target_url: process.env.DEPLOY_DETAILS_URL,
                 description: `Preview created, expires at: ${expires.toISOString()}`,
             });
