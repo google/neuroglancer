@@ -45,8 +45,8 @@ import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_sourc
 import {
   MeshLayer,
   MeshSource,
-  MultiscaleMeshSource,
   MultiscaleMeshLayer,
+  MultiscaleMeshSource,
 } from "#src/mesh/frontend.js";
 import {
   RenderScaleHistogram,
