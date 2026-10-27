@@ -29,7 +29,7 @@ import {
   getSegmentIdFromLayerSelectionValue,
   SkeletonHoverState,
   SkeletonNodeSelection,
-} from "#src/layer/segmentation/selection.js";
+} from "#src/layer/segmentation/skeleton_node_selection.js";
 import type { RenderLayerTransform } from "#src/render_coordinate_transform.js";
 import { Uint64MapEntry } from "#src/segmentation_display_state/base.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
