@@ -108,8 +108,12 @@ describe("Viewer with chrome: false", () => {
 });
 
 describe("PrefetchManager", () => {
-  it("makes a viewer with no chrome for each prefetch state", async () => {
-    const viewer = makeViewer();
+  it("keeps the chrome, so the data panels match the main viewer", async () => {
+    // No layer dialog, as in the prefetch viewers, so the main viewer does
+    // not add a new layer and open its side panel.
+    const viewer = makeViewer({ showLayerDialog: false });
+    const state = { helpPanel: { visible: true, size: 100 } };
+    viewer.state.restoreState(state);
     const prefetchManager = new PrefetchManager(
       viewer.display,
       viewer.dataSourceProvider,
@@ -118,15 +122,23 @@ describe("PrefetchManager", () => {
     );
     cleanups.push(() => prefetchManager.dispose());
 
-    prefetchManager.restoreState([{ state: { layout: "xy" } }]);
+    prefetchManager.restoreState([{ state }]);
 
     await vi.waitFor(() => expect(prefetchManager.prefetchStates.size).toBe(1));
-    for (const prefetchViewer of prefetchManager.prefetchStates.values()) {
-      expect(prefetchViewer.chrome).toBeUndefined();
-    }
+    viewer.display.draw();
+    const [prefetchViewer] = prefetchManager.prefetchStates.values();
+
+    expect(prefetchViewer.chrome).toBeDefined();
+    // The prefetch viewer is hidden, so it builds no panel content, but the
+    // side panel still takes its space from the data panels.
     expect(
-      viewer.display.container.querySelectorAll(".neuroglancer-viewer-top-row"),
-    ).toHaveLength(1);
+      prefetchViewer.element.querySelector(".neuroglancer-side-panel"),
+    ).toBeNull();
+    const mainRect = viewer.layout.element.getBoundingClientRect();
+    const prefetchRect = prefetchViewer.layout.element.getBoundingClientRect();
+    expect(prefetchRect.width).toBe(mainRect.width);
+    expect(prefetchRect.height).toBe(mainRect.height);
+    expect(prefetchRect.width).toBeLessThan(viewer.element.clientWidth);
   });
 });
 
