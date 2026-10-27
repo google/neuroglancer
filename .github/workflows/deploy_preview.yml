@@ -1,6 +1,8 @@
 name: Deploy preview
 
-on:
+# Fork PR builds have no secrets; this workflow deploys their static artifacts.
+# Use trusted default-branch config only, and never execute downloaded artifacts.
+on: # zizmor: ignore[dangerous-triggers]
   workflow_run:
     workflows: ["Build preview"]
     types: [completed]
@@ -12,8 +14,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
+      actions: read
+      contents: read
       statuses: write
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'pull_request' &&
+          github.event.workflow_run.path == '.github/workflows/build_preview.yml' }}
     steps:
       - name: "Create commit status"
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -31,6 +38,9 @@ jobs:
                 target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24.18.0"
@@ -40,6 +50,20 @@ jobs:
           path: dist/client
           github-token: "${{ secrets.GITHUB_TOKEN }}"
           run-id: "${{ github.event.workflow_run.id }}"
+      - name: Validate preview artifact
+        shell: bash
+        env:
+          PREVIEW_DIR: dist/client
+        run: |
+          invalid_entry=$(find "$PREVIEW_DIR" ! -type d ! -type f -print -quit)
+          if [ -n "$invalid_entry" ]; then
+            echo "::error::Preview artifacts must contain only regular files and directories."
+            exit 1
+          fi
+          if [ ! -f "$PREVIEW_DIR/index.html" ]; then
+            echo "::error::Preview artifact is missing index.html."
+            exit 1
+          fi
       - name: Get PR ID
         # https://github.com/orgs/community/discussions/25220#discussioncomment-7532132
         id: pr-id
