@@ -31,7 +31,7 @@ import type {
 import {
   getNodeIdFromLayerSelectionState,
   getSegmentIdFromLayerSelectionValue,
-} from "#src/layer/segmentation/selection.js";
+} from "#src/layer/segmentation/skeleton_node_selection.js";
 import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import {

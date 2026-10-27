@@ -20,7 +20,7 @@
  * segments and the selection of the layer.
  */
 
-import type { SkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
+import type { SkeletonNodeSelection } from "#src/layer/segmentation/skeleton_node_selection.js";
 import type { SegmentationGroupState } from "#src/segmentation_display_state/frontend.js";
 import type {
   SpatialSkeletonLayerContext,

@@ -31,7 +31,7 @@ import svg_redo from "ikonate/icons/redo.svg?raw";
 import svg_retweet from "ikonate/icons/retweet.svg?raw";
 import svg_undo from "ikonate/icons/undo.svg?raw";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import { getSegmentIdFromLayerSelectionValue } from "#src/layer/segmentation/selection.js";
+import { getSegmentIdFromLayerSelectionValue } from "#src/layer/segmentation/skeleton_node_selection.js";
 import {
   getSegmentEquivalences,
   getVisibleSegments,

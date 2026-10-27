@@ -21,7 +21,7 @@
 
 import type { DisplayContext, RenderedPanel } from "#src/display_context.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import { getSegmentIdFromLayerSelectionValue } from "#src/layer/segmentation/selection.js";
+import { getSegmentIdFromLayerSelectionValue } from "#src/layer/segmentation/skeleton_node_selection.js";
 import type { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_source_connection.js";
 import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { getVisibleSegments } from "#src/segmentation_display_state/base.js";

@@ -25,7 +25,7 @@ import type {
 } from "#src/layer/index.js";
 import { TrackableDataSelectionState } from "#src/layer/index.js";
 import type { SegmentationLayerSelectionState } from "#src/layer/segmentation/index.js";
-import { SkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
+import { SkeletonNodeSelection } from "#src/layer/segmentation/skeleton_node_selection.js";
 import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_source_connection.js";
 import type { SegmentationGroupState } from "#src/segmentation_display_state/frontend.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";

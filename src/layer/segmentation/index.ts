@@ -40,7 +40,7 @@ import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { layerDataSourceSpecificationFromJson } from "#src/layer/layer_data_source.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
 import { registerLayerControls } from "#src/layer/segmentation/layer_controls.js";
-import { SkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
+import { SkeletonNodeSelection } from "#src/layer/segmentation/skeleton_node_selection.js";
 import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_source_connection.js";
 import {
   MeshLayer,

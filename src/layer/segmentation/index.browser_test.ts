@@ -21,7 +21,7 @@ import { CatmaidSpatialSkeletonEditCommands } from "#src/datasource/catmaid/spat
 import { LocalDataSource } from "#src/datasource/local.js";
 import { TrackableDataSelectionState } from "#src/layer/index.js";
 import { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import { SkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
+import { SkeletonNodeSelection } from "#src/layer/segmentation/skeleton_node_selection.js";
 import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_source_connection.js";
 import { LocalSegmentationGraphSource } from "#src/segmentation_graph/local.js";
 import { SharedDisjointUint64Sets } from "#src/shared_disjoint_sets.js";

@@ -22,7 +22,7 @@
 import "#src/ui/skeleton_edit_tools.css";
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import { hasSkeletonNodeSelection } from "#src/layer/segmentation/selection.js";
+import { hasSkeletonNodeSelection } from "#src/layer/segmentation/skeleton_node_selection.js";
 import { getChunkPositionFromCombinedGlobalLocalPositions } from "#src/render_coordinate_transform.js";
 import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
