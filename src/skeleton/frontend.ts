@@ -314,7 +314,8 @@ emitRaycastCone(canonicalVertexA, canonicalVertexB, edgeRadii.x, edgeRadii.y,
       defineLineShader(builder, { endpointClipping: true });
       builder.addUniform("highp float", "uLineWidth");
       vertexMain += `
-emitLine(uProjection, vertexA, vertexB, uLineWidth, uNodeClipPixelRadius);
+emitLine(uProjection, vertexA, vertexB, uLineWidth,
+         uNodeClipPixelRadius, uNodeClipPixelRadius);
 highp uint lineEndpointIndex = getLineEndpointIndex();
 highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexIndex.y * lineEndpointIndex;
 `;

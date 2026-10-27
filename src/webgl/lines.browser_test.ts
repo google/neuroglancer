@@ -35,7 +35,8 @@ interface LineSpec {
   readonly endpointA: ClipPoint;
   readonly endpointB: ClipPoint;
   readonly widthInPixels: number;
-  readonly clipRadiusInPixels: number;
+  readonly clipRadiusAInPixels: number;
+  readonly clipRadiusBInPixels: number;
 }
 
 function glslClipPoint(point: ClipPoint): string {
@@ -49,7 +50,8 @@ function drawLine(gl: GL, spec: LineSpec): Uint8Array {
   defineLineShader(builder, { endpointClipping: true });
   builder.setVertexMain(
     `emitLine(${glslClipPoint(spec.endpointA)}, ${glslClipPoint(spec.endpointB)},
-              ${spec.widthInPixels.toFixed(1)}, ${spec.clipRadiusInPixels.toFixed(1)});`,
+              ${spec.widthInPixels.toFixed(1)},
+              ${spec.clipRadiusAInPixels.toFixed(1)}, ${spec.clipRadiusBInPixels.toFixed(1)});`,
   );
   builder.setFragmentMain("out_color = vec4(getLineAlpha());\n");
   const shader = builder.build();
@@ -105,8 +107,16 @@ describe("line endpoint clipping", () => {
         endpointB: [0.5, 0, 0, 1],
         widthInPixels: 6,
       } as const;
-      const unclipped = drawLine(gl, { ...spec, clipRadiusInPixels: 0 });
-      const clipped = drawLine(gl, { ...spec, clipRadiusInPixels: 10 });
+      const unclipped = drawLine(gl, {
+        ...spec,
+        clipRadiusAInPixels: 0,
+        clipRadiusBInPixels: 0,
+      });
+      const clipped = drawLine(gl, {
+        ...spec,
+        clipRadiusAInPixels: 10,
+        clipRadiusBInPixels: 10,
+      });
 
       expect(coveredCount(clipped)).toBeGreaterThan(0);
       expect(coveredCount(clipped)).toBeLessThan(coveredCount(unclipped));
@@ -124,13 +134,41 @@ describe("line endpoint clipping", () => {
         endpointB: [0.75, 0, 0.5, 1],
         widthInPixels: 6,
       } as const;
-      const unclipped = drawLine(gl, { ...spec, clipRadiusInPixels: 0 });
-      const clipped = drawLine(gl, { ...spec, clipRadiusInPixels: 10 });
+      const unclipped = drawLine(gl, {
+        ...spec,
+        clipRadiusAInPixels: 0,
+        clipRadiusBInPixels: 0,
+      });
+      const clipped = drawLine(gl, {
+        ...spec,
+        clipRadiusAInPixels: 10,
+        clipRadiusBInPixels: 10,
+      });
 
       expect(isCovered(unclipped, 33, VIEWPORT / 2)).toBe(true);
       expect(isCovered(clipped, 33, VIEWPORT / 2)).toBe(true);
       expect(isCovered(unclipped, 55, VIEWPORT / 2)).toBe(true);
       expect(isCovered(clipped, 55, VIEWPORT / 2)).toBe(false);
+    });
+  });
+
+  it("clears each endpoint by its own radius, so different node sizes each have room", () => {
+    webglTest((gl) => {
+      // A lands at pixel 16 and B at pixel 48.
+      const spec = {
+        endpointA: [-0.5, 0, 0, 1],
+        endpointB: [0.5, 0, 0, 1],
+        widthInPixels: 6,
+      } as const;
+      const clipped = drawLine(gl, {
+        ...spec,
+        clipRadiusAInPixels: 10,
+        clipRadiusBInPixels: 2,
+      });
+
+      expect(isCovered(clipped, 22, VIEWPORT / 2)).toBe(false);
+      expect(isCovered(clipped, 42, VIEWPORT / 2)).toBe(true);
+      expect(isCovered(clipped, 47, VIEWPORT / 2)).toBe(false);
     });
   });
 

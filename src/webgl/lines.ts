@@ -32,8 +32,9 @@ export interface LineShaderOptions {
   /** Adds a borderWidth argument to emitLine, and rounds the two ends. */
   readonly rounded?: boolean;
   /**
-   * Adds an endpointClipRadiusInPixels argument to emitLine, and discards
-   * fragments within that radius of either endpoint as it was given.
+   * Adds endpointClipRadiusAInPixels and endpointClipRadiusBInPixels arguments
+   * to emitLine, and discards fragments within each radius of its endpoint as it
+   * was given.
    */
   readonly endpointClipping?: boolean;
 }
@@ -62,7 +63,7 @@ export function defineLineShader(
     // Taken before depth clipping, which moves the drawn ends away from them.
 
     builder.addVarying("highp vec4", "vLineEndpointsWindow", "flat");
-    builder.addVarying("highp float", "vLineEndpointClipRadius", "flat");
+    builder.addVarying("highp vec2", "vLineEndpointClipRadii", "flat");
   }
   if (rounded) {
     // Fraction of total line length used by each endpoint.
@@ -88,12 +89,12 @@ float getLineEndpointCoefficient() { return getLineOffset().x; }
 uint getLineEndpointIndex() { return uint(getLineEndpointCoefficient()); }
 void emitLine(vec4 vertexAClip, vec4 vertexBClip, float lineWidthInPixels
               ${rounded ? ", float borderWidth" : ""}
-              ${endpointClipping ? ", float endpointClipRadiusInPixels" : ""}) {
+              ${endpointClipping ? ", float endpointClipRadiusAInPixels, float endpointClipRadiusBInPixels" : ""}) {
   ${
     endpointClipping
       ? `vLineEndpointsWindow = vec4(lineClipToWindow(vertexAClip),
                               lineClipToWindow(vertexBClip));
-  vLineEndpointClipRadius = endpointClipRadiusInPixels;`
+  vLineEndpointClipRadii = vec2(endpointClipRadiusAInPixels, endpointClipRadiusBInPixels);`
       : ""
   }
   if (!clipLineToDepthRange(vertexAClip, vertexBClip)) {
@@ -143,11 +144,11 @@ void emitLine(vec4 vertexAClip, vec4 vertexBClip, float lineWidthInPixels
 }
 void emitLine(mat4 projection, vec3 vertexA, vec3 vertexB, float lineWidthInPixels
               ${rounded ? ", float borderWidth" : ""}
-              ${endpointClipping ? ", float endpointClipRadiusInPixels" : ""}) {
+              ${endpointClipping ? ", float endpointClipRadiusAInPixels, float endpointClipRadiusBInPixels" : ""}) {
   emitLine(projection * vec4(vertexA, 1.0), projection * vec4(vertexB, 1.0),
            lineWidthInPixels
            ${rounded ? ", borderWidth" : ""}
-           ${endpointClipping ? ", endpointClipRadiusInPixels" : ""});
+           ${endpointClipping ? ", endpointClipRadiusAInPixels, endpointClipRadiusBInPixels" : ""});
 }
 `);
   if (rounded) {
@@ -175,11 +176,9 @@ vec4 getRoundedLineColor(vec4 interiorColor, vec4 borderColor) {
 float getLineAlpha() {
   ${
     endpointClipping
-      ? `if (vLineEndpointClipRadius > 0.0) {
-    float distFromA = distance(gl_FragCoord.xy, vLineEndpointsWindow.xy);
-    float distFromB = distance(gl_FragCoord.xy, vLineEndpointsWindow.zw);
-    if (min(distFromA, distFromB) < vLineEndpointClipRadius) discard;
-  }`
+      ? `float distFromA = distance(gl_FragCoord.xy, vLineEndpointsWindow.xy);
+  float distFromB = distance(gl_FragCoord.xy, vLineEndpointsWindow.zw);
+  if (distFromA < vLineEndpointClipRadii.x || distFromB < vLineEndpointClipRadii.y) discard;`
       : ""
   }
   return clamp((1.0 - abs(vLineCoord)) / vLineFeatherFraction, 0.0, 1.0);
