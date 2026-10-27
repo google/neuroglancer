@@ -276,3 +276,21 @@ export function shaderCodeWithLineDirective(
 ) {
   return `\n#line ${line} ${sourceStringNumber}\n` + code;
 }
+
+/**
+ * Renames the `main` in user-supplied shader code to `userMain`, so that generated
+ * code can call it where it chooses.
+ *
+ * The whole shader is one source string, so the `#line` directive attributing the
+ * user's code to source string 1 stays in effect for whatever the builder appends
+ * next. Without the reset at the end, a compile error in that generated code is
+ * reported against the user's source, and the shader control widget marks a line
+ * of theirs that has nothing wrong with it.
+ */
+export function wrapUserShaderMain(code: string) {
+  return (
+    "\n#define main userMain\n" +
+    shaderCodeWithLineDirective(code) +
+    "\n#undef main\n#line 1 0\n"
+  );
+}

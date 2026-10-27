@@ -40,7 +40,7 @@ import type {
 } from "#src/webgl/dynamic_shader.js";
 import {
   parameterizedEmitterDependentShaderGetter,
-  shaderCodeWithLineDirective,
+  wrapUserShaderMain,
 } from "#src/webgl/dynamic_shader.js";
 import {
   defineInvlerpShaderFunction,
@@ -560,11 +560,7 @@ void userMain();
         }
         defineShader(builder);
         builder.addVertexCode(glsl_string);
-        builder.addVertexCode(
-          "\n#define main userMain\n" +
-            shaderCodeWithLineDirective(parameters.parseResult.code) +
-            "\n#undef main\n",
-        );
+        builder.addVertexCode(wrapUserShaderMain(parameters.parseResult.code));
       },
     });
   }
