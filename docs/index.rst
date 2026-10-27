@@ -12,6 +12,7 @@ Neuroglancer
    :hidden:
    :caption: Concepts
 
+   concepts/commands
    concepts/coordinate_spaces
    concepts/data_views
    concepts/layers

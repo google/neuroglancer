@@ -36,7 +36,10 @@ import { matchesTerms, matchPredicate } from "#src/ui/tool_query.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
-import { getDropEffectFromModifiers } from "#src/util/drag_and_drop.js";
+import {
+  declareAllowedDropEffects,
+  getDropEffectFromModifiers,
+} from "#src/util/drag_and_drop.js";
 import type {
   ActionEvent,
   EventActionMap,
@@ -516,6 +519,20 @@ export class GlobalToolBinder extends RefCounted {
   public deactivate() {
     this.debounceDeactivate();
   }
+
+  // Activate a tool that has no letter-key binding. The tool is treated as
+  // toggle-mode (stays active until explicitly deactivated). The ToolActivation
+  // takes ownership of the tool via registerDisposer so the tool is disposed
+  // automatically when the activation ends.
+  activateDirect(tool: Owned<Tool>): void {
+    this.queuedTool = undefined; // explicit activation clears any queued toggle tool
+    this.deactivate_(); // cancels debounce + disposes current activation
+    const activation = new ToolActivation(tool, this.inputEventMapBinder);
+    activation.registerDisposer(tool);
+    this.activeTool_ = activation;
+    tool.activate(activation);
+    this.changed.dispatch();
+  }
 }
 
 export class LocalToolBinder<
@@ -690,6 +707,7 @@ export class ToolBindingWidget<Context extends object> extends RefCounted {
     if (dragElement !== undefined) {
       dragElement.draggable = true;
       dragElement.addEventListener("dragstart", (event: DragEvent) => {
+        declareAllowedDropEffects(event, "copyMove");
         pushDragStatus(
           event,
           dragElement,
@@ -843,7 +861,13 @@ export function makeToolActivationStatusMessage(
   activation: ToolActivation,
   options: { showBindings?: boolean } = {},
 ) {
-  const message = activation.registerDisposer(new StatusMessage(false));
+  const message = activation.registerDisposer(
+    new StatusMessage(
+      /*delay=*/ false,
+      /*modal=*/ false,
+      /*insertAtBottom=*/ true,
+    ),
+  );
   message.element.classList.add("neuroglancer-tool-status");
   const content = document.createElement("div");
   content.classList.add("neuroglancer-tool-status-content");

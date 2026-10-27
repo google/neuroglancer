@@ -28,6 +28,10 @@ export function formatIntegerPoint(point: Float32Array) {
   return result;
 }
 
+export function formatPositionText(coordinates: ArrayLike<number>): string {
+  return Array.from(coordinates, (x) => Math.floor(x)).join(", ");
+}
+
 export function formatIntegerBounds(bounds: Float32Array) {
   let result = "";
   for (let i = 0, rank = bounds.length; i < rank; ++i) {

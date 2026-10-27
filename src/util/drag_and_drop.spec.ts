@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   encodeParametersAsDragType,
   decodeParametersFromDragType,
+  getDropEffectFromModifiers,
 } from "#src/util/drag_and_drop.js";
 
 describe("drag_and_drop", () => {
@@ -29,5 +30,51 @@ describe("drag_and_drop", () => {
       prefix,
     );
     expect(result).toEqual(json);
+  });
+});
+
+describe("getDropEffectFromModifiers", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function makeDragEvent(
+    modifiers: Partial<
+      Pick<DragEvent, "shiftKey" | "ctrlKey" | "metaKey" | "altKey">
+    >,
+  ) {
+    return {
+      shiftKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      altKey: false,
+      ...modifiers,
+    } as DragEvent;
+  }
+
+  function dropEffectFor(platform: string, modifiers: Partial<DragEvent>) {
+    vi.stubGlobal("navigator", { platform });
+    return getDropEffectFromModifiers(makeDragEvent(modifiers), "link", true)
+      .dropEffect;
+  }
+
+  it("moves on Ctrl everywhere, and on Cmd on Mac only", () => {
+    expect(dropEffectFor("Win32", { ctrlKey: true })).toBe("move");
+    expect(dropEffectFor("Win32", { metaKey: true })).toBe("link");
+    expect(dropEffectFor("MacIntel", { ctrlKey: true })).toBe("move");
+    expect(dropEffectFor("MacIntel", { metaKey: true })).toBe("move");
+  });
+
+  it("names the move modifier per platform in the message", () => {
+    vi.stubGlobal("navigator", { platform: "Win32" });
+    expect(
+      getDropEffectFromModifiers(makeDragEvent({}), "link", true)
+        .dropEffectMessage,
+    ).toContain("hold CONTROL to move");
+    vi.stubGlobal("navigator", { platform: "MacIntel" });
+    expect(
+      getDropEffectFromModifiers(makeDragEvent({}), "link", true)
+        .dropEffectMessage,
+    ).toContain("hold COMMAND to move");
   });
 });

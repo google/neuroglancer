@@ -96,6 +96,7 @@ import {
   parseShaderUiControls,
   setControlsInShader,
   ShaderControlState,
+  stripComments,
 } from "#src/webgl/shader_ui_controls.js";
 import {
   computeTextureFormat,
@@ -120,12 +121,14 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
 `;
 
 // The colour of a raycast primitive, shared by the cone and the sphere.
-// emitRGBA takes a colour from the user's shader, so it premultiplies by alpha.
-// `emitDefault` reads `uColor`, which instead arrives premultiplied by alpha.
+// emitRGBA takes a colour from the user's shader, so it scales the alpha by the
+// layer alpha and premultiplies.
+// `emitDefault` reads `uColor`, which arrives already premultiplied.
 // raycastLightingFactor is to apply spotlight lighting and ambient lighting
 // in a Lambertian shading model
 const glsl_raycastSkeletonEmit = `
 void emitRGBA(vec4 color) {
+  color.a *= uColor.a;
   emit(vec4(color.rgb * raycastLightingFactor * color.a, color.a),
        raycastSurfaceDepth, uPickID);
 }
@@ -317,6 +320,7 @@ highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexInde
 `;
       builder.addFragmentCode(`
 void emitRGBA(vec4 color) {
+  color.a *= uColor.a;
   emit(vec4(color.rgb * color.a, color.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
 }
 void emitDefault() {
@@ -324,14 +328,6 @@ void emitDefault() {
 }
 `);
     }
-    // TODO unlike nodes, emitRGB is modulated by the layer alpha
-    // and alike with nodes the code is included here to be consistent
-    // across cylinders and lines either way
-    builder.addFragmentCode(`
-void emitRGB(vec3 color) {
-  emitRGBA(vec4(color, uColor.a));
-}
-`);
     this.finalizeShaderBuilder(
       builder,
       shaderBuilderState,
@@ -369,22 +365,16 @@ emitRaycastSphere(
       vertexMain += `emitCircle(uProjection * vec4(vertexPosition, 1.0), uNodeDiameter, 0.0);\n`;
       builder.addFragmentCode(`
 void emitRGBA(vec4 color) {
+  color.a *= uColor.a;
+  color.rgb *= color.a;
   vec4 borderColor = color;
   emit(getCircleColor(color, borderColor), uPickID);
 }
 void emitDefault() {
-  emitRGBA(uColor);
+  emit(getCircleColor(uColor, uColor), uPickID);
 }
 `);
     }
-    // TODO unsure if nodes are intentionally not modulated
-    // by the layer alpha, but either way, this
-    // code is here to be consistent across points and balls
-    builder.addFragmentCode(`
-void emitRGB(vec3 color) {
-  emitRGBA(vec4(color, 1.0));
-}
-`);
     this.finalizeShaderBuilder(
       builder,
       shaderBuilderState,
@@ -409,6 +399,11 @@ void emitRGB(vec3 color) {
       geometry === SkeletonShaderGeometry.RAYCAST_SPHERE;
     const interpolateInFragment =
       geometry === SkeletonShaderGeometry.RAYCAST_CONE;
+    builder.addFragmentCode(`
+void emitRGB(vec3 color) {
+  emitRGBA(vec4(color, 1.0));
+}
+`);
     builder.addFragmentCode(glsl_COLORMAPS);
     const { vertexAttributes } = this;
     for (let i = 1; i < vertexAttributes.length; ++i) {
@@ -1057,7 +1052,13 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   }
 
   get isTransparent() {
-    return this.base.displayState.objectAlpha.value < 1.0;
+    const { displayState } = this.base;
+    return (
+      displayState.objectAlpha.value < 1.0 ||
+      stripComments(
+        displayState.skeletonRenderingOptions.shader.value,
+      ).includes("emitRGBA")
+    );
   }
 
   draw(
