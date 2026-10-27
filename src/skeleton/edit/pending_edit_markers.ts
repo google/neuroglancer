@@ -23,7 +23,7 @@ import type {
   SkeletonNodeRing,
   SkeletonPendingEditConnector,
   SkeletonPendingEditMarker,
-} from "#src/skeleton/spatial/node_overlay.js";
+} from "#src/skeleton/spatial/skeleton_panel_overlay.js";
 
 export type PendingEditMarker =
   | {
