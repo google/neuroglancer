@@ -848,8 +848,6 @@ export function getSkeletonNodeDiameter(
   return lineWidth;
 }
 
-// A selected/hovered node highlight or pending-intent marker to draw as a DOM
-
 export interface ViewSpecificSkeletonRenderingOptions {
   mode: TrackableSkeletonRenderMode;
   lineWidth: TrackableSkeletonLineWidth;

@@ -90,6 +90,15 @@ import {
   isSkeletonNodeTrueEnd,
 } from "#src/skeleton/node_attributes.js";
 
+export type { CatmaidEditPlan } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_plan.js";
+
+/** Immutable queue input returned by CATMAID command factories. */
+export interface CatmaidSpatialSkeletonCommandDescriptor
+  extends SpatialSkeletonEditCommand {
+  readonly action: SpatialSkeletonAction;
+  readonly payload: CatmaidSpatialSkeletonCommandPayload;
+}
+
 interface CatmaidMaterializationContext {
   readonly direction: "forward" | "inverse";
   readonly localNodeBindings: ReadonlyMap<string, bigint>;
@@ -811,8 +820,6 @@ function resolveCatmaidPreparedCommand(
   return Object.freeze({ ...command, payload: Object.freeze(resolved) });
 }
 
-export type { CatmaidEditPlan } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_plan.js";
-
 // Match CATMAID creation defaults so later history captures complete values.
 const CATMAID_CREATED_NODE_ATTRIBUTES = Object.freeze({
   radius: 0,
@@ -849,13 +856,6 @@ function getCatmaidAuthorityLabels(
     operationNoun: CATMAID_OPTIMISTIC_OPERATION_NOUNS[kind],
     stalledWarning: CATMAID_OPTIMISTIC_STALLED_WARNING,
   });
-}
-
-/** Immutable queue input returned by CATMAID command factories. */
-export interface CatmaidSpatialSkeletonCommandDescriptor
-  extends SpatialSkeletonEditCommand {
-  readonly action: SpatialSkeletonAction;
-  readonly payload: CatmaidSpatialSkeletonCommandPayload;
 }
 
 function copyVector(value: ArrayLike<number>): SkeletonVector {

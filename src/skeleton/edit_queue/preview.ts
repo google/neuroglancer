@@ -65,6 +65,47 @@ import {
 } from "#src/skeleton/edit_queue/stable_id_handles.js";
 import { bigintCompare } from "#src/util/bigint.js";
 
+export interface SpatialSkeletonDisplayStableOwner {
+  readonly segmentId: bigint;
+  readonly stableHandle: SpatialSkeletonStableSegmentHandle;
+}
+
+export interface SpatialSkeletonDisplayNumericAlias {
+  readonly stableHandle: SpatialSkeletonStableSegmentHandle;
+  /** Numeric id shown to rendering, picking, and user-facing selection. */
+  readonly segmentId: bigint;
+  /** False while the numeric id exists only in the local optimistic preview. */
+  readonly authoritative?: boolean;
+}
+
+export const preparedSpatialSkeletonPreviewCachePublicationBrand = Symbol(
+  "prepared spatial skeleton preview state publication",
+);
+
+/**
+ * Opaque, session-owned result of complete off-screen preview publication
+ * preparation. The preview may only return this value to the edit session
+ * that created it; a preview ownership token rejects forged/cross-state use.
+ */
+export interface SpatialSkeletonPreparedPreviewCachePublication {
+  readonly [preparedSpatialSkeletonPreviewCachePublicationBrand]: true;
+  /** Planned post-adoption revisions, prepared with the cache maps. */
+  readonly cacheRevisions: ReadonlyMap<bigint, number>;
+}
+
+/** Complete state-facing portion of one immutable optimistic publication. */
+export interface SpatialSkeletonPreviewCachePublicationRequest {
+  readonly snapshots: Iterable<readonly [bigint, CompleteSkeleton | undefined]>;
+  readonly expectedRevisions: ReadonlyMap<bigint, number>;
+  /** Confirmed deletions advance revisions even for already-absent snapshots. */
+  readonly retiredSegmentIds?: ReadonlySet<bigint>;
+  readonly activeStableOwners: Iterable<SpatialSkeletonDisplayStableOwner>;
+  readonly numericAliases: Iterable<SpatialSkeletonDisplayNumericAlias>;
+  readonly provisionalNodeIds: Iterable<bigint>;
+  readonly pendingEditIntentIdsToRemove: Iterable<number>;
+  readonly notify: boolean;
+}
+
 /**
  * Structural state boundary needed for one immutable preview adoption.
  * `SpatialSkeletonEditSession` implements this interface; keeping it structural
@@ -1664,45 +1705,4 @@ export class SpatialSkeletonEditPreview
     });
     return retiredSegmentId;
   }
-}
-
-export interface SpatialSkeletonDisplayStableOwner {
-  readonly segmentId: bigint;
-  readonly stableHandle: SpatialSkeletonStableSegmentHandle;
-}
-
-export interface SpatialSkeletonDisplayNumericAlias {
-  readonly stableHandle: SpatialSkeletonStableSegmentHandle;
-  /** Numeric id shown to rendering, picking, and user-facing selection. */
-  readonly segmentId: bigint;
-  /** False while the numeric id exists only in the local optimistic preview. */
-  readonly authoritative?: boolean;
-}
-
-export const preparedSpatialSkeletonPreviewCachePublicationBrand = Symbol(
-  "prepared spatial skeleton preview state publication",
-);
-
-/**
- * Opaque, session-owned result of complete off-screen preview publication
- * preparation. The preview may only return this value to the edit session
- * that created it; a preview ownership token rejects forged/cross-state use.
- */
-export interface SpatialSkeletonPreparedPreviewCachePublication {
-  readonly [preparedSpatialSkeletonPreviewCachePublicationBrand]: true;
-  /** Planned post-adoption revisions, prepared with the cache maps. */
-  readonly cacheRevisions: ReadonlyMap<bigint, number>;
-}
-
-/** Complete state-facing portion of one immutable optimistic publication. */
-export interface SpatialSkeletonPreviewCachePublicationRequest {
-  readonly snapshots: Iterable<readonly [bigint, CompleteSkeleton | undefined]>;
-  readonly expectedRevisions: ReadonlyMap<bigint, number>;
-  /** Confirmed deletions advance revisions even for already-absent snapshots. */
-  readonly retiredSegmentIds?: ReadonlySet<bigint>;
-  readonly activeStableOwners: Iterable<SpatialSkeletonDisplayStableOwner>;
-  readonly numericAliases: Iterable<SpatialSkeletonDisplayNumericAlias>;
-  readonly provisionalNodeIds: Iterable<bigint>;
-  readonly pendingEditIntentIdsToRemove: Iterable<number>;
-  readonly notify: boolean;
 }

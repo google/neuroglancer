@@ -505,6 +505,15 @@ export interface SpatialSkeletonEditSessionOptions {
   readonly editQueueCapacity?: number;
 }
 
+export interface SpatialSkeletonLayerContext {
+  getSpatiallyIndexedSkeletonLayer(): SpatiallyIndexedSkeletonLayer | undefined;
+  readonly spatialSkeletonEditSession: SpatialSkeletonEditSession;
+  /** Optional because headless/test layer contexts have no presentation UI. */
+  applySpatialSkeletonPreviewUiHints?(
+    hints: SpatialSkeletonResolvedPreviewUiHints,
+  ): void;
+}
+
 export class SpatialSkeletonEditSession
   extends RefCounted
   implements SpatialSkeletonUndoRedoControls, CompleteSkeletonDownloadTarget
@@ -1653,13 +1662,4 @@ export class SpatialSkeletonEditSession
     this.releaseEditQueue();
     super.disposed();
   }
-}
-
-export interface SpatialSkeletonLayerContext {
-  getSpatiallyIndexedSkeletonLayer(): SpatiallyIndexedSkeletonLayer | undefined;
-  readonly spatialSkeletonEditSession: SpatialSkeletonEditSession;
-  /** Optional because headless/test layer contexts have no presentation UI. */
-  applySpatialSkeletonPreviewUiHints?(
-    hints: SpatialSkeletonResolvedPreviewUiHints,
-  ): void;
 }
