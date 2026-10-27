@@ -35,11 +35,11 @@ import {
 } from "#src/skeleton/frontend.js";
 import { type SpatiallyIndexedSkeletonChunkSpecification } from "#src/skeleton/spatial/base.js";
 import { getSpatialSkeletonLevelSpecs } from "#src/skeleton/spatial/base.js";
-import { type SliceViewSourceOptions } from "#src/sliceview/base.js";
 import {
   SliceViewChunk,
   SliceViewChunkSource,
   MultiscaleSliceViewChunkSource,
+  type SliceViewSingleResolutionSource,
 } from "#src/sliceview/frontend.js";
 import { DataType } from "#src/util/data_type.js";
 import { type Borrowed } from "#src/util/disposable.js";
@@ -207,15 +207,6 @@ export function disposeSpatiallyIndexedSkeletonSourceRuntimeState(
   }
 }
 
-// Options are provided by the SliceView framework for scale selection,
-// but spatial skeleton sources expose all grid levels unconditionally.
-// TODO (SKM): validate if this is an ok deviation from the SliceView
-export const SPATIAL_SKELETON_SOURCE_OPTIONS: SliceViewSourceOptions = {
-  displayRank: 0,
-  multiscaleToViewTransform: new Float32Array(0),
-  modelChannelDimensionIndices: [],
-};
-
 export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends MultiscaleSliceViewChunkSource<SpatiallyIndexedSkeletonSource> {
   abstract readonly fragmentSource: SkeletonFragmentSource;
   private readonly levelSpecs: SpatiallyIndexedSkeletonChunkSpecification[];
@@ -233,6 +224,8 @@ export abstract class MultiscaleSpatiallyIndexedSkeletonSource extends Multiscal
   get rank() {
     return 3;
   }
+
+  abstract override getSources(): SliceViewSingleResolutionSource<SpatiallyIndexedSkeletonSource>[][];
 
   getLevelSpecs(): SpatiallyIndexedSkeletonChunkSpecification[] {
     return this.levelSpecs;

@@ -19,12 +19,12 @@
  * segment in the shader or from one uniform color.
  */
 
-// `dynamic`: per-segment appearance resolved in the shader (spatial skeletons).
-// `legacy`: one skeleton drawn per call with a CPU-supplied `uColor`.
-export type SkeletonColorPath = "dynamic" | "legacy";
+import type { SegmentAppearanceParameters } from "#src/skeleton/frontend.js";
 
-export function edgeColorPathsGlsl(path: SkeletonColorPath): string {
-  if (path === "dynamic") {
+export function edgeColorGlsl(
+  segmentAppearance: SegmentAppearanceParameters | undefined,
+): string {
+  if (segmentAppearance !== undefined) {
     return `
 vec4 segmentColor() {
   return getSegmentAppearance(uint64_t(vSegmentId));
@@ -66,8 +66,10 @@ void emitDefault() {
 `;
 }
 
-export function nodeColorPathsGlsl(path: SkeletonColorPath): string {
-  if (path === "dynamic") {
+export function nodeColorGlsl(
+  segmentAppearance: SegmentAppearanceParameters | undefined,
+): string {
+  if (segmentAppearance !== undefined) {
     return `
 vec4 segmentColor() {
   return getSegmentAppearance(uint64_t(vSegmentId));

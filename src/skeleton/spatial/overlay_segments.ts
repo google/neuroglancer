@@ -396,8 +396,7 @@ export class SkeletonOverlaySegments extends RefCounted {
     return this.geometries;
   }
 
-  /** Returns whether any skeleton is excluded from the browse pass. */
-  updateBrowseExcludedSegments(): boolean {
+  updateBrowseExcludedSegments(): void {
     const { editSession, segmentationGroupState } = this.options;
     const visibleSegments = getVisibleSegments(segmentationGroupState.value);
     const presentation = editSession.spatialSkeletonDisplay.value;
@@ -440,7 +439,6 @@ export class SkeletonOverlaySegments extends RefCounted {
         this.browseExcludedSegments.add([...segmentIds].sort(bigintCompare));
       }
     }
-    return this.browseExcludedSegments.size !== 0;
   }
 
   private setRetainedSegments(nextRetainedSegments: Map<bigint, number>) {

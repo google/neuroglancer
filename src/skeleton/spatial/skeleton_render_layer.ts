@@ -23,9 +23,6 @@
 import { ChunkState } from "#src/chunk_manager/base.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { ChunkRenderLayerFrontend } from "#src/chunk_manager/frontend.js";
-import { hashCombine } from "#src/gpu_hash/hash_function.js";
-import type { HashSetUint64 } from "#src/gpu_hash/hash_table.js";
-import { GPUHashTable } from "#src/gpu_hash/shader.js";
 import type {
   LayerView,
   MouseSelectionState,
@@ -66,6 +63,7 @@ import {
   DEFAULT_FRAGMENT_MAIN,
   getSkeletonNodeDiameter,
   RenderHelper,
+  type SkeletonDrawOptions,
   type SkeletonGPUGeometry,
   type SkeletonLayerDisplayState,
   type SkeletonShaderContext,
@@ -89,7 +87,6 @@ import type {
 import {
   disposeSpatiallyIndexedSkeletonSourceRuntimeState,
   uploadSegmentIdTexture,
-  SPATIAL_SKELETON_SOURCE_OPTIONS,
 } from "#src/skeleton/spatial/frontend.js";
 import type {
   SkeletonOverlaySegments,
@@ -127,12 +124,11 @@ import {
 } from "#src/trackable_value.js";
 import type { Uint64Set } from "#src/uint64_set.js";
 import { gatherUpdate } from "#src/util/array.js";
-import { hsvToRgb } from "#src/util/colorspace.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import type { ValueOrError } from "#src/util/error.js";
 import { makeValueOrError, valueOrThrow } from "#src/util/error.js";
-import { kZeroVec, mat4, vec3, vec4 } from "#src/util/geom.js";
+import { mat4, vec3 } from "#src/util/geom.js";
 import * as matrix from "#src/util/matrix.js";
 import { getObjectId } from "#src/util/object_id.js";
 import { NullarySignal } from "#src/util/signal.js";
@@ -144,11 +140,9 @@ import { GLBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ParameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
 import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
-import type { ShaderProgram } from "#src/webgl/shader.js";
 import {
   getFallbackBuilderState,
   parseShaderUiControls,
-  setControlsInShader,
 } from "#src/webgl/shader_ui_controls.js";
 import {
   computeTextureFormat,
@@ -162,12 +156,6 @@ interface VisibleChunk {
 }
 
 const tempMat4 = mat4.create();
-
-const DEBUG_SPATIAL_SKELETON_CHUNKS = false;
-const kOneVec4 = vec4.fromValues(1, 1, 1, 1);
-
-// One colour per chunk, for debugging.
-const tempChunkKeyToColorMap = new Map<string, Float32Array>();
 
 interface SpatiallyIndexedSkeletonPickData {
   // Only overlay node picks ("node") move the mouse position onto the node.
@@ -308,7 +296,7 @@ export interface SpatiallyIndexedSkeletonLayerDisplayState
 
 export class SpatiallyIndexedSkeletonLayer
   extends RefCounted
-  implements Required<SkeletonShaderContext>, SkeletonNodeAccess
+  implements SkeletonShaderContext, SkeletonNodeAccess
 {
   redrawNeeded = new NullarySignal();
   vertexAttributes: VertexAttributeRenderInfo[];
@@ -340,7 +328,6 @@ export class SpatiallyIndexedSkeletonLayer
     }
   >();
   readonly overlayPrimitives: SkeletonOverlayPrimitives;
-  private readonly gpuBrowseExcludedSegmentsHashTable: GPUHashTable<HashSetUint64>;
 
   getUniqueChunkSources() {
     const sources = new Set<SpatiallyIndexedSkeletonSource>();
@@ -417,9 +404,7 @@ export class SpatiallyIndexedSkeletonLayer
         chunkSource.dispose();
       }
     });
-    const sources = multiscaleSource.getSources(
-      SPATIAL_SKELETON_SOURCE_OPTIONS,
-    )[0];
+    const sources = multiscaleSource.getSources()[0];
     if (sources.length === 0) {
       throw new Error(
         "SpatiallyIndexedSkeletonLayer requires at least one source.",
@@ -466,28 +451,26 @@ export class SpatiallyIndexedSkeletonLayer
     );
 
     this.vertexAttributes = [...this.source.vertexAttributes];
-    this.skeletonShaderParameters =
-      new WatchableValue<SkeletonShaderParameters>({
-        dynamicSegmentAppearance: true,
-        hasSegmentStatedColors: false,
-        hasSegmentDefaultColor: false,
-        hasProvisionalSegmentColors: false,
-        hoverHighlight: false,
-        spatialChunkCulling: false,
-      });
-    const updateSkeletonShaderParameters = () => {
+    const getSkeletonShaderParameters = (): SkeletonShaderParameters => {
       const colorGroupState = displayState.segmentationColorGroupState.value;
-      this.skeletonShaderParameters.value = {
-        dynamicSegmentAppearance: true,
-        hasSegmentStatedColors: colorGroupState.segmentStatedColors.size !== 0,
-        hasSegmentDefaultColor:
-          colorGroupState.segmentDefaultColor.value !== undefined ||
-          DEBUG_SPATIAL_SKELETON_CHUNKS,
-        hasProvisionalSegmentColors:
-          editSession.provisionalSegmentIds.size !== 0,
-        hoverHighlight: displayState.hoverHighlight.value,
+      return {
+        segmentAppearance: {
+          hasSegmentStatedColors:
+            colorGroupState.segmentStatedColors.size !== 0,
+          hasSegmentDefaultColor:
+            colorGroupState.segmentDefaultColor.value !== undefined,
+          hasProvisionalSegmentColors:
+            editSession.provisionalSegmentIds.size !== 0,
+          hoverHighlight: displayState.hoverHighlight.value,
+        },
         spatialChunkCulling: false,
       };
+    };
+    this.skeletonShaderParameters = new WatchableValue(
+      getSkeletonShaderParameters(),
+    );
+    const updateSkeletonShaderParameters = () => {
+      this.skeletonShaderParameters.value = getSkeletonShaderParameters();
     };
     this.registerDisposer(
       registerNested((context, colorGroupState) => {
@@ -530,13 +513,8 @@ export class SpatiallyIndexedSkeletonLayer
       displayState,
       skeletonShaderParameters: this.browsePassSkeletonShaderParameters,
       provisionalSegmentIds: editSession.provisionalSegmentIds,
+      excludedSegmentIds: overlaySegments.browseExcludedSegments,
     };
-    this.gpuBrowseExcludedSegmentsHashTable = this.registerDisposer(
-      GPUHashTable.get(
-        this.gl,
-        this.overlaySegments.browseExcludedSegments.hashTable,
-      ),
-    );
   }
 
   get gl() {
@@ -701,338 +679,64 @@ export class SpatiallyIndexedSkeletonLayer
     return this.editSession.getDisplayedNode(nodeId);
   }
 
-  private beginSkeletonRenderPass(
-    renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
-    renderHelper: RenderHelper,
-    modelMatrix: mat4,
-    lineWidth: number,
-    pointDiameter: number,
-    excludedGPUTable?: GPUHashTable<HashSetUint64>,
-  ):
-    | {
-        gl: GL;
-        edgeShader: ShaderProgram;
-        nodeShader: ShaderProgram;
-        skeletonParams: SkeletonShaderParameters;
-      }
-    | undefined {
-    const { gl } = this;
-    const edgeShaderResult = renderHelper.edgeShaderGetter(
-      renderContext.emitter,
-    );
-    const nodeShaderResult = renderHelper.nodeShaderGetter(
-      renderContext.emitter,
-    );
-    const {
-      shader: edgeShader,
-      parameters: edgeShaderParameters,
-      extraParameters: skeletonParams,
-    } = edgeShaderResult;
-    const { shader: nodeShader, parameters: nodeShaderParameters } =
-      nodeShaderResult;
-    if (edgeShader === null || nodeShader === null) return undefined;
-
-    const { shaderControlState } = this.displayState.skeletonRenderingOptions;
-
-    edgeShader.bind();
-    renderHelper.beginLayer(gl, edgeShader, renderContext, modelMatrix);
-    renderHelper.setLineWidth(gl, edgeShader, lineWidth);
-    renderHelper.setPickInstanceStride(gl, edgeShader, 0);
-    setControlsInShader(
-      gl,
-      edgeShader,
-      shaderControlState,
-      edgeShaderParameters.parseResult,
-    );
-    renderHelper.setColor(gl, edgeShader, kOneVec4);
-    renderHelper.maybeEnableDynamicSegmentAppearance(
-      gl,
-      edgeShader,
-      skeletonParams,
-      excludedGPUTable,
-    );
-
-    nodeShader.bind();
-    renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
-    renderHelper.setNodeDiameter(gl, nodeShader, pointDiameter);
-    renderHelper.setPickInstanceStride(gl, nodeShader, 0);
-    setControlsInShader(
-      gl,
-      nodeShader,
-      shaderControlState,
-      nodeShaderParameters.parseResult,
-    );
-    renderHelper.setColor(gl, nodeShader, kOneVec4);
-    renderHelper.maybeEnableDynamicSegmentAppearance(
-      gl,
-      nodeShader,
-      skeletonParams,
-      excludedGPUTable,
-    );
-
-    return {
-      gl,
-      edgeShader,
-      nodeShader,
-      skeletonParams,
-    };
-  }
-
-  private endSkeletonRenderPass(
-    renderHelper: RenderHelper,
-    gl: GL,
-    edgeShader: ShaderProgram,
-    nodeShader: ShaderProgram,
-    skeletonParams: SkeletonShaderParameters,
-  ) {
-    renderHelper.maybeDisableDynamicSegmentAppearance(
-      gl,
-      edgeShader,
-      skeletonParams,
-    );
-    renderHelper.maybeDisableDynamicSegmentAppearance(
-      gl,
-      nodeShader,
-      skeletonParams,
-    );
-    renderHelper.endLayer(gl, edgeShader, nodeShader);
-  }
-
   private drawBrowsePass(
     renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
     layer: RenderLayer,
     renderHelper: RenderHelper,
-    modelMatrix: mat4,
-    lineWidth: number,
-    pointDiameter: number,
+    options: SkeletonDrawOptions,
     visibleChunks: VisibleChunk[],
   ) {
     if (visibleChunks.length === 0) return;
-    const hasExcludedSegments =
-      this.overlaySegments.updateBrowseExcludedSegments();
-    const passState = this.beginSkeletonRenderPass(
-      renderContext,
-      renderHelper,
-      modelMatrix,
-      lineWidth,
-      pointDiameter,
-      hasExcludedSegments ? this.gpuBrowseExcludedSegmentsHashTable : undefined,
-    );
-    if (passState === undefined) return;
-    const { gl, edgeShader, nodeShader, skeletonParams } = passState;
-
-    nodeShader.bind();
-
+    this.overlaySegments.updateBrowseExcludedSegments();
     const chunkOrigin = vec3.create();
     const chunkBound = vec3.create();
-    for (const { chunk, chunkLayout } of visibleChunks) {
-      if (skeletonParams.spatialChunkCulling) {
+    renderHelper.draw(renderContext, options, (pass) => {
+      for (const { chunk, chunkLayout } of visibleChunks) {
         vec3.mul(chunkOrigin, chunk.chunkGridPosition, chunkLayout.size);
         vec3.add(chunkBound, chunkOrigin, chunkLayout.size);
-        edgeShader.bind();
-        renderHelper.setChunkBounds(gl, edgeShader, chunkOrigin, chunkBound);
-        nodeShader.bind();
-        renderHelper.setChunkBounds(gl, nodeShader, chunkOrigin, chunkBound);
-      }
-      if (renderContext.emitPickID) {
-        let edgePickId = 0;
-        let edgePickStride = 0;
-        let nodePickId = 0;
-        let nodePickStride = 0;
-        if (chunk.numIndices > 0) {
-          edgePickId = renderContext.pickIDs.register(
+        pass.setChunkBounds(chunkOrigin, chunkBound);
+        if (renderContext.emitPickID) {
+          const { firstEdgePickId, firstNodePickId } = registerSkeletonPickIds(
+            renderContext,
             layer,
-            chunk.numIndices / 2,
-            0n,
+            chunk,
             {
-              kind: "segment-edge",
-              geometry: chunk,
-            } satisfies SpatiallyIndexedSkeletonPickData,
+              edgeKind: "segment-edge",
+              nodeKind: "segment-node",
+            },
           );
-          edgePickStride = 1;
+          pass.setElementPickIds(firstEdgePickId, firstNodePickId);
         }
-        if (chunk.numVertices > 0) {
-          nodePickId = renderContext.pickIDs.register(
-            layer,
-            chunk.numVertices,
-            0n,
-            {
-              kind: "segment-node",
-              geometry: chunk,
-            } satisfies SpatiallyIndexedSkeletonPickData,
-          );
-          nodePickStride = 1;
-        }
-        edgeShader.bind();
-        renderHelper.setPickID(gl, edgeShader, edgePickId);
-        renderHelper.setPickInstanceStride(gl, edgeShader, edgePickStride);
-        nodeShader.bind();
-        renderHelper.setPickID(gl, nodeShader, nodePickId);
-        renderHelper.setPickInstanceStride(gl, nodeShader, nodePickStride);
+        pass.draw(chunk);
       }
-
-      // Unlike the wireframe, this shows edges that two chunks both draw.
-      if (DEBUG_SPATIAL_SKELETON_CHUNKS) {
-        const chunkKey = `${chunk.chunkGridPosition[0]},${chunk.chunkGridPosition[1]},${chunk.chunkGridPosition[2]}`;
-        let randomColor = tempChunkKeyToColorMap.get(chunkKey);
-        if (randomColor === undefined) {
-          // Hashed like segment colours, so a chunk keeps its colour across sessions.
-          randomColor = new Float32Array([0, 0, 0]);
-          let h = hashCombine(0, chunk.chunkGridPosition[0]);
-          h = hashCombine(h, chunk.chunkGridPosition[1]);
-          h = hashCombine(h, chunk.chunkGridPosition[2]);
-          const c0 = (h & 0xff) / 255;
-          const c1 = ((h >> 8) & 0xff) / 255;
-          hsvToRgb(randomColor, c0, 0.5 + 0.5 * c1, 1.0);
-          tempChunkKeyToColorMap.set(chunkKey, randomColor);
-        }
-        if (skeletonParams.hasSegmentDefaultColor) {
-          nodeShader.bind();
-          gl.uniform3fv(
-            nodeShader.uniform("uSegmentDefaultColor"),
-            randomColor,
-          );
-          edgeShader.bind();
-          gl.uniform3fv(
-            edgeShader.uniform("uSegmentDefaultColor"),
-            randomColor,
-          );
-        }
-      }
-
-      renderHelper.drawSkeletons(
-        gl,
-        edgeShader,
-        nodeShader,
-        chunk,
-        renderContext.projectionParameters,
-      );
-    }
-    this.endSkeletonRenderPass(
-      renderHelper,
-      gl,
-      edgeShader,
-      nodeShader,
-      skeletonParams,
-    );
-  }
-
-  // The uniform persists across chunks, so a chunk without the dragged node must clear it.
-  private applyOverlayNodePositionOverride(
-    gl: GL,
-    renderHelper: RenderHelper,
-    edgeShader: ShaderProgram,
-    nodeShader: ShaderProgram,
-    overlayChunk: SkeletonOverlayChunk,
-  ) {
-    const override = getPendingNodeOverride(
-      overlayChunk.nodeIndex,
-      this.editSession,
-    );
-    const overrideVertexIndex = override?.vertexIndex ?? -1;
-    const overridePosition = override?.position ?? kZeroVec;
-    edgeShader.bind();
-    renderHelper.setNodePositionOverride(
-      gl,
-      edgeShader,
-      overrideVertexIndex,
-      overridePosition,
-    );
-    nodeShader.bind();
-    renderHelper.setNodePositionOverride(
-      gl,
-      nodeShader,
-      overrideVertexIndex,
-      overridePosition,
-    );
+    });
   }
 
   private drawInspectionOverlayPass(
     renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
     layer: RenderLayer,
     renderHelper: RenderHelper,
-    modelMatrix: mat4,
-    lineWidth: number,
-    pointDiameter: number,
+    options: SkeletonDrawOptions,
   ) {
     const overlayChunks = this.getOverlayChunks();
     if (overlayChunks.length === 0) return;
-    const passState = this.beginSkeletonRenderPass(
-      renderContext,
-      renderHelper,
-      modelMatrix,
-      lineWidth,
-      pointDiameter,
-    );
-    if (passState === undefined) return;
-    const { gl, edgeShader, nodeShader, skeletonParams } = passState;
-
-    for (const overlayChunk of overlayChunks) {
-      if (renderContext.emitPickID) {
-        const edgePickId =
-          overlayChunk.numIndices > 0
-            ? renderContext.pickIDs.register(
-                layer,
-                overlayChunk.numIndices / 2,
-                0n,
-                {
-                  kind: "edge",
-                  geometry: overlayChunk,
-                } satisfies SpatiallyIndexedSkeletonPickData,
-              )
-            : 0;
-        edgeShader.bind();
-        renderHelper.setPickID(gl, edgeShader, edgePickId);
-        renderHelper.setPickInstanceStride(
-          gl,
-          edgeShader,
-          edgePickId === 0 ? 0 : 1,
+    renderHelper.draw(renderContext, options, (pass) => {
+      for (const overlayChunk of overlayChunks) {
+        if (renderContext.emitPickID) {
+          const { firstEdgePickId, firstNodePickId } = registerSkeletonPickIds(
+            renderContext,
+            layer,
+            overlayChunk,
+            { edgeKind: "edge", nodeKind: "node" },
+          );
+          pass.setElementPickIds(firstEdgePickId, firstNodePickId);
+        }
+        pass.setNodePositionOverride(
+          getPendingNodeOverride(overlayChunk.nodeIndex, this.editSession),
         );
-
-        const nodePickId =
-          overlayChunk.numVertices > 0
-            ? renderContext.pickIDs.register(
-                layer,
-                overlayChunk.numVertices,
-                0n,
-                {
-                  kind: "node",
-                  geometry: overlayChunk,
-                } satisfies SpatiallyIndexedSkeletonPickData,
-              )
-            : 0;
-        nodeShader.bind();
-        renderHelper.setPickID(gl, nodeShader, nodePickId);
-        renderHelper.setPickInstanceStride(
-          gl,
-          nodeShader,
-          nodePickId === 0 ? 0 : 1,
-        );
+        pass.draw(overlayChunk);
       }
-
-      this.applyOverlayNodePositionOverride(
-        gl,
-        renderHelper,
-        edgeShader,
-        nodeShader,
-        overlayChunk,
-      );
-
-      renderHelper.drawSkeletons(
-        gl,
-        edgeShader,
-        nodeShader,
-        overlayChunk,
-        renderContext.projectionParameters,
-      );
-    }
-    this.endSkeletonRenderPass(
-      renderHelper,
-      gl,
-      edgeShader,
-      nodeShader,
-      skeletonParams,
-    );
+    });
   }
 
   draw(
@@ -1052,28 +756,19 @@ export class SpatiallyIndexedSkeletonLayer
       return;
     }
 
-    const lineWidth = renderOptions.lineWidth.value;
-    const pointDiameter = getSkeletonNodeDiameter(
-      renderOptions.mode.value,
-      lineWidth,
-    );
-
+    const options: SkeletonDrawOptions = { modelMatrix, renderOptions };
     this.drawBrowsePass(
       renderContext,
       layer,
       browseRenderHelper,
-      modelMatrix,
-      lineWidth,
-      pointDiameter,
+      options,
       visibleChunks,
     );
     this.drawInspectionOverlayPass(
       renderContext,
       layer,
       overlayRenderHelper,
-      modelMatrix,
-      lineWidth,
-      pointDiameter,
+      options,
     );
   }
 
@@ -1088,6 +783,36 @@ export class SpatiallyIndexedSkeletonLayer
       spacingTarget,
     );
   }
+}
+
+function registerSkeletonPickIds(
+  renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
+  layer: RenderLayer,
+  geometry: SkeletonPickGeometry,
+  kinds: {
+    readonly edgeKind: SpatiallyIndexedSkeletonPickData["kind"];
+    readonly nodeKind: SpatiallyIndexedSkeletonPickData["kind"];
+  },
+): { firstEdgePickId: number; firstNodePickId: number } {
+  const { pickIDs } = renderContext;
+  const numEdges = geometry.indices.length / 2;
+  const { numVertices } = geometry;
+  return {
+    firstEdgePickId:
+      numEdges === 0
+        ? 0
+        : pickIDs.register(layer, numEdges, 0n, {
+            kind: kinds.edgeKind,
+            geometry,
+          } satisfies SpatiallyIndexedSkeletonPickData),
+    firstNodePickId:
+      numVertices === 0
+        ? 0
+        : pickIDs.register(layer, numVertices, 0n, {
+            kind: kinds.nodeKind,
+            geometry,
+          } satisfies SpatiallyIndexedSkeletonPickData),
+  };
 }
 
 function transformSpatiallyIndexedSkeletonPickedValue(
@@ -1210,7 +935,7 @@ export function attachSpatiallyIndexedSkeletonLayer(
         const transformedSources = getVolumetricTransformedSources(
           displayDimensionRenderInfo,
           transform,
-          (options) => base.multiscaleSource.getSources(options),
+          () => base.multiscaleSource.getSources(),
           attachment.messages,
           renderLayer,
         );
