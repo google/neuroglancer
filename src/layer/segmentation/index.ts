@@ -906,10 +906,10 @@ export class SegmentationUserLayer extends Base {
 
   readonly getSkeletonLayer = () => {
     for (const layer of this.renderLayers) {
-      if (layer instanceof PerspectiveViewSkeletonLayer) {
-        return layer.base;
-      }
-      if (layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer) {
+      if (
+        layer instanceof PerspectiveViewSkeletonLayer ||
+        layer instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer
+      ) {
         return layer.base;
       }
     }
