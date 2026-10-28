@@ -414,20 +414,39 @@ interface SpatiallyIndexedValidAttachmentState extends AttachmentState {
 
 function getAnnotationProjectionParameters(
   chunkDisplayTransform: ChunkDisplayTransformParameters,
+  clipDimensionsWeight: ReadonlyMap<string, number>,
 ) {
   const { chunkTransform } = chunkDisplayTransform;
-  const { unpaddedRank } = chunkTransform.modelTransform;
+  const { unpaddedRank, layerDimensionNames } = chunkTransform.modelTransform;
   const modelClipBounds = new Float32Array(unpaddedRank * 2);
   const renderSubspaceTransform = new Float32Array(unpaddedRank * 3);
   renderSubspaceTransform.fill(0);
   modelClipBounds.fill(1, unpaddedRank);
   const { numChunkDisplayDims, chunkDisplayDimensionIndices } =
     chunkDisplayTransform;
+
+  // Set display dimensions to not clip by default (multiplier = 0)
   for (let i = 0; i < numChunkDisplayDims; ++i) {
     const chunkDim = chunkDisplayDimensionIndices[i];
     modelClipBounds[unpaddedRank + chunkDim] = 0;
     renderSubspaceTransform[chunkDim * 3 + i] = 1;
   }
+
+  // Apply custom clip dimension weights to non display dims
+  if (clipDimensionsWeight.size > 0) {
+    for (const [dimName, weight] of clipDimensionsWeight) {
+      const dimIndex = layerDimensionNames.indexOf(dimName);
+      if (
+        dimIndex !== -1 &&
+        dimIndex < unpaddedRank &&
+        !chunkDisplayDimensionIndices.includes(dimIndex)
+      ) {
+        const newIndex = unpaddedRank + dimIndex;
+        modelClipBounds[newIndex] = weight;
+      }
+    }
+  }
+
   return { modelClipBounds, renderSubspaceTransform };
 }
 
@@ -435,6 +454,7 @@ function getChunkRenderParameters(
   chunkTransform: ValueOrError<ChunkTransformParameters>,
   displayDimensionRenderInfo: DisplayDimensionRenderInfo,
   messages: MessageList,
+  clipDimensionsWeight: ReadonlyMap<string, number>,
 ): AnnotationChunkRenderParameters | undefined {
   messages.clearMessages();
   const returnError = (message: string) => {
@@ -458,7 +478,10 @@ function getChunkRenderParameters(
     return returnError((e as Error).message);
   }
   const { modelClipBounds, renderSubspaceTransform } =
-    getAnnotationProjectionParameters(chunkDisplayTransform);
+    getAnnotationProjectionParameters(
+      chunkDisplayTransform,
+      clipDimensionsWeight,
+    );
   return {
     chunkTransform,
     chunkDisplayTransform,
@@ -549,6 +572,9 @@ function AnnotationRenderLayer<
       const { chunkTransform } = this;
       const displayDimensionRenderInfo =
         attachment.view.displayDimensionRenderInfo.value;
+      const clipDimensionsWeight =
+        this.base.state.displayState.clipDimensionsWeight.value;
+
       attachment.state = {
         chunkTransform,
         displayDimensionRenderInfo,
@@ -556,6 +582,7 @@ function AnnotationRenderLayer<
           chunkTransform,
           displayDimensionRenderInfo,
           attachment.messages,
+          clipDimensionsWeight,
         ),
       };
     }
@@ -568,13 +595,16 @@ function AnnotationRenderLayer<
       const { chunkTransform } = this;
       const displayDimensionRenderInfo =
         attachment.view.displayDimensionRenderInfo.value;
+
       if (
-        state !== undefined &&
         state.chunkTransform === chunkTransform &&
         state.displayDimensionRenderInfo === displayDimensionRenderInfo
       ) {
         return state.chunkRenderParameters;
       }
+
+      const clipDimensionsWeight =
+        this.base.state.displayState.clipDimensionsWeight.value;
       state.chunkTransform = chunkTransform;
       state.displayDimensionRenderInfo = displayDimensionRenderInfo;
       const chunkRenderParameters = (state.chunkRenderParameters =
@@ -582,6 +612,7 @@ function AnnotationRenderLayer<
           chunkTransform,
           displayDimensionRenderInfo,
           attachment.messages,
+          clipDimensionsWeight,
         ));
       return chunkRenderParameters;
     }
@@ -1026,6 +1057,7 @@ const SpatiallyIndexedAnnotationLayer = <
             context: RefCounted,
             transform: RenderLayerTransformOrError,
             displayDimensionRenderInfo: DisplayDimensionRenderInfo,
+            clipDimensionsWeightValue: ReadonlyMap<string, number>,
           ) => {
             const transformedSources = getVolumetricTransformedSources(
               displayDimensionRenderInfo,
@@ -1044,6 +1076,7 @@ const SpatiallyIndexedAnnotationLayer = <
                   tsource,
                   getAnnotationProjectionParameters(
                     tsource.chunkDisplayTransform,
+                    clipDimensionsWeightValue,
                   ),
                 );
               }
@@ -1063,6 +1096,7 @@ const SpatiallyIndexedAnnotationLayer = <
           },
           this.base.state.transform,
           attachment.view.displayDimensionRenderInfo,
+          this.base.state.displayState.clipDimensionsWeight,
         ),
       );
     }
