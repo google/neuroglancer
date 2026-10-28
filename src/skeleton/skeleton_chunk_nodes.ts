@@ -18,8 +18,13 @@
  * @file Lists the nodes of a skeleton chunk with their parents.
  */
 
-import type { SkeletonNode } from "#src/skeleton/api.js";
-import { inferSkeletonParentIndices } from "#src/skeleton/skeleton_edges.js";
+import type { SkeletonEdge, SkeletonNode } from "#src/skeleton/api.js";
+import { inferSkeletonTopology } from "#src/skeleton/skeleton_edges.js";
+
+export interface SkeletonChunkNodes {
+  readonly nodes: readonly SkeletonNode[];
+  readonly loopEdges: readonly SkeletonEdge[];
+}
 
 // Precomputed edges have no direction, so parents are inferred.
 export function getSkeletonChunkNodes(
@@ -30,7 +35,7 @@ export function getSkeletonChunkNodes(
     readonly vertexAttributes: Uint8Array;
     readonly vertexAttributeOffsets: Uint32Array;
   },
-): SkeletonNode[] {
+): SkeletonChunkNodes {
   const { numVertices, indices, vertexAttributes, vertexAttributeOffsets } =
     chunk;
   const positions = new Float32Array(
@@ -38,7 +43,10 @@ export function getSkeletonChunkNodes(
     vertexAttributes.byteOffset + vertexAttributeOffsets[0],
     numVertices * 3,
   );
-  const parentVertexByVertex = inferSkeletonParentIndices(numVertices, indices);
+  const {
+    parentIndexByNode: parentVertexByVertex,
+    loopEdgeIndices: loopEdgeVertices,
+  } = inferSkeletonTopology(numVertices, indices);
   const nodes: SkeletonNode[] = [];
   for (let vertex = 0; vertex < numVertices; ++vertex) {
     const parentVertex = parentVertexByVertex[vertex];
@@ -49,5 +57,12 @@ export function getSkeletonChunkNodes(
       parentNodeId: parentVertex === -1 ? undefined : BigInt(parentVertex),
     });
   }
-  return nodes;
+  const loopEdges: SkeletonEdge[] = [];
+  for (let offset = 0; offset < loopEdgeVertices.length; offset += 2) {
+    loopEdges.push({
+      firstNodeId: BigInt(loopEdgeVertices[offset]),
+      secondNodeId: BigInt(loopEdgeVertices[offset + 1]),
+    });
+  }
+  return { nodes, loopEdges };
 }

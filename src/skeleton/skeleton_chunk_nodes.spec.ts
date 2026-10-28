@@ -54,7 +54,7 @@ describe("skeleton nodes from a chunk", () => {
       ],
     );
 
-    const nodes = getSkeletonChunkNodes(7n, chunk);
+    const nodes = getSkeletonChunkNodes(7n, chunk).nodes;
 
     expect(getParentNodeIds(nodes)).toEqual([
       [0n, undefined],
@@ -81,7 +81,7 @@ describe("skeleton nodes from a chunk", () => {
     );
 
     const graph = buildSkeletonNavigationGraph(
-      getSkeletonChunkNodes(7n, chunk),
+      getSkeletonChunkNodes(7n, chunk).nodes,
     );
 
     expect(graph.rootNodeIds).toEqual([0n, 3n]);
@@ -101,7 +101,7 @@ describe("skeleton nodes from a chunk", () => {
       ],
     );
 
-    expect(getParentNodeIds(getSkeletonChunkNodes(7n, chunk))).toEqual([
+    expect(getParentNodeIds(getSkeletonChunkNodes(7n, chunk).nodes)).toEqual([
       [0n, undefined],
       [1n, 0n],
     ]);
@@ -120,7 +120,7 @@ describe("skeleton nodes from a chunk", () => {
       ],
     );
 
-    const nodes = getSkeletonChunkNodes(7n, chunk);
+    const nodes = getSkeletonChunkNodes(7n, chunk).nodes;
 
     expect(getParentNodeIds(nodes)).toEqual([
       [0n, undefined],
@@ -143,7 +143,7 @@ describe("skeleton nodes from a chunk", () => {
       ],
     );
 
-    const nodes = getSkeletonChunkNodes(7n, chunk);
+    const nodes = getSkeletonChunkNodes(7n, chunk).nodes;
 
     expect(getParentNodeIds(nodes)).toEqual([
       [0n, undefined],
@@ -153,5 +153,84 @@ describe("skeleton nodes from a chunk", () => {
     expect(getBranchEnd(buildSkeletonNavigationGraph(nodes), 1n).nodeId).toBe(
       1n,
     );
+  });
+
+  it("parents a node with two neighbors equally near the root on the lower-indexed one, whatever the edge order", () => {
+    const positions = [
+      [0, 0, 0],
+      [10, 0, 0],
+      [20, 0, 0],
+      [30, 0, 0],
+    ];
+    const expectedParents = [
+      [0n, undefined],
+      [1n, 0n],
+      [2n, 1n],
+      [3n, 0n],
+    ];
+
+    const nodesFromHigherFirst = getSkeletonChunkNodes(
+      7n,
+      makePackedSkeletonChunk(positions, [
+        [0, 3],
+        [0, 1],
+        [3, 2],
+        [1, 2],
+      ]),
+    ).nodes;
+    const nodesFromLowerFirst = getSkeletonChunkNodes(
+      7n,
+      makePackedSkeletonChunk(positions, [
+        [1, 2],
+        [0, 1],
+        [0, 3],
+        [3, 2],
+      ]),
+    ).nodes;
+
+    expect(getParentNodeIds(nodesFromHigherFirst)).toEqual(expectedParents);
+    expect(getParentNodeIds(nodesFromLowerFirst)).toEqual(expectedParents);
+  });
+
+  it("lists the edge that closes a loop apart from the parent links", () => {
+    const chunk = makePackedSkeletonChunk(
+      Array.from({ length: 11 }, (_, vertex) => [vertex * 10, 0, 0]),
+      [
+        [0, 5],
+        [5, 9],
+        [9, 2],
+        [2, 5],
+        [2, 10],
+      ],
+    );
+
+    const { nodes, loopEdges } = getSkeletonChunkNodes(7n, chunk);
+
+    expect(
+      [0, 5, 9, 2, 10].map((vertex) => nodes[vertex].parentNodeId),
+    ).toEqual([undefined, 0n, 5n, 5n, 2n]);
+    expect(loopEdges).toEqual([{ firstNodeId: 2n, secondNodeId: 9n }]);
+  });
+
+  it("does not list a self edge or a repeated edge as a loop", () => {
+    const chunk = makePackedSkeletonChunk(
+      [
+        [0, 0, 0],
+        [10, 0, 0],
+        [20, 0, 0],
+      ],
+      [
+        [0, 1],
+        [1, 0],
+        [1, 1],
+        [0, 2],
+        [1, 2],
+        [2, 1],
+      ],
+    );
+
+    expect(getSkeletonChunkNodes(7n, chunk).loopEdges).toEqual([
+      { firstNodeId: 1n, secondNodeId: 2n },
+    ]);
   });
 });

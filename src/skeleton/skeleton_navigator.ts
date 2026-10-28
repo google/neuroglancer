@@ -20,7 +20,7 @@
  */
 
 import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
-import type { SkeletonNode } from "#src/skeleton/api.js";
+import type { SkeletonEdge, SkeletonNode } from "#src/skeleton/api.js";
 import {
   buildSkeletonNavigationGraph,
   getBranchEnd,
@@ -49,6 +49,8 @@ export interface SkeletonNodeAccess {
   // Undefined until every node of the segment is in memory.
   // Returns the same array while the nodes are unchanged.
   getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined;
+  // Edges that are not parent links.
+  getSegmentLoopEdges?(segmentId: bigint): readonly SkeletonEdge[] | undefined;
   readonly parentsInferred: boolean;
   readonly nodesChanged: NullaryReadonlySignal;
   readonly hasPickableNodes: boolean;
@@ -110,7 +112,10 @@ const TARGET_FINDERS: Record<
 export class SkeletonNavigator {
   private readonly graphs = new WeakMap<
     readonly SkeletonNode[],
-    SkeletonNavigationGraph
+    {
+      readonly loopEdges: readonly SkeletonEdge[] | undefined;
+      readonly graph: SkeletonNavigationGraph;
+    }
   >();
 
   constructor(
@@ -120,13 +125,16 @@ export class SkeletonNavigator {
   ) {}
 
   getGraph(segmentId: bigint): SkeletonNavigationGraph | undefined {
-    const nodes = this.nodeAccess.value?.getSegmentNodes(segmentId);
+    const nodeAccess = this.nodeAccess.value;
+    const nodes = nodeAccess?.getSegmentNodes(segmentId);
     if (nodes === undefined || nodes.length === 0) return undefined;
-    let graph = this.graphs.get(nodes);
-    if (graph === undefined) {
-      graph = buildSkeletonNavigationGraph(nodes);
-      this.graphs.set(nodes, graph);
+    const loopEdges = nodeAccess?.getSegmentLoopEdges?.(segmentId);
+    const cached = this.graphs.get(nodes);
+    if (cached !== undefined && cached.loopEdges === loopEdges) {
+      return cached.graph;
     }
+    const graph = buildSkeletonNavigationGraph(nodes, loopEdges);
+    this.graphs.set(nodes, { loopEdges, graph });
     return graph;
   }
 

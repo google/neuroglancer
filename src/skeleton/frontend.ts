@@ -42,12 +42,15 @@ import {
   registerRedrawWhenSegmentationDisplayState3DChanged,
   SegmentationLayerSharedObject,
 } from "#src/segmentation_display_state/frontend.js";
-import { type SkeletonNode } from "#src/skeleton/api.js";
+import { type SkeletonEdge, type SkeletonNode } from "#src/skeleton/api.js";
 import {
   SKELETON_LAYER_RPC_ID,
   type VertexAttributeInfo,
 } from "#src/skeleton/base.js";
-import { getSkeletonChunkNodes } from "#src/skeleton/skeleton_chunk_nodes.js";
+import {
+  getSkeletonChunkNodes,
+  type SkeletonChunkNodes,
+} from "#src/skeleton/skeleton_chunk_nodes.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
 import {
   edgeColorPathsGlsl,
@@ -918,7 +921,7 @@ export class SkeletonLayer
   private sharedObject: SegmentationLayerSharedObject;
   private readonly chunkNodes = new WeakMap<
     SkeletonChunk,
-    readonly SkeletonNode[]
+    SkeletonChunkNodes
   >();
   vertexAttributes: VertexAttributeRenderInfo[];
   // Non-spatial skeletons iterate segments individually and pass color/alpha via
@@ -996,15 +999,25 @@ export class SkeletonLayer
     return this.source.chunksChanged;
   }
 
-  getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined {
+  private getSegmentChunkNodes(
+    segmentId: bigint,
+  ): SkeletonChunkNodes | undefined {
     const chunk = this.source.chunks.get(getObjectKey(segmentId));
     if (chunk === undefined) return undefined;
-    let nodes = this.chunkNodes.get(chunk);
-    if (nodes === undefined) {
-      nodes = getSkeletonChunkNodes(segmentId, chunk);
-      this.chunkNodes.set(chunk, nodes);
+    let chunkNodes = this.chunkNodes.get(chunk);
+    if (chunkNodes === undefined) {
+      chunkNodes = getSkeletonChunkNodes(segmentId, chunk);
+      this.chunkNodes.set(chunk, chunkNodes);
     }
-    return nodes;
+    return chunkNodes;
+  }
+
+  getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined {
+    return this.getSegmentChunkNodes(segmentId)?.nodes;
+  }
+
+  getSegmentLoopEdges(segmentId: bigint): readonly SkeletonEdge[] | undefined {
+    return this.getSegmentChunkNodes(segmentId)?.loopEdges;
   }
 
   readonly parentsInferred = true;

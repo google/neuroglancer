@@ -214,6 +214,42 @@ describe("spatial skeleton edit tab render state", () => {
     expect(state.branchCount).toBe(1);
     expect(state.rows.map((row) => row.node.nodeId)).toEqual([31n]);
   });
+
+  it("gives each row the nodes that close a loop with it", () => {
+    const graph = buildSkeletonNavigationGraph(
+      [
+        makeNode(0n, undefined),
+        makeNode(5n, 0n),
+        makeNode(9n, 5n),
+        makeNode(2n, 5n),
+        makeNode(10n, 2n),
+      ],
+      [{ firstNodeId: 2n, secondNodeId: 9n }],
+    );
+
+    const state = buildSkeletonSegmentRenderState(20380n, graph, {
+      filterText: "",
+      nodeFilterType: SkeletonNodeFilterType.NONE,
+      getNodeDescription: () => undefined,
+    });
+
+    expect(
+      new Map(
+        state.rows.map((row) => [
+          row.node.nodeId,
+          row.loopNeighbors.map((neighbor) => neighbor.nodeId),
+        ]),
+      ),
+    ).toEqual(
+      new Map([
+        [0n, []],
+        [5n, []],
+        [9n, [2n]],
+        [2n, [9n]],
+        [10n, []],
+      ]),
+    );
+  });
 });
 
 describe("spatial skeleton edit tab virtual list items", () => {
