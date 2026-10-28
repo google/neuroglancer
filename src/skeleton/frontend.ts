@@ -166,7 +166,7 @@ export interface SkeletonShaderContext {
   fallbackShaderParameters: WatchableValue<ShaderControlsBuilderState>;
   displayState: SkeletonLayerDisplayState;
   skeletonShaderParameters: WatchableValueInterface<SkeletonShaderParameters>;
-  segmentStates?: HashMapUint64;
+  segmentStatesHashMap?: HashMapUint64;
 }
 
 export interface SkeletonGPUGeometry {
@@ -502,7 +502,10 @@ vec4 getSegmentAppearance(uint64_t segmentId) {
       ),
     );
     this.gpuSegmentStatesHashTable = this.registerDisposer(
-      GPUHashTable.get(this.gl, base.segmentStates ?? this.emptySegmentStates),
+      GPUHashTable.get(
+        this.gl,
+        base.segmentStatesHashMap ?? this.emptySegmentStates,
+      ),
     );
     this.gpuSegmentStatedColorHashTable = this.registerDisposer(
       GPUHashTable.get(this.gl, colorGroupState.segmentStatedColors.hashTable),

@@ -313,7 +313,7 @@ export class SpatiallyIndexedSkeletonLayer
   readonly chunkManager: ChunkManager;
   readonly displayState: SpatiallyIndexedSkeletonLayerOptions["displayState"];
   readonly editSession: SpatialSkeletonEditSession;
-  private readonly segmentStateTable: SpatialSkeletonSegmentStates;
+  private readonly segmentStates: SpatialSkeletonSegmentStates;
   readonly multiscaleSource: MultiscaleSpatiallyIndexedSkeletonSource;
   private readonly sources: SpatiallyIndexedSkeletonSourceEntry[];
   readonly source: SpatiallyIndexedSkeletonSource;
@@ -422,7 +422,7 @@ export class SpatiallyIndexedSkeletonLayer
       ),
     );
     this.overlaySegments = overlaySegments;
-    this.segmentStateTable = new SpatialSkeletonSegmentStates(
+    this.segmentStates = new SpatialSkeletonSegmentStates(
       overlaySegments.browseExcludedSegments,
       editSession.provisionalSegmentIds,
     );
@@ -512,7 +512,7 @@ export class SpatiallyIndexedSkeletonLayer
       fallbackShaderParameters: this.fallbackShaderParameters,
       displayState,
       skeletonShaderParameters: this.browsePassSkeletonShaderParameters,
-      segmentStates: this.segmentStateTable.hashMap,
+      segmentStatesHashMap: this.segmentStates.hashMap,
     };
   }
 
@@ -520,8 +520,8 @@ export class SpatiallyIndexedSkeletonLayer
     return this.chunkManager.chunkQueueManager.gl;
   }
 
-  get segmentStates() {
-    return this.segmentStateTable.hashMap;
+  get segmentStatesHashMap() {
+    return this.segmentStates.hashMap;
   }
 
   private forEachVisibleChunkSlot(
@@ -691,7 +691,7 @@ export class SpatiallyIndexedSkeletonLayer
   ) {
     if (visibleChunks.length === 0) return;
     this.overlaySegments.updateBrowseExcludedSegments();
-    this.segmentStateTable.update();
+    this.segmentStates.update();
     const chunkOrigin = vec3.create();
     const chunkBound = vec3.create();
     renderHelper.draw(renderContext, options, (pass) => {
@@ -724,7 +724,7 @@ export class SpatiallyIndexedSkeletonLayer
   ) {
     const overlayChunks = this.getOverlayChunks();
     if (overlayChunks.length === 0) return;
-    this.segmentStateTable.update();
+    this.segmentStates.update();
     renderHelper.draw(renderContext, options, (pass) => {
       for (const overlayChunk of overlayChunks) {
         if (renderContext.emitPickID) {

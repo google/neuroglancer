@@ -198,7 +198,7 @@ function makeRenderHelper(
       segmentAppearance: options.segmentAppearance,
       spatialIndexChunks: options.spatialIndexChunks ?? false,
     }),
-    segmentStates,
+    segmentStatesHashMap: segmentStates,
   } as unknown as SkeletonShaderContext;
   return new RenderHelper(base, /*targetIsSliceView=*/ false);
 }
@@ -454,7 +454,7 @@ describe("skeleton render helper", () => {
     });
   });
 
-  it("draws a provisional skeleton in red even when spatial index chunks hide it", () => {
+  it("draws a provisional skeleton in red when spatial index chunks would hide it", () => {
     webglTest((gl) => {
       const framebuffer = makeFramebuffer(gl);
       const renderHelper = makeRenderHelper(gl, {
