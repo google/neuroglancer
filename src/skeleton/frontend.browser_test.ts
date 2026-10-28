@@ -274,11 +274,11 @@ describe("skeleton render helper", () => {
       renderHelper.draw(
         makeRenderContext(),
         makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
-        (pass) => {
-          pass.setColor(vec4.fromValues(0, 0, 1, 1));
-          pass.setPickId(5);
-          pass.draw(skeleton);
-        },
+        (drawSkeleton) =>
+          drawSkeleton(skeleton, {
+            color: vec4.fromValues(0, 0, 1, 1),
+            pickIds: 5,
+          }),
       );
 
       expect([
@@ -302,11 +302,9 @@ describe("skeleton render helper", () => {
       renderHelper.draw(
         makeRenderContext(),
         makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
-        (pass) => {
-          pass.setColor(vec4.fromValues(1, 0, 0, 1));
-          pass.draw(left);
-          pass.setColor(vec4.fromValues(0, 1, 0, 1));
-          pass.draw(right);
+        (drawSkeleton) => {
+          drawSkeleton(left, { color: vec4.fromValues(1, 0, 0, 1) });
+          drawSkeleton(right, { color: vec4.fromValues(0, 1, 0, 1) });
         },
       );
 
@@ -340,10 +338,10 @@ describe("skeleton render helper", () => {
       renderHelper.draw(
         makeRenderContext(),
         makeDrawOptions(SkeletonRenderMode.LINES, 3),
-        (pass) => {
-          pass.setElementPickIds(10, 20);
-          pass.draw(chunk);
-        },
+        (drawSkeleton) =>
+          drawSkeleton(chunk, {
+            pickIds: { firstEdgePickId: 10, firstNodePickId: 20 },
+          }),
       );
 
       expect(readPixel(framebuffer, OffscreenTextures.PICK, 0, -0.5)[0]).toBe(
@@ -368,15 +366,13 @@ describe("skeleton render helper", () => {
       renderHelper.draw(
         makeRenderContext(),
         makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
-        (pass) => {
-          pass.setColor(vec4.fromValues(1, 1, 1, 1));
-          pass.setNodePositionOverride({
-            vertexIndex: 0,
-            position: [-0.5, 0.5, 0],
+        (drawSkeleton) => {
+          const color = vec4.fromValues(1, 1, 1, 1);
+          drawSkeleton(draggedChunk, {
+            color,
+            nodePositionOverride: { vertexIndex: 0, position: [-0.5, 0.5, 0] },
           });
-          pass.draw(draggedChunk);
-          pass.setNodePositionOverride(undefined);
-          pass.draw(otherChunk);
+          drawSkeleton(otherChunk, { color });
         },
       );
 
@@ -414,13 +410,13 @@ describe("skeleton render helper", () => {
       renderHelper.draw(
         makeRenderContext(),
         makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
-        (pass) => {
-          pass.setChunkBounds(
-            Float32Array.of(-1, -1, -1),
-            Float32Array.of(1, 1, 1),
-          );
-          pass.draw(chunk);
-        },
+        (drawSkeleton) =>
+          drawSkeleton(chunk, {
+            chunkBounds: {
+              origin: Float32Array.of(-1, -1, -1),
+              upperBound: Float32Array.of(1, 1, 1),
+            },
+          }),
       );
 
       expect(readPixel(framebuffer, OffscreenTextures.COLOR, -0.5, 0)[3]).toBe(
@@ -445,7 +441,7 @@ describe("skeleton render helper", () => {
       renderHelper.draw(
         makeRenderContext(),
         makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
-        (pass) => pass.draw(skeleton),
+        (drawSkeleton) => drawSkeleton(skeleton, {}),
       );
 
       expect(readPixel(framebuffer, OffscreenTextures.COLOR, 0.5, 0)[3]).toBe(
@@ -473,7 +469,7 @@ describe("skeleton render helper", () => {
       renderHelper.draw(
         makeRenderContext(),
         makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
-        (pass) => pass.draw(skeleton),
+        (drawSkeleton) => drawSkeleton(skeleton, {}),
       );
 
       expect([
@@ -506,17 +502,19 @@ describe("skeleton render helper", () => {
       renderHelper.draw(
         makeRenderContext(),
         makeDrawOptions(SkeletonRenderMode.LINES, 4),
-        (pass) => {
-          pass.setChunkBounds(
-            Float32Array.of(-1, -1, -1),
-            Float32Array.of(0, 1, 1),
-          );
-          pass.draw(edge);
-          pass.setChunkBounds(
-            Float32Array.of(0, -1, -1),
-            Float32Array.of(1, 1, 1),
-          );
-          pass.draw(edge);
+        (drawSkeleton) => {
+          drawSkeleton(edge, {
+            chunkBounds: {
+              origin: Float32Array.of(-1, -1, -1),
+              upperBound: Float32Array.of(0, 1, 1),
+            },
+          });
+          drawSkeleton(edge, {
+            chunkBounds: {
+              origin: Float32Array.of(0, -1, -1),
+              upperBound: Float32Array.of(1, 1, 1),
+            },
+          });
         },
       );
 

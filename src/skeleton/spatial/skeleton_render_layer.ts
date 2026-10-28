@@ -692,26 +692,21 @@ export class SpatiallyIndexedSkeletonLayer
     if (visibleChunks.length === 0) return;
     this.overlaySegments.updateBrowseExcludedSegments();
     this.segmentStates.update();
-    const chunkOrigin = vec3.create();
-    const chunkBound = vec3.create();
-    renderHelper.draw(renderContext, options, (pass) => {
+    const origin = vec3.create();
+    const upperBound = vec3.create();
+    renderHelper.draw(renderContext, options, (drawSkeleton) => {
       for (const { chunk, chunkLayout } of visibleChunks) {
-        vec3.mul(chunkOrigin, chunk.chunkGridPosition, chunkLayout.size);
-        vec3.add(chunkBound, chunkOrigin, chunkLayout.size);
-        pass.setChunkBounds(chunkOrigin, chunkBound);
-        if (renderContext.emitPickID) {
-          const { firstEdgePickId, firstNodePickId } = registerSkeletonPickIds(
-            renderContext,
-            layer,
-            chunk,
-            {
-              edgeKind: "segment-edge",
-              nodeKind: "segment-node",
-            },
-          );
-          pass.setElementPickIds(firstEdgePickId, firstNodePickId);
-        }
-        pass.draw(chunk);
+        vec3.mul(origin, chunk.chunkGridPosition, chunkLayout.size);
+        vec3.add(upperBound, origin, chunkLayout.size);
+        drawSkeleton(chunk, {
+          chunkBounds: { origin, upperBound },
+          pickIds: renderContext.emitPickID
+            ? registerSkeletonPickIds(renderContext, layer, chunk, {
+                edgeKind: "segment-edge",
+                nodeKind: "segment-node",
+              })
+            : undefined,
+        });
       }
     });
   }
@@ -725,21 +720,20 @@ export class SpatiallyIndexedSkeletonLayer
     const overlayChunks = this.getOverlayChunks();
     if (overlayChunks.length === 0) return;
     this.segmentStates.update();
-    renderHelper.draw(renderContext, options, (pass) => {
+    renderHelper.draw(renderContext, options, (drawSkeleton) => {
       for (const overlayChunk of overlayChunks) {
-        if (renderContext.emitPickID) {
-          const { firstEdgePickId, firstNodePickId } = registerSkeletonPickIds(
-            renderContext,
-            layer,
-            overlayChunk,
-            { edgeKind: "edge", nodeKind: "node" },
-          );
-          pass.setElementPickIds(firstEdgePickId, firstNodePickId);
-        }
-        pass.setNodePositionOverride(
-          getPendingNodeOverride(overlayChunk.nodeIndex, this.editSession),
-        );
-        pass.draw(overlayChunk);
+        drawSkeleton(overlayChunk, {
+          pickIds: renderContext.emitPickID
+            ? registerSkeletonPickIds(renderContext, layer, overlayChunk, {
+                edgeKind: "edge",
+                nodeKind: "node",
+              })
+            : undefined,
+          nodePositionOverride: getPendingNodeOverride(
+            overlayChunk.nodeIndex,
+            this.editSession,
+          ),
+        });
       }
     });
   }

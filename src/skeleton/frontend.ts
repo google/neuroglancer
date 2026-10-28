@@ -194,19 +194,34 @@ export interface SkeletonDrawOptions {
   readonly renderOptions: ViewSpecificSkeletonRenderingOptions;
 }
 
-export interface SkeletonDrawPass {
-  setColor(color: vec4): void;
-  // One pick ID for every edge and node of the skeleton.
-  setPickId(pickId: number): void;
-  // One pick ID per edge and per node, counted from the first.
-  setElementPickIds(firstEdgePickId: number, firstNodePickId: number): void;
-  setChunkBounds(origin: Float32Array, upperBound: Float32Array): void;
-  setNodePositionOverride(
-    override:
-      | { readonly vertexIndex: number; readonly position: ArrayLike<number> }
-      | undefined,
-  ): void;
-  draw(geometry: SkeletonGPUGeometry): void;
+// A number picks the whole skeleton. Otherwise IDs count up per edge and per node.
+type SkeletonPickIds =
+  | number
+  | { readonly firstEdgePickId: number; readonly firstNodePickId: number };
+
+function resolveSkeletonPickIds(pickIds: SkeletonPickIds | undefined) {
+  if (pickIds === undefined) return undefined;
+  if (typeof pickIds === "number") {
+    return { edgePickId: pickIds, nodePickId: pickIds, stride: 0 };
+  }
+  return {
+    edgePickId: pickIds.firstEdgePickId,
+    nodePickId: pickIds.firstNodePickId,
+    stride: 1,
+  };
+}
+
+interface SkeletonDrawParameters {
+  readonly color?: vec4;
+  readonly pickIds?: SkeletonPickIds;
+  readonly chunkBounds?: {
+    readonly origin: Float32Array;
+    readonly upperBound: Float32Array;
+  };
+  readonly nodePositionOverride?: {
+    readonly vertexIndex: number;
+    readonly position: ArrayLike<number>;
+  };
 }
 
 export class RenderHelper extends RefCounted {
@@ -553,7 +568,12 @@ vec4 getSegmentAppearance(uint64_t segmentId) {
   draw(
     renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
     { modelMatrix, renderOptions }: SkeletonDrawOptions,
-    callback: (pass: SkeletonDrawPass) => void,
+    callback: (
+      drawSkeleton: (
+        geometry: SkeletonGPUGeometry,
+        parameters: SkeletonDrawParameters,
+      ) => void,
+    ) => void,
   ): void {
     const edgeShaderResult = this.edgeShaderGetter(renderContext.emitter);
     const nodeShaderResult = this.nodeShaderGetter(renderContext.emitter);
@@ -561,7 +581,8 @@ vec4 getSegmentAppearance(uint64_t segmentId) {
     const nodeShader = nodeShaderResult.shader;
     if (edgeShader === null || nodeShader === null) return;
     const { gl } = this;
-    const { segmentAppearance } = edgeShaderResult.extraParameters;
+    const { segmentAppearance, spatialIndexChunks } =
+      edgeShaderResult.extraParameters;
     const { shaderControlState } =
       this.base.displayState.skeletonRenderingOptions;
     const lineWidth = renderOptions.lineWidth.value;
@@ -576,8 +597,6 @@ vec4 getSegmentAppearance(uint64_t segmentId) {
     ] as const) {
       shader.bind();
       gl.uniformMatrix4fv(shader.uniform("uProjection"), false, projection);
-      // A uniform left at 0 would move vertex 0.
-      gl.uniform1i(shader.uniform("uOverrideVertexIndex"), -1);
       gl.uniform1ui(shader.uniform("uPickInstanceStride"), 0);
       setControlsInShader(
         gl,
@@ -597,22 +616,127 @@ vec4 getSegmentAppearance(uint64_t segmentId) {
       getSkeletonNodeDiameter(renderOptions.mode.value, lineWidth),
     );
     this.vertexIdHelper.enable();
-    callback(
-      new ShaderPairDrawPass(
-        gl,
+    callback((geometry, parameters) => {
+      if (spatialIndexChunks && parameters.chunkBounds === undefined) {
+        throw new Error("A spatial index chunk is drawn without its bounds.");
+      }
+      this.drawSkeleton(
         edgeShader,
         nodeShader,
         renderContext.projectionParameters,
-        this.vertexAttributes.length,
-        this.targetIsSliceView ? 1.0 : 0.0,
-      ),
-    );
+        geometry,
+        parameters,
+      );
+    });
     if (segmentAppearance !== undefined) {
       this.disableSegmentAppearance(edgeShader, segmentAppearance);
       this.disableSegmentAppearance(nodeShader, segmentAppearance);
     }
     this.unbindTextures(edgeShader, nodeShader);
     this.vertexIdHelper.disable();
+  }
+
+  private drawSkeleton(
+    edgeShader: ShaderProgram,
+    nodeShader: ShaderProgram,
+    projectionParameters: { readonly width: number; readonly height: number },
+    geometry: SkeletonGPUGeometry,
+    parameters: SkeletonDrawParameters,
+  ) {
+    const { gl } = this;
+    const featherWidthInPixels = this.targetIsSliceView ? 1.0 : 0.0;
+    // Both shaders declare their samplers in the same order, so they share texture units.
+    const { vertexAttributeTextures } = geometry;
+    for (let i = 0; i < this.vertexAttributes.length; ++i) {
+      gl.activeTexture(
+        WebGL2RenderingContext.TEXTURE0 +
+          edgeShader.textureUnit(vertexAttributeSamplerSymbols[i]),
+      );
+      gl.bindTexture(
+        WebGL2RenderingContext.TEXTURE_2D,
+        vertexAttributeTextures[i],
+      );
+    }
+    if (edgeShader.textureUnits.has(segmentIdSamplerSymbol)) {
+      gl.activeTexture(
+        WebGL2RenderingContext.TEXTURE0 +
+          edgeShader.textureUnit(segmentIdSamplerSymbol),
+      );
+      gl.bindTexture(
+        WebGL2RenderingContext.TEXTURE_2D,
+        geometry.segmentIdTexture ?? null,
+      );
+    }
+    const pickIds = resolveSkeletonPickIds(parameters.pickIds);
+
+    edgeShader.bind();
+    this.setDrawUniforms(edgeShader, parameters);
+    if (pickIds !== undefined) {
+      this.setPickUniforms(edgeShader, pickIds.edgePickId, pickIds.stride);
+    }
+    const aVertexIndex = edgeShader.attribute("aVertexIndex");
+    geometry.indexBuffer.bindToVertexAttribI(
+      aVertexIndex,
+      2,
+      WebGL2RenderingContext.UNSIGNED_INT,
+    );
+    gl.vertexAttribDivisor(aVertexIndex, 1);
+    initializeLineShader(
+      edgeShader,
+      projectionParameters,
+      featherWidthInPixels,
+    );
+    drawLines(gl, 1, geometry.numIndices / 2);
+    gl.vertexAttribDivisor(aVertexIndex, 0);
+    gl.disableVertexAttribArray(aVertexIndex);
+
+    // Nodes are drawn in line mode too, so that edges meet without gaps.
+    nodeShader.bind();
+    this.setDrawUniforms(nodeShader, parameters);
+    if (pickIds !== undefined) {
+      this.setPickUniforms(nodeShader, pickIds.nodePickId, pickIds.stride);
+    }
+    initializeCircleShader(nodeShader, projectionParameters, {
+      featherWidthInPixels,
+    });
+    drawCircles(gl, 1, geometry.numVertices);
+  }
+
+  private setPickUniforms(
+    shader: ShaderProgram,
+    pickId: number,
+    stride: number,
+  ) {
+    this.gl.uniform1ui(shader.uniform("uPickID"), pickId);
+    this.gl.uniform1ui(shader.uniform("uPickInstanceStride"), stride);
+  }
+
+  private setDrawUniforms(
+    shader: ShaderProgram,
+    { color, chunkBounds, nodePositionOverride }: SkeletonDrawParameters,
+  ) {
+    const { gl } = this;
+    if (color !== undefined) {
+      gl.uniform4fv(shader.uniform("uColor"), color);
+    }
+    if (chunkBounds !== undefined) {
+      gl.uniform3fv(shader.uniform("uChunkOrigin"), chunkBounds.origin);
+      gl.uniform3fv(shader.uniform("uChunkBound"), chunkBounds.upperBound);
+    }
+    // A uniform left at 0 would move vertex 0.
+    gl.uniform1i(
+      shader.uniform("uOverrideVertexIndex"),
+      nodePositionOverride?.vertexIndex ?? -1,
+    );
+    if (nodePositionOverride !== undefined) {
+      const { position } = nodePositionOverride;
+      gl.uniform3f(
+        shader.uniform("uOverridePosition"),
+        position[0],
+        position[1],
+        position[2],
+      );
+    }
   }
 
   private readSegmentIdGlsl(
@@ -761,135 +885,6 @@ highp vec3 vertexPosition = applyNodePositionOverride(vertexIndex, readAttribute
         gl.bindTexture(gl.TEXTURE_2D, null);
       }
     }
-  }
-}
-
-// Setters take effect at the next draw, so each draw binds each shader once.
-class ShaderPairDrawPass implements SkeletonDrawPass {
-  private readonly pendingUniforms: ((shader: ShaderProgram) => void)[] = [];
-
-  constructor(
-    private readonly gl: GL,
-    private readonly edgeShader: ShaderProgram,
-    private readonly nodeShader: ShaderProgram,
-    private readonly projectionParameters: {
-      readonly width: number;
-      readonly height: number;
-    },
-    private readonly numVertexAttributes: number,
-    private readonly featherWidthInPixels: number,
-  ) {}
-
-  private queueUniforms(setUniforms: (shader: ShaderProgram) => void) {
-    this.pendingUniforms.push(setUniforms);
-  }
-
-  private bindWithPendingUniforms(shader: ShaderProgram) {
-    shader.bind();
-    for (const setUniforms of this.pendingUniforms) setUniforms(shader);
-  }
-
-  setColor(color: vec4) {
-    this.queueUniforms((shader) =>
-      this.gl.uniform4fv(shader.uniform("uColor"), color),
-    );
-  }
-
-  setPickId(pickId: number) {
-    this.queueUniforms((shader) => {
-      this.gl.uniform1ui(shader.uniform("uPickID"), pickId);
-      this.gl.uniform1ui(shader.uniform("uPickInstanceStride"), 0);
-    });
-  }
-
-  setElementPickIds(firstEdgePickId: number, firstNodePickId: number) {
-    this.queueUniforms((shader) => {
-      this.gl.uniform1ui(
-        shader.uniform("uPickID"),
-        shader === this.edgeShader ? firstEdgePickId : firstNodePickId,
-      );
-      this.gl.uniform1ui(shader.uniform("uPickInstanceStride"), 1);
-    });
-  }
-
-  setChunkBounds(origin: Float32Array, upperBound: Float32Array) {
-    this.queueUniforms((shader) => {
-      this.gl.uniform3fv(shader.uniform("uChunkOrigin"), origin);
-      this.gl.uniform3fv(shader.uniform("uChunkBound"), upperBound);
-    });
-  }
-
-  setNodePositionOverride(
-    override:
-      | { readonly vertexIndex: number; readonly position: ArrayLike<number> }
-      | undefined,
-  ) {
-    this.queueUniforms((shader) => {
-      this.gl.uniform1i(
-        shader.uniform("uOverrideVertexIndex"),
-        override?.vertexIndex ?? -1,
-      );
-      if (override !== undefined) {
-        const { position } = override;
-        this.gl.uniform3f(
-          shader.uniform("uOverridePosition"),
-          position[0],
-          position[1],
-          position[2],
-        );
-      }
-    });
-  }
-
-  draw(geometry: SkeletonGPUGeometry) {
-    const { gl, edgeShader, nodeShader, projectionParameters } = this;
-    // Both shaders declare their samplers in the same order, so they share texture units.
-    const { vertexAttributeTextures } = geometry;
-    for (let i = 0; i < this.numVertexAttributes; ++i) {
-      gl.activeTexture(
-        WebGL2RenderingContext.TEXTURE0 +
-          edgeShader.textureUnit(vertexAttributeSamplerSymbols[i]),
-      );
-      gl.bindTexture(
-        WebGL2RenderingContext.TEXTURE_2D,
-        vertexAttributeTextures[i],
-      );
-    }
-    if (edgeShader.textureUnits.has(segmentIdSamplerSymbol)) {
-      gl.activeTexture(
-        WebGL2RenderingContext.TEXTURE0 +
-          edgeShader.textureUnit(segmentIdSamplerSymbol),
-      );
-      gl.bindTexture(
-        WebGL2RenderingContext.TEXTURE_2D,
-        geometry.segmentIdTexture ?? null,
-      );
-    }
-
-    this.bindWithPendingUniforms(edgeShader);
-    const aVertexIndex = edgeShader.attribute("aVertexIndex");
-    geometry.indexBuffer.bindToVertexAttribI(
-      aVertexIndex,
-      2,
-      WebGL2RenderingContext.UNSIGNED_INT,
-    );
-    gl.vertexAttribDivisor(aVertexIndex, 1);
-    initializeLineShader(
-      edgeShader,
-      projectionParameters,
-      this.featherWidthInPixels,
-    );
-    drawLines(gl, 1, geometry.numIndices / 2);
-    gl.vertexAttribDivisor(aVertexIndex, 0);
-    gl.disableVertexAttribArray(aVertexIndex);
-
-    // Nodes are drawn in line mode too, so that edges meet without gaps.
-    this.bindWithPendingUniforms(nodeShader);
-    this.pendingUniforms.length = 0;
-    initializeCircleShader(nodeShader, projectionParameters, {
-      featherWidthInPixels: this.featherWidthInPixels,
-    });
-    drawCircles(gl, 1, geometry.numVertices);
   }
 }
 
@@ -1104,26 +1099,28 @@ export class SkeletonLayer
     );
     if (modelMatrix === undefined) return;
     const skeletons = source.chunks;
-    renderHelper.draw(renderContext, { modelMatrix, renderOptions }, (pass) => {
-      forEachVisibleSegmentToDraw(
-        displayState,
-        layer,
-        renderContext.emitColor,
-        renderContext.emitPickID ? renderContext.pickIDs : undefined,
-        (objectId, color, pickIndex) => {
-          const skeleton = skeletons.get(getObjectKey(objectId));
-          if (
-            skeleton === undefined ||
-            skeleton.state !== ChunkState.GPU_MEMORY
-          ) {
-            return;
-          }
-          if (color !== undefined) pass.setColor(color);
-          if (pickIndex !== undefined) pass.setPickId(pickIndex);
-          pass.draw(skeleton);
-        },
-      );
-    });
+    renderHelper.draw(
+      renderContext,
+      { modelMatrix, renderOptions },
+      (drawSkeleton) => {
+        forEachVisibleSegmentToDraw(
+          displayState,
+          layer,
+          renderContext.emitColor,
+          renderContext.emitPickID ? renderContext.pickIDs : undefined,
+          (objectId, color, pickIndex) => {
+            const skeleton = skeletons.get(getObjectKey(objectId));
+            if (
+              skeleton === undefined ||
+              skeleton.state !== ChunkState.GPU_MEMORY
+            ) {
+              return;
+            }
+            drawSkeleton(skeleton, { color, pickIds: pickIndex });
+          },
+        );
+      },
+    );
   }
 
   isReady() {
