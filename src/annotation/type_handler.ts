@@ -69,6 +69,7 @@ export interface AnnotationRenderContext {
   buffer: GLBuffer;
   annotationLayer: AnnotationLayer;
   renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext;
+  attachment: RefCounted;
   bufferOffset: number;
   count: number;
   basePickId: number;
@@ -626,12 +627,17 @@ if (ng_discardValue) {
     context: AnnotationRenderContext,
     callback: (shader: ShaderProgram) => void,
   ) {
-    const { shader, parameters } = shaderGetter(context.renderContext.emitter);
+    const shaderResult = shaderGetter(context.renderContext.emitter);
+    const { shader, parameters } = shaderResult;
     if (shader === null) return;
     shader.bind();
     const { gl } = this;
     const { renderContext } = context;
     const { annotationLayer } = context;
+    this.shaderControlState.activeControls.trackShader(
+      shaderResult,
+      context.attachment,
+    );
     setControlsInShader(
       gl,
       shader,

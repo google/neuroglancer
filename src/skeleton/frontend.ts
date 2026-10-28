@@ -598,6 +598,7 @@ export class SkeletonLayer extends RefCounted {
 
     edgeShader.bind();
     renderHelper.beginLayer(gl, edgeShader, renderContext, modelMatrix);
+    shaderControlState.activeControls.trackShader(edgeShaderResult, attachment);
     setControlsInShader(
       gl,
       edgeShader,
@@ -609,6 +610,7 @@ export class SkeletonLayer extends RefCounted {
     nodeShader.bind();
     renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
     gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
+    shaderControlState.activeControls.trackShader(nodeShaderResult, attachment);
     setControlsInShader(
       gl,
       nodeShader,
