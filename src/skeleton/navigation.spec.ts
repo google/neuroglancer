@@ -27,7 +27,14 @@ import {
   getParentNode,
   getPathBetweenNodes,
   getSkeletonRootNode,
-} from "#src/skeleton/navigation_graph.js";
+  SkeletonNavigation,
+  SkeletonNavigationFailure,
+  SkeletonNavigator,
+  type SkeletonNavigationResult,
+  type SkeletonNodeAccess,
+} from "#src/skeleton/navigation.js";
+import { WatchableValue } from "#src/trackable_value.js";
+import { NullarySignal } from "#src/util/signal.js";
 
 function makeNode(
   nodeId: bigint,
@@ -332,5 +339,79 @@ describe("skeleton navigation", () => {
       [6n, 5],
       [11n, 5],
     ]);
+  });
+});
+
+function makeNodeAccess(
+  getSegmentNodes: (segmentId: bigint) => readonly SkeletonNode[] | undefined,
+) {
+  const access: SkeletonNodeAccess = {
+    getSegmentNodes,
+    nodesChanged: new NullarySignal(),
+    hasPickableNodes: false,
+    parentsInferred: false,
+    displayState: { transform: new WatchableValue(undefined as any) },
+  };
+  return new WatchableValue<SkeletonNodeAccess | undefined>(access);
+}
+
+function getNodeId(result: SkeletonNavigationResult) {
+  return typeof result === "number" ? result : result.nodeId;
+}
+
+describe("skeleton navigator", () => {
+  it("goes to the parent, child and root of the selected node", () => {
+    const nodes = [makeNode(1n, undefined), makeNode(2n, 1n), makeNode(3n, 2n)];
+    const navigator = new SkeletonNavigator(makeNodeAccess(() => nodes));
+    const selection = { segmentId: 42n, nodeId: 2n };
+
+    expect(
+      getNodeId(navigator.navigate(SkeletonNavigation.PARENT, selection)),
+    ).toBe(1n);
+    expect(
+      getNodeId(navigator.navigate(SkeletonNavigation.CHILD, selection)),
+    ).toBe(3n);
+    expect(
+      getNodeId(
+        navigator.navigate(SkeletonNavigation.ROOT, {
+          segmentId: 42n,
+          nodeId: undefined,
+        }),
+      ),
+    ).toBe(1n);
+  });
+
+  it("asks to show the skeleton when its nodes are not in memory", () => {
+    const navigator = new SkeletonNavigator(makeNodeAccess(() => undefined));
+
+    const result = navigator.navigate(SkeletonNavigation.PARENT, {
+      segmentId: 42n,
+      nodeId: 2n,
+    });
+
+    expect(result).toBe(SkeletonNavigationFailure.NODES_NOT_LOADED);
+    expect(
+      navigator.describeFailure(
+        SkeletonNavigation.PARENT,
+        result as SkeletonNavigationFailure,
+      ),
+    ).toBe(
+      "To use skeleton navigation, show this skeleton in Seg, then allow it to finish loading.",
+    );
+  });
+
+  it("goes to the new parent after the skeleton changes", () => {
+    let nodes = [makeNode(1n, undefined), makeNode(2n, 1n), makeNode(3n, 2n)];
+    const navigator = new SkeletonNavigator(makeNodeAccess(() => nodes));
+    const selection = { segmentId: 42n, nodeId: 3n };
+    expect(
+      getNodeId(navigator.navigate(SkeletonNavigation.PARENT, selection)),
+    ).toBe(2n);
+
+    nodes = [makeNode(1n, undefined), makeNode(2n, 1n), makeNode(3n, 1n)];
+
+    expect(
+      getNodeId(navigator.navigate(SkeletonNavigation.PARENT, selection)),
+    ).toBe(1n);
   });
 });

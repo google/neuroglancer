@@ -23,7 +23,7 @@ import {
   SkeletonBrowseState,
   SkeletonDisplayNodeType,
   SkeletonNodeFilterType,
-} from "#src/skeleton/node_types.js";
+} from "#src/skeleton/node_attributes.js";
 
 function makeNode(overrides: Partial<SkeletonNode> = {}): SkeletonNode {
   return {

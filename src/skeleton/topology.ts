@@ -16,7 +16,8 @@
 
 /**
  * @file Resolves the parent of each skeleton node from edges that point either
- * way or have no direction.
+ * way or have no direction. Lists the nodes of a precomputed chunk with the
+ * parents it resolves.
  */
 
 import {
@@ -252,4 +253,50 @@ export function resolveSkeletonParents(
       parentNodeId: parentIndex === -1 ? undefined : nodes[parentIndex].nodeId,
     };
   });
+}
+
+export interface SkeletonChunkNodes {
+  readonly nodes: readonly SkeletonNode[];
+  readonly loopEdges: readonly SkeletonEdge[];
+}
+
+// Precomputed edges have no direction, so parents are inferred.
+export function getSkeletonChunkNodes(
+  segmentId: bigint,
+  chunk: {
+    readonly numVertices: number;
+    readonly indices: Uint32Array;
+    readonly vertexAttributes: Uint8Array;
+    readonly vertexAttributeOffsets: Uint32Array;
+  },
+): SkeletonChunkNodes {
+  const { numVertices, indices, vertexAttributes, vertexAttributeOffsets } =
+    chunk;
+  const positions = new Float32Array(
+    vertexAttributes.buffer,
+    vertexAttributes.byteOffset + vertexAttributeOffsets[0],
+    numVertices * 3,
+  );
+  const {
+    parentIndexByNode: parentVertexByVertex,
+    loopEdgeIndices: loopEdgeVertices,
+  } = inferSkeletonTopology(numVertices, indices);
+  const nodes: SkeletonNode[] = [];
+  for (let vertex = 0; vertex < numVertices; ++vertex) {
+    const parentVertex = parentVertexByVertex[vertex];
+    nodes.push({
+      nodeId: BigInt(vertex),
+      segmentId,
+      position: positions.subarray(vertex * 3, vertex * 3 + 3),
+      parentNodeId: parentVertex === -1 ? undefined : BigInt(parentVertex),
+    });
+  }
+  const loopEdges: SkeletonEdge[] = [];
+  for (let offset = 0; offset < loopEdgeVertices.length; offset += 2) {
+    loopEdges.push({
+      firstNodeId: BigInt(loopEdgeVertices[offset]),
+      secondNodeId: BigInt(loopEdgeVertices[offset + 1]),
+    });
+  }
+  return { nodes, loopEdges };
 }

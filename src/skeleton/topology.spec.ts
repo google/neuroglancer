@@ -21,8 +21,8 @@ import {
   buildSkeletonNavigationGraph,
   getBranchEnd,
   getSkeletonRootNode,
-} from "#src/skeleton/navigation_graph.js";
-import { getSkeletonChunkNodes } from "#src/skeleton/skeleton_chunk_nodes.js";
+} from "#src/skeleton/navigation.js";
+import { getSkeletonChunkNodes } from "#src/skeleton/topology.js";
 
 function makePackedSkeletonChunk(
   positions: readonly (readonly number[])[],
