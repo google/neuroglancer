@@ -95,6 +95,16 @@ void emit(vec4 color, highp uint pickId) {
 `);
 }
 
+// Premultiplies the color by alpha, as the canvas expects when it is not opaque.
+function sliceViewPanelEmitPremultipliedColor(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "out_fragColor", null);
+  builder.addFragmentCode(`
+void emit(vec4 color, highp uint pickId) {
+  out_fragColor = vec4(color.rgb * color.a, color.a);
+}
+`);
+}
+
 const tempVec3 = vec3.create();
 const tempVec3b = vec3.create();
 const tempVec4 = vec4.create();
@@ -102,6 +112,7 @@ const tempVec4 = vec4.create();
 export class SliceViewPanel extends RenderedDataPanel {
   declare viewer: SliceViewerState;
   private sliceViewRenderHelper;
+  private premultipliedSliceViewRenderHelper;
 
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
 
@@ -171,6 +182,15 @@ export class SliceViewPanel extends RenderedDataPanel {
       SliceViewRenderHelper.get(
         this.gl,
         sliceViewPanelEmitColor,
+        this.viewer,
+        false /*sliceViewPanel*/,
+      ),
+    );
+
+    this.premultipliedSliceViewRenderHelper = this.registerDisposer(
+      SliceViewRenderHelper.get(
+        this.gl,
+        sliceViewPanelEmitPremultipliedColor,
         this.viewer,
         false /*sliceViewPanel*/,
       ),
@@ -352,10 +372,13 @@ export class SliceViewPanel extends RenderedDataPanel {
     backgroundColor[0] = crossSectionBackgroundColor[0];
     backgroundColor[1] = crossSectionBackgroundColor[1];
     backgroundColor[2] = crossSectionBackgroundColor[2];
-    backgroundColor[3] = 1;
+    backgroundColor[3] = this.context.transparentBackground ? 0 : 1;
 
     this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
-    this.sliceViewRenderHelper.draw(
+    const sliceViewRenderHelper = this.context.transparentBackground
+      ? this.premultipliedSliceViewRenderHelper
+      : this.sliceViewRenderHelper;
+    sliceViewRenderHelper.draw(
       sliceView.offscreenFramebuffer.colorBuffers[0].texture,
       identityMat4,
       this.colorFactor,
@@ -377,6 +400,7 @@ export class SliceViewPanel extends RenderedDataPanel {
         WebGL2RenderingContext.SRC_ALPHA,
         WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
       );
+      this.keepAlphaOfTranslucentContent();
       this.offscreenFramebuffer.bind(width, height);
     };
 
@@ -422,6 +446,7 @@ export class SliceViewPanel extends RenderedDataPanel {
           WebGL2RenderingContext.SRC_ALPHA,
           WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
         );
+        this.keepAlphaOfTranslucentContent();
         this.scaleBars.draw(
           projectionParameters,
           this.navigationState.displayDimensionRenderInfo.value,
@@ -441,6 +466,18 @@ export class SliceViewPanel extends RenderedDataPanel {
       this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
     );
     return true;
+  }
+
+  // With a transparent background, blends alpha with (ONE, ONE_MINUS_SRC_ALPHA), so that
+  // translucent content keeps its alpha.  Blending alpha with SRC_ALPHA would square it.
+  private keepAlphaOfTranslucentContent() {
+    if (!this.context.transparentBackground) return;
+    this.gl.blendFuncSeparate(
+      WebGL2RenderingContext.SRC_ALPHA,
+      WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
+      WebGL2RenderingContext.ONE,
+      WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA,
+    );
   }
 
   ensureBoundsUpdated() {
