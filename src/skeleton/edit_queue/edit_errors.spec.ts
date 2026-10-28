@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 import {
   SpatialSkeletonActions,
   getSpatialSkeletonActionSupportLabel,
-} from "#src/skeleton/edit_commands.js";
+} from "#src/skeleton/edit/edit_commands.js";
 import {
   getSpatialSkeletonActionErrorMessage,
   isSpatialSkeletonInspectionRequiredError,

@@ -49,21 +49,21 @@ function hasNonEmptyNodeDescription(description: string | undefined) {
   return (description?.trim().length ?? 0) > 0;
 }
 
-export interface SkeletonSegmentRenderRow {
+export interface SkeletonNodeRow {
   node: SkeletonNode;
   type: SkeletonNodeType;
   isLeaf: boolean;
   loopNeighbors: readonly SkeletonNode[];
 }
 
-export interface SkeletonSegmentRenderState {
+export interface SkeletonSegmentRows {
   segmentId: bigint;
   totalNodeCount: number;
   matchedNodeCount: number;
   displayedNodeCount: number;
   branchCount: number;
   connectedPartCount: number;
-  rows: readonly SkeletonSegmentRenderRow[];
+  rows: readonly SkeletonNodeRow[];
 }
 
 interface NodeClassification {
@@ -85,7 +85,7 @@ function getLoopNeighbors(
   return loopNeighbors;
 }
 
-export function buildSkeletonSegmentRenderState(
+export function buildSkeletonSegmentRows(
   segmentId: bigint,
   graph: SkeletonNavigationGraph,
   options: {
@@ -93,7 +93,7 @@ export function buildSkeletonSegmentRenderState(
     nodeFilterType: SkeletonNodeFilterType;
     getNodeDescription: (node: SkeletonNode) => string | undefined;
   },
-): SkeletonSegmentRenderState {
+): SkeletonSegmentRows {
   const { nodeById, childrenByParent } = graph;
   if (nodeById.size === 0) {
     return {
@@ -182,7 +182,7 @@ export function buildSkeletonSegmentRenderState(
     );
   };
 
-  const rows: SkeletonSegmentRenderRow[] = [];
+  const rows: SkeletonNodeRow[] = [];
   for (const nodeId of matchedNodeIds) {
     if (isCollapsedFromDisplay(nodeId)) continue;
     const { node, type, isLeaf } = classificationById.get(nodeId)!;
@@ -298,13 +298,13 @@ export function getSpatialSkeletonDetailsPreparationState(options: {
   };
 }
 
-export type SegmentDisplayState = SkeletonSegmentRenderState & {
+export type SegmentDisplayState = SkeletonSegmentRows & {
   segmentLabel: string | undefined;
 };
 
 export type SkeletonListItem =
   | { kind: "segment"; segmentState: SegmentDisplayState }
-  | { kind: "node"; row: SkeletonSegmentRenderRow }
+  | { kind: "node"; row: SkeletonNodeRow }
   | { kind: "empty"; text: string };
 
 export function buildSkeletonVirtualListItems(

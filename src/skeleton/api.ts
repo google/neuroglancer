@@ -33,7 +33,7 @@ import type {
   SpatialSkeletonMoveNodesCommandFactory,
   SpatialSkeletonRerootCommandFactory,
   SpatialSkeletonSplitSkeletonsCommandFactory,
-} from "#src/skeleton/edit_commands.js";
+} from "#src/skeleton/edit/edit_commands.js";
 import type { SpatialSkeletonEditPlannerProvider } from "#src/skeleton/edit_queue/api.js";
 
 // One number per dimension of the model space, in its units, such as a position or a chunk size.

@@ -46,13 +46,14 @@ to describe and persist its edit plans.
 
 Each file's `@file` comment states its job.
 
-`src/skeleton/edit_queue/` holds the generic queue. It must not import
-`src/datasource` or `src/skeleton/edit/`; eslint enforces both.
+`src/skeleton/edit_queue/` holds the generic queue. eslint stops it from
+importing `src/datasource`.
 
-`src/skeleton/edit/` holds the layer-facing side.
+`src/skeleton/edit/` holds the layer-facing side. Its
+[README](../edit/README.md) states the line between the two folders.
 
-`src/skeleton/edit_commands.ts` holds the edit actions and the command contract
-that a datasource implements.
+`src/skeleton/edit/edit_commands.ts` holds the edit actions and the command
+contract that a datasource implements.
 
 `src/datasource/catmaid/spatial_skeleton_edit/` holds the CATMAID planner; see
 [CATMAID boundary](#catmaid-boundary).

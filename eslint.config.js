@@ -4,18 +4,6 @@ import eslint from "@eslint/js";
 import importPlugin from "eslint-plugin-import";
 import tseslint from "typescript-eslint";
 
-const editQueueImportPatterns = [
-  {
-    group: ["./", "../"],
-    message: "Relative imports are not allowed.",
-  },
-  {
-    regex: "^(?:#src/|src/)datasource(?:/|$)",
-    message:
-      "Generic optimistic edit modules must not depend on datasource implementations.",
-  },
-];
-
 export default tseslint.config(
   {
     ignores: [
@@ -135,26 +123,16 @@ export default tseslint.config(
         "error",
         {
           patterns: [
-            ...editQueueImportPatterns,
             {
-              regex: "^#src/skeleton/edit/",
+              group: ["./", "../"],
+              message: "Relative imports are not allowed.",
+            },
+            {
+              regex: "^(?:#src/|src/)datasource(?:/|$)",
               message:
-                "The edit queue must not depend on the layer-facing edit code.",
+                "Generic optimistic edit modules must not depend on datasource implementations.",
             },
           ],
-        },
-      ],
-    },
-  },
-  {
-    // Specs may build their fixtures from the layer-facing edit code.
-    files: ["src/skeleton/edit_queue/**/*.spec.ts"],
-
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: editQueueImportPatterns,
         },
       ],
     },

@@ -33,8 +33,8 @@ import { CompleteSkeletonCache } from "#src/skeleton/edit/complete_skeleton_cach
 import type {
   SpatialSkeletonAction,
   SpatialSkeletonEditCommand,
-} from "#src/skeleton/edit_commands.js";
-import { getSpatialSkeletonEditCommandFactoryFromSource } from "#src/skeleton/edit_commands.js";
+} from "#src/skeleton/edit/edit_commands.js";
+import { getSpatialSkeletonEditCommandFactoryFromSource } from "#src/skeleton/edit/edit_commands.js";
 import type {
   SpatialSkeletonEditPlannerProvider,
   SpatialSkeletonProvisionalNumericIdPolicy,

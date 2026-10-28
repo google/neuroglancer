@@ -25,8 +25,8 @@ import type {
   SkeletonNode,
   SkeletonNodeAttributes,
 } from "#src/skeleton/api.js";
-import type { SpatialSkeletonAction } from "#src/skeleton/edit_commands.js";
-import { getSpatialSkeletonActionSupportLabel } from "#src/skeleton/edit_commands.js";
+import type { SpatialSkeletonAction } from "#src/skeleton/edit/edit_commands.js";
+import { getSpatialSkeletonActionSupportLabel } from "#src/skeleton/edit/edit_commands.js";
 import type { CompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import { createCompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import type { SpatialSkeletonInspectionRequiredReason } from "#src/skeleton/edit_queue/edit_errors.js";

@@ -20,7 +20,7 @@
  */
 
 import type { EditableSkeletonSource } from "#src/skeleton/api.js";
-import type { SpatialSkeletonEditCommand } from "#src/skeleton/edit_commands.js";
+import type { SpatialSkeletonEditCommand } from "#src/skeleton/edit/edit_commands.js";
 import type { SpatialSkeletonEditInverseDelta } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
 import type {
   SpatialSkeletonCommittedEditRequestAttempt,

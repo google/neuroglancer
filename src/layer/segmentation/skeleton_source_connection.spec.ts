@@ -28,9 +28,9 @@ import { SkeletonNodeSelection } from "#src/layer/segmentation/skeleton_node_sel
 import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_source_connection.js";
 import type { SegmentationGroupState } from "#src/segmentation_display_state/frontend.js";
 import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit/edit_commands.js";
 import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import { executeSpatialSkeletonDeleteNode } from "#src/skeleton/edit/submit_edits.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import type { SpatialSkeletonResolvedPreviewUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
 import { SkeletonFindPathState } from "#src/skeleton/find_path/find_path.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/navigation.js";

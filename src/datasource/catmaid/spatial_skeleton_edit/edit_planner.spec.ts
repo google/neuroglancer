@@ -26,7 +26,7 @@ import type {
   CatmaidEditRequestResult,
 } from "#src/datasource/catmaid/spatial_skeleton_edit/edit_requests.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit/edit_commands.js";
 import { createCompleteSkeleton } from "#src/skeleton/edit_queue/complete_skeleton.js";
 import type { SpatialSkeletonEditInverseDelta } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
 import type {

@@ -22,6 +22,13 @@
 
 import type { SkeletonNodeSelection } from "#src/layer/segmentation/skeleton_node_selection.js";
 import type { SegmentationGroupState } from "#src/segmentation_display_state/frontend.js";
+import type { SpatialSkeletonAction } from "#src/skeleton/edit/edit_commands.js";
+import {
+  DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS,
+  getSpatialSkeletonActionSupportLabel,
+  isSpatialSkeletonEditAction,
+  SpatialSkeletonActions,
+} from "#src/skeleton/edit/edit_commands.js";
 import type {
   SpatialSkeletonLayerContext,
   SpatialSkeletonEditSession,
@@ -30,13 +37,6 @@ import {
   ensureSpatialSkeletonEditQueue,
   editableSpatiallyIndexedSkeletonSourceSupportsAction,
 } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
-import type { SpatialSkeletonAction } from "#src/skeleton/edit_commands.js";
-import {
-  DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS,
-  getSpatialSkeletonActionSupportLabel,
-  isSpatialSkeletonEditAction,
-  SpatialSkeletonActions,
-} from "#src/skeleton/edit_commands.js";
 import type { SpatialSkeletonResolvedPreviewUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/types.js";
 import type { SkeletonFindPathState } from "#src/skeleton/find_path/find_path.js";

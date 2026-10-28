@@ -24,13 +24,13 @@ import {
   type SkeletonFragmentNode,
   type SkeletonNode,
 } from "#src/skeleton/api.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit/edit_commands.js";
 import type { SpatialSkeletonLayerContext } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   editableSpatiallyIndexedSkeletonSourceSupportsAction,
   ensureSpatialSkeletonEditQueue,
   SpatialSkeletonEditSession,
 } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import type {
   SpatialSkeletonEditPlannerRegistration,
   SpatialSkeletonEditPlannerProvider,

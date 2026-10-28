@@ -22,6 +22,12 @@
 import type { UserLayer } from "#src/layer/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
+import type { SpatialSkeletonAction } from "#src/skeleton/edit/edit_commands.js";
+import {
+  DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS,
+  SpatialSkeletonActions,
+  SpatialSkeletonHistoryActions,
+} from "#src/skeleton/edit/edit_commands.js";
 import {
   executeSpatialSkeletonNodeTrueEndUpdate,
   redoSpatialSkeletonCommand,
@@ -29,12 +35,6 @@ import {
   undoSpatialSkeletonCommand,
   executeSpatialSkeletonReroot,
 } from "#src/skeleton/edit/submit_edits.js";
-import type { SpatialSkeletonAction } from "#src/skeleton/edit_commands.js";
-import {
-  DEFAULT_SPATIAL_SKELETON_EDIT_ACTIONS,
-  SpatialSkeletonActions,
-  SpatialSkeletonHistoryActions,
-} from "#src/skeleton/edit_commands.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/types.js";
 import { SkeletonNavigation } from "#src/skeleton/navigation.js";
 import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";

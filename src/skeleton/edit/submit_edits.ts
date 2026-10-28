@@ -22,23 +22,23 @@
 
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import type { SpatialSkeletonInputReference } from "#src/skeleton/edit/complete_skeleton_cache.js";
-import type { SpatialSkeletonLayerContext } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
-import {
-  ensureSpatialSkeletonEditQueue,
-  getSpatialSkeletonEditCommandFactoryForAction,
-} from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type {
   SpatialSkeletonAction,
   SpatialSkeletonCommandContext,
   SpatialSkeletonEditCommand,
   SpatialSkeletonErrorAction,
   SpatialSkeletonCommandPayload,
-} from "#src/skeleton/edit_commands.js";
+} from "#src/skeleton/edit/edit_commands.js";
 import {
   SpatialSkeletonActions,
   SpatialSkeletonHistoryActions,
   getSpatialSkeletonActionSupportLabel,
-} from "#src/skeleton/edit_commands.js";
+} from "#src/skeleton/edit/edit_commands.js";
+import type { SpatialSkeletonLayerContext } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
+import {
+  ensureSpatialSkeletonEditQueue,
+  getSpatialSkeletonEditCommandFactoryForAction,
+} from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
   getSpatialSkeletonActionErrorMessage,
   SpatialSkeletonInspectionRequiredError,

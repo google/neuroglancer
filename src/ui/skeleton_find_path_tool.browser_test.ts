@@ -17,7 +17,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit/edit_commands.js";
 import { SkeletonFindPathState } from "#src/skeleton/find_path/find_path.js";
 import {
   buildSkeletonNavigationGraph,

@@ -26,6 +26,8 @@ import { hasSkeletonNodeSelection } from "#src/layer/segmentation/skeleton_node_
 import { getChunkPositionFromCombinedGlobalLocalPositions } from "#src/render_coordinate_transform.js";
 import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
+import type { SpatialSkeletonAction } from "#src/skeleton/edit/edit_commands.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit/edit_commands.js";
 import { SpatialSkeletonMergeTargetPrefetch } from "#src/skeleton/edit/merge_target_prefetch.js";
 import {
   executeSpatialSkeletonAddNode,
@@ -36,8 +38,6 @@ import {
   executeSpatialSkeletonSplit,
   showSpatialSkeletonActionError,
 } from "#src/skeleton/edit/submit_edits.js";
-import type { SpatialSkeletonAction } from "#src/skeleton/edit_commands.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import type { SpatialSkeletonEditExecution } from "#src/skeleton/edit_queue/types.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { StatusMessage } from "#src/status.js";

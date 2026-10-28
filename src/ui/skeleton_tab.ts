@@ -38,6 +38,11 @@ import {
 } from "#src/segmentation_display_state/base.js";
 import { getBaseObjectColor } from "#src/segmentation_display_state/frontend.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
+import type { SpatialSkeletonAction } from "#src/skeleton/edit/edit_commands.js";
+import {
+  SpatialSkeletonActions,
+  SpatialSkeletonHistoryActions,
+} from "#src/skeleton/edit/edit_commands.js";
 import {
   executeSpatialSkeletonDeleteNode,
   executeSpatialSkeletonNodeTrueEndUpdate,
@@ -45,11 +50,6 @@ import {
   showSpatialSkeletonActionError,
   undoSpatialSkeletonCommand,
 } from "#src/skeleton/edit/submit_edits.js";
-import type { SpatialSkeletonAction } from "#src/skeleton/edit_commands.js";
-import {
-  SpatialSkeletonActions,
-  SpatialSkeletonHistoryActions,
-} from "#src/skeleton/edit_commands.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/types.js";
 import { SkeletonNavigation } from "#src/skeleton/navigation.js";
 import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
@@ -68,7 +68,7 @@ import {
 import { registerSpatialSkeletonEditQueueTab } from "#src/ui/skeleton_edit_queue_tab.js";
 import { getSkeletonNodeTypeIcon } from "#src/ui/skeleton_node_icons.js";
 import {
-  buildSkeletonSegmentRenderState,
+  buildSkeletonSegmentRows,
   buildSkeletonVirtualListItems,
   getSkeletonEmptyListText,
   getSkeletonNodeIdPresentation,
@@ -76,9 +76,9 @@ import {
   PREPARATION_PENDING_LIST_MESSAGE,
   type SegmentDisplayState,
   type SkeletonListItem,
-  type SkeletonSegmentRenderRow,
+  type SkeletonNodeRow,
   type SpatialSkeletonDetailsPreparationState,
-} from "#src/ui/skeleton_tab_render.js";
+} from "#src/ui/skeleton_tab_rows.js";
 import {
   SPATIAL_SKELETON_EDIT_MODE_TOOL_ID,
   SPATIAL_SKELETON_FIND_PATH_TOOL_ID,
@@ -846,7 +846,7 @@ export class SkeletonTab extends Tab {
       const segmentId = activeSegmentId;
       if (segmentId === undefined) return undefined;
       const graph = layer.skeletonNodeSelection.navigator.getGraph(segmentId);
-      const renderState =
+      const segmentRows =
         graph === undefined
           ? {
               segmentId,
@@ -857,13 +857,13 @@ export class SkeletonTab extends Tab {
               connectedPartCount: 0,
               rows: [],
             }
-          : buildSkeletonSegmentRenderState(segmentId, graph, {
+          : buildSkeletonSegmentRows(segmentId, graph, {
               filterText: getFilterText(),
               nodeFilterType: nodeFilterTypeModel.value,
               getNodeDescription: getNodeDescriptionText,
             });
       return {
-        ...renderState,
+        ...segmentRows,
         segmentLabel: getSegmentDisplayLabel(segmentId),
       };
     };
@@ -982,7 +982,7 @@ export class SkeletonTab extends Tab {
       return line;
     };
 
-    const makeNodeEntry = (rowInfo: SkeletonSegmentRenderRow) => {
+    const makeNodeEntry = (rowInfo: SkeletonNodeRow) => {
       const { node, type, isLeaf } = rowInfo;
       const entry = document.createElement("div");
       entry.className = "neuroglancer-skeleton-tree-entry";

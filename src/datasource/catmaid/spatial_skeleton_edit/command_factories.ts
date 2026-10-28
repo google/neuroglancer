@@ -68,8 +68,8 @@ import type {
   SpatialSkeletonCommandContext,
   SpatialSkeletonEditCommand,
   SpatialSkeletonEditCommandFactory,
-} from "#src/skeleton/edit_commands.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
+} from "#src/skeleton/edit/edit_commands.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit/edit_commands.js";
 import type {
   SpatialSkeletonEditPlannerRegistration,
   SpatialSkeletonEditPlannerProvider,

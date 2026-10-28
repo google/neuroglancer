@@ -28,6 +28,8 @@ import { SkeletonNodeSelection } from "#src/layer/segmentation/skeleton_node_sel
 import { SkeletonSourceConnection } from "#src/layer/segmentation/skeleton_source_connection.js";
 import type { SegmentationGroupState } from "#src/segmentation_display_state/frontend.js";
 import { SkeletonEdgeDirection, type SkeletonNode } from "#src/skeleton/api.js";
+import type { SpatialSkeletonEditCommand } from "#src/skeleton/edit/edit_commands.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit/edit_commands.js";
 import {
   SpatialSkeletonEditSession,
   ensureSpatialSkeletonEditQueue,
@@ -50,8 +52,6 @@ import {
   showSpatialSkeletonActionError,
   undoSpatialSkeletonCommand,
 } from "#src/skeleton/edit/submit_edits.js";
-import type { SpatialSkeletonEditCommand } from "#src/skeleton/edit_commands.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import { SpatialSkeletonEditConflictError } from "#src/skeleton/edit_queue/edit_errors.js";
 import { SpatialSkeletonEditPreview } from "#src/skeleton/edit_queue/preview.js";
 import type { SpatialSkeletonQueueInputRequirement } from "#src/skeleton/edit_queue/queue_input.js";

@@ -21,11 +21,11 @@ import type { SpatialSkeletonPendingEdit } from "#src/skeleton/edit/spatial_skel
 import { buildSkeletonNavigationGraph } from "#src/skeleton/navigation.js";
 import { SkeletonNodeFilterType } from "#src/skeleton/node_attributes.js";
 import {
-  buildSkeletonSegmentRenderState,
+  buildSkeletonSegmentRows,
   buildSkeletonVirtualListItems,
   getSkeletonEmptyListText,
   getSpatialSkeletonDetailsPreparationState,
-} from "#src/ui/skeleton_tab_render.js";
+} from "#src/ui/skeleton_tab_rows.js";
 
 function makeNode(
   nodeId: bigint,
@@ -72,7 +72,7 @@ describe("spatial skeleton edit tab render state", () => {
       makeNode(4n, 2n),
     ]);
 
-    const state = buildSkeletonSegmentRenderState(20380n, graph, {
+    const state = buildSkeletonSegmentRows(20380n, graph, {
       filterText: "target",
       nodeFilterType: SkeletonNodeFilterType.NONE,
       getNodeDescription(node) {
@@ -92,21 +92,21 @@ describe("spatial skeleton edit tab render state", () => {
       makeNode(102n, 101n),
     ]);
 
-    const byCoordinates = buildSkeletonSegmentRenderState(20380n, graph, {
+    const byCoordinates = buildSkeletonSegmentRows(20380n, graph, {
       filterText: "101 102 103",
       nodeFilterType: SkeletonNodeFilterType.NONE,
       getNodeDescription() {
         return undefined;
       },
     });
-    const bySegmentId = buildSkeletonSegmentRenderState(20380n, graph, {
+    const bySegmentId = buildSkeletonSegmentRows(20380n, graph, {
       filterText: "20380",
       nodeFilterType: SkeletonNodeFilterType.NONE,
       getNodeDescription() {
         return undefined;
       },
     });
-    const byTrueEndText = buildSkeletonSegmentRenderState(20380n, graph, {
+    const byTrueEndText = buildSkeletonSegmentRows(20380n, graph, {
       filterText: "true end",
       nodeFilterType: SkeletonNodeFilterType.NONE,
       getNodeDescription() {
@@ -129,7 +129,7 @@ describe("spatial skeleton edit tab render state", () => {
       makeNode(12n, 11n),
     ]);
 
-    const state = buildSkeletonSegmentRenderState(20380n, graph, {
+    const state = buildSkeletonSegmentRows(20380n, graph, {
       filterText: "",
       nodeFilterType: SkeletonNodeFilterType.DEFAULT,
       getNodeDescription() {
@@ -150,7 +150,7 @@ describe("spatial skeleton edit tab render state", () => {
       makeNode(12n, 11n),
     ]);
 
-    const state = buildSkeletonSegmentRenderState(20380n, graph, {
+    const state = buildSkeletonSegmentRows(20380n, graph, {
       filterText: "",
       nodeFilterType: SkeletonNodeFilterType.NONE,
       getNodeDescription() {
@@ -170,7 +170,7 @@ describe("spatial skeleton edit tab render state", () => {
       makeNode(22n, 20n),
     ]);
 
-    const state = buildSkeletonSegmentRenderState(20380n, graph, {
+    const state = buildSkeletonSegmentRows(20380n, graph, {
       filterText: "",
       nodeFilterType: SkeletonNodeFilterType.VIRTUAL_END,
       getNodeDescription() {
@@ -192,7 +192,7 @@ describe("spatial skeleton edit tab render state", () => {
       makeNode(33n, 30n),
     ]);
 
-    const state = buildSkeletonSegmentRenderState(20380n, graph, {
+    const state = buildSkeletonSegmentRows(20380n, graph, {
       filterText: "",
       nodeFilterType: SkeletonNodeFilterType.HAS_DESCRIPTION,
       getNodeDescription(node) {
@@ -227,7 +227,7 @@ describe("spatial skeleton edit tab render state", () => {
       [{ firstNodeId: 2n, secondNodeId: 9n }],
     );
 
-    const state = buildSkeletonSegmentRenderState(20380n, graph, {
+    const state = buildSkeletonSegmentRows(20380n, graph, {
       filterText: "",
       nodeFilterType: SkeletonNodeFilterType.NONE,
       getNodeDescription: () => undefined,
@@ -260,7 +260,7 @@ describe("spatial skeleton edit tab virtual list items", () => {
       makeNode(3n, 2n),
     ]);
     const segmentState = {
-      ...buildSkeletonSegmentRenderState(20380n, graph, {
+      ...buildSkeletonSegmentRows(20380n, graph, {
         filterText: "",
         nodeFilterType: SkeletonNodeFilterType.DEFAULT,
         getNodeDescription() {
@@ -309,7 +309,7 @@ describe("spatial skeleton edit tab virtual list items", () => {
     }
     const graph = buildSkeletonNavigationGraph(nodes);
     const segmentState = {
-      ...buildSkeletonSegmentRenderState(20380n, graph, {
+      ...buildSkeletonSegmentRows(20380n, graph, {
         filterText: "",
         nodeFilterType: SkeletonNodeFilterType.NONE,
         getNodeDescription() {
@@ -376,7 +376,7 @@ describe("spatial skeleton edit tab empty list text", () => {
   it("reports no matching nodes when a filter excludes all loaded nodes", () => {
     const graph = buildSkeletonNavigationGraph([makeNode(1n, undefined)]);
     const segmentState = {
-      ...buildSkeletonSegmentRenderState(20380n, graph, {
+      ...buildSkeletonSegmentRows(20380n, graph, {
         filterText: "no-match",
         nodeFilterType: SkeletonNodeFilterType.DEFAULT,
         getNodeDescription() {

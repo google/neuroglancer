@@ -21,7 +21,7 @@
 
 import type { Annotation } from "#src/annotation/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
+import { SpatialSkeletonActions } from "#src/skeleton/edit/edit_commands.js";
 import type { SkeletonFindPathEndpoint } from "#src/skeleton/find_path/find_path.js";
 import {
   SPATIAL_SKELETON_FIND_PATH_SOURCE_DESCRIPTION,

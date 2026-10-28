@@ -48,7 +48,7 @@ import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
 import type {
   SpatialSkeletonAction,
   SpatialSkeletonEditCommand,
-} from "#src/skeleton/edit_commands.js";
+} from "#src/skeleton/edit/edit_commands.js";
 import type {
   SpatialSkeletonIntentCreationContext,
   SpatialSkeletonEditPlanner,
