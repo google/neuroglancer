@@ -20,7 +20,11 @@
  * with unbranched runs collapsed.
  */
 
-import type { SkeletonNode, SkeletonVector } from "#src/skeleton/api.js";
+import type {
+  SkeletonEdge,
+  SkeletonNode,
+  SkeletonVector,
+} from "#src/skeleton/api.js";
 import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import { bigintCompare } from "#src/util/bigint.js";
 
@@ -37,6 +41,7 @@ export interface SkeletonNavigationGraph {
   nodeById: Map<bigint, SkeletonNode>;
   childrenByParent: Map<bigint, bigint[]>;
   rootNodeIds: bigint[];
+  loopNeighborIdsByNode: ReadonlyMap<bigint, readonly bigint[]>;
 }
 
 interface CollapsedChildPath {
@@ -104,8 +109,31 @@ function getNavigationGraphDerivedState(graph: SkeletonNavigationGraph) {
   return state;
 }
 
+function getLoopNeighborIdsByNode(
+  loopEdges: readonly SkeletonEdge[],
+): Map<bigint, bigint[]> {
+  const loopNeighborIdsByNode = new Map<bigint, bigint[]>();
+  const addLoopNeighbor = (nodeId: bigint, neighborId: bigint) => {
+    let neighborIds = loopNeighborIdsByNode.get(nodeId);
+    if (neighborIds === undefined) {
+      neighborIds = [];
+      loopNeighborIdsByNode.set(nodeId, neighborIds);
+    }
+    neighborIds.push(neighborId);
+  };
+  for (const { firstNodeId, secondNodeId } of loopEdges) {
+    addLoopNeighbor(firstNodeId, secondNodeId);
+    addLoopNeighbor(secondNodeId, firstNodeId);
+  }
+  for (const neighborIds of loopNeighborIdsByNode.values()) {
+    neighborIds.sort(bigintCompare);
+  }
+  return loopNeighborIdsByNode;
+}
+
 export function buildSkeletonNavigationGraph(
   nodes: readonly SkeletonNode[],
+  loopEdges: readonly SkeletonEdge[] = [],
 ): SkeletonNavigationGraph {
   const nodeById = new Map<bigint, SkeletonNode>();
   for (const node of nodes) {
@@ -145,6 +173,7 @@ export function buildSkeletonNavigationGraph(
     nodeById,
     childrenByParent,
     rootNodeIds,
+    loopNeighborIdsByNode: getLoopNeighborIdsByNode(loopEdges),
   };
   navigationGraphDerivedState.set(
     graph,

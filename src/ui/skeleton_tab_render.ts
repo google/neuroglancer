@@ -53,6 +53,7 @@ export interface SkeletonSegmentRenderRow {
   node: SkeletonNode;
   type: SkeletonNodeType;
   isLeaf: boolean;
+  loopNeighbors: readonly SkeletonNode[];
 }
 
 export interface SkeletonSegmentRenderState {
@@ -61,6 +62,7 @@ export interface SkeletonSegmentRenderState {
   matchedNodeCount: number;
   displayedNodeCount: number;
   branchCount: number;
+  connectedPartCount: number;
   rows: readonly SkeletonSegmentRenderRow[];
 }
 
@@ -69,6 +71,18 @@ interface NodeClassification {
   type: SkeletonNodeType;
   isLeaf: boolean;
   description: string | undefined;
+}
+
+function getLoopNeighbors(
+  graph: SkeletonNavigationGraph,
+  node: SkeletonNode,
+): readonly SkeletonNode[] {
+  const loopNeighbors: SkeletonNode[] = [];
+  for (const neighborId of graph.loopNeighborIdsByNode.get(node.nodeId) ?? []) {
+    const neighbor = graph.nodeById.get(neighborId);
+    if (neighbor !== undefined) loopNeighbors.push(neighbor);
+  }
+  return loopNeighbors;
 }
 
 export function buildSkeletonSegmentRenderState(
@@ -88,6 +102,7 @@ export function buildSkeletonSegmentRenderState(
       matchedNodeCount: 0,
       displayedNodeCount: 0,
       branchCount: 0,
+      connectedPartCount: 0,
       rows: [],
     };
   }
@@ -171,7 +186,12 @@ export function buildSkeletonSegmentRenderState(
   for (const nodeId of matchedNodeIds) {
     if (isCollapsedFromDisplay(nodeId)) continue;
     const { node, type, isLeaf } = classificationById.get(nodeId)!;
-    rows.push({ node, type, isLeaf });
+    rows.push({
+      node,
+      type,
+      isLeaf,
+      loopNeighbors: getLoopNeighbors(graph, node),
+    });
   }
 
   return {
@@ -180,6 +200,7 @@ export function buildSkeletonSegmentRenderState(
     matchedNodeCount: matchedNodeIds.length,
     displayedNodeCount: rows.length,
     branchCount,
+    connectedPartCount: graph.rootNodeIds.length,
     rows,
   };
 }

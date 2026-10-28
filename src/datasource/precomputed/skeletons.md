@@ -53,6 +53,16 @@ The skeleton representation for a single segment ID is a binary file with the fo
   - `attribute_data`: `num_vertices * num_components` elements of the specified `data_type` in
     little-endian format.
 
+### Parent and child of each vertex
+
+Neuroglancer treats each edge as undirected. The Skeleton tab shows each vertex index as its node ID. To browse a skeleton as a tree in the viewer, Neuroglancer chooses a parent for each vertex following this strategy:
+
+- The root of each connected part is its lowest vertex index. Vertex 0 is the root of its part. If the whole skeleton is connected, vertex 0 is the only root.
+- The parent of a vertex is the neighbor that is closest to the root. If more than one neighbor is that near, the parent is the one with the lowest index. Two neighbors can be equally near only in a loop. In a skeleton without loops, each edge points away from the root.
+- Every other edge closes a loop. Neuroglancer still draws it, and the Skeleton tab lists each end of it as a loop neighbor of the other, but parent and child navigation does not follow it.
+
+For example, the edges `0-5`, `5-9`, `9-2`, `2-5` and `2-10` give `5` the parent `0`, both `9` and `2` the parent `5`, and `10` the parent `2`. Vertices `9` and `2` are both two edges from the root, so the edge `9-2` closes the loop and is tracked separately from the parent and child relationship.
+
 ### Unsharded storage of encoded skeleton data
 
 If the unsharded format is used, the encoded skeleton data is stored as a separate file within the

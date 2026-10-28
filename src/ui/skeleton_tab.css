@@ -194,7 +194,7 @@
   min-width: 0;
 }
 
-.neuroglancer-skeleton-inferred-topology {
+.neuroglancer-skeleton-disconnected {
   flex: none;
   font-size: small;
   color: #d9e7f8;
@@ -528,12 +528,28 @@
   white-space: nowrap;
 }
 
+.neuroglancer-skeleton-node-description,
+.neuroglancer-skeleton-node-loop-neighbors {
+  color: #a7a7a7;
+  font-size: 11px;
+}
+
 .neuroglancer-skeleton-node-description {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #a7a7a7;
-  font-size: 11px;
+}
+
+.neuroglancer-skeleton-node-loop-neighbors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.neuroglancer-skeleton-node-loop-neighbors button {
+  padding: 0 0.3em;
+  font-size: inherit;
 }
 
 .neuroglancer-skeleton-node-actions {

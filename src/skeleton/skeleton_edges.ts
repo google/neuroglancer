@@ -62,16 +62,26 @@ function getDirectedParentIndices(
   return parentIndexByNode;
 }
 
+export interface InferredSkeletonTopology {
+  // -1 for the root of each connected part.
+  readonly parentIndexByNode: Int32Array;
+  // Each pair is one edge, lower index first.
+  readonly loopEdgeIndices: readonly number[];
+}
+
 // Each pair of endpointIndices is one edge, given as node indices.
-// Walks each connected part outward from its lowest node index, so an edge that closes a loop is dropped.
-// An edge to an index outside the nodes is ignored.
-export function inferSkeletonParentIndices(
+// The root of each connected part is its lowest node index.
+// The parent of a node is its lowest-indexed neighbor one edge nearer the root.
+// Each other edge closes a loop.
+// A self edge, a repeated edge, and an edge to an index outside the nodes are ignored.
+export function inferSkeletonTopology(
   numNodes: number,
   endpointIndices: ArrayLike<number>,
-): Int32Array {
+): InferredSkeletonTopology {
   const isEdgeKnown = (edgeOffset: number) =>
     endpointIndices[edgeOffset] < numNodes &&
-    endpointIndices[edgeOffset + 1] < numNodes;
+    endpointIndices[edgeOffset + 1] < numNodes &&
+    endpointIndices[edgeOffset] !== endpointIndices[edgeOffset + 1];
   const neighborOffsets = new Int32Array(numNodes + 1);
   for (
     let edgeOffset = 0;
@@ -98,12 +108,12 @@ export function inferSkeletonParentIndices(
     neighbors[nextNeighborOffset[firstIndex]++] = secondIndex;
     neighbors[nextNeighborOffset[secondIndex]++] = firstIndex;
   }
-  const parentIndexByNode = new Int32Array(numNodes).fill(-1);
-  const visited = new Uint8Array(numNodes);
+
+  const distanceByNode = new Int32Array(numNodes).fill(-1);
   const queue = new Int32Array(numNodes);
   for (let rootIndex = 0; rootIndex < numNodes; ++rootIndex) {
-    if (visited[rootIndex]) continue;
-    visited[rootIndex] = 1;
+    if (distanceByNode[rootIndex] !== -1) continue;
+    distanceByNode[rootIndex] = 0;
     let queueStart = 0;
     let queueEnd = 0;
     queue[queueEnd++] = rootIndex;
@@ -115,14 +125,52 @@ export function inferSkeletonParentIndices(
         ++offset
       ) {
         const neighborIndex = neighbors[offset];
-        if (visited[neighborIndex]) continue;
-        visited[neighborIndex] = 1;
-        parentIndexByNode[neighborIndex] = nodeIndex;
+        if (distanceByNode[neighborIndex] !== -1) continue;
+        distanceByNode[neighborIndex] = distanceByNode[nodeIndex] + 1;
         queue[queueEnd++] = neighborIndex;
       }
     }
   }
-  return parentIndexByNode;
+
+  const parentIndexByNode = new Int32Array(numNodes).fill(-1);
+  for (let nodeIndex = 0; nodeIndex < numNodes; ++nodeIndex) {
+    const parentDistance = distanceByNode[nodeIndex] - 1;
+    for (
+      let offset = neighborOffsets[nodeIndex];
+      offset < neighborOffsets[nodeIndex + 1];
+      ++offset
+    ) {
+      const neighborIndex = neighbors[offset];
+      if (distanceByNode[neighborIndex] !== parentDistance) continue;
+      const parentIndex = parentIndexByNode[nodeIndex];
+      if (parentIndex === -1 || neighborIndex < parentIndex) {
+        parentIndexByNode[nodeIndex] = neighborIndex;
+      }
+    }
+  }
+
+  const loopEdgeIndices: number[] = [];
+  const lastLowerIndexByNode = new Int32Array(numNodes).fill(-1);
+  for (let lowerIndex = 0; lowerIndex < numNodes; ++lowerIndex) {
+    for (
+      let offset = neighborOffsets[lowerIndex];
+      offset < neighborOffsets[lowerIndex + 1];
+      ++offset
+    ) {
+      const higherIndex = neighbors[offset];
+      if (higherIndex < lowerIndex) continue;
+      if (lastLowerIndexByNode[higherIndex] === lowerIndex) continue;
+      lastLowerIndexByNode[higherIndex] = lowerIndex;
+      if (
+        parentIndexByNode[higherIndex] === lowerIndex ||
+        parentIndexByNode[lowerIndex] === higherIndex
+      ) {
+        continue;
+      }
+      loopEdgeIndices.push(lowerIndex, higherIndex);
+    }
+  }
+  return { parentIndexByNode, loopEdgeIndices };
 }
 
 function getKnownEndpointIndices(
@@ -149,10 +197,10 @@ export function resolveSkeletonParents(
   nodes.forEach((node, nodeIndex) => nodeIndexById.set(node.nodeId, nodeIndex));
   const parentIndexByNode =
     edgeDirection === SkeletonEdgeDirection.UNDIRECTED
-      ? inferSkeletonParentIndices(
+      ? inferSkeletonTopology(
           nodes.length,
           getKnownEndpointIndices(nodeIndexById, edges),
-        )
+        ).parentIndexByNode
       : getDirectedParentIndices(
           segmentId,
           nodeIndexById,

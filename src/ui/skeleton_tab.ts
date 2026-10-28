@@ -206,12 +206,10 @@ export class SkeletonTab extends Tab {
     nodesSummaryBar.className = "neuroglancer-skeleton-summary-bar";
     const nodesSummary = document.createElement("div");
     nodesSummary.className = "neuroglancer-skeleton-summary";
-    const inferredTopologyBadge = document.createElement("div");
-    inferredTopologyBadge.className = "neuroglancer-skeleton-inferred-topology";
-    inferredTopologyBadge.textContent = "Inferred topology";
-    inferredTopologyBadge.title =
-      "Parent and child are inferred, because this skeleton's edges have no direction.";
-    inferredTopologyBadge.hidden = true;
+    const disconnectedBadge = document.createElement("div");
+    disconnectedBadge.className = "neuroglancer-skeleton-disconnected";
+    disconnectedBadge.textContent = "Disconnected";
+    disconnectedBadge.hidden = true;
     let virtualItems: SkeletonListItem[] = [];
     let renderVirtualListItem = (
       _item: SkeletonListItem | undefined,
@@ -247,7 +245,7 @@ export class SkeletonTab extends Tab {
     nodesSection.appendChild(nodesNavigationBar);
     nodesSection.appendChild(preparationStatus);
     nodesSummaryBar.appendChild(nodesSummary);
-    nodesSummaryBar.appendChild(inferredTopologyBadge);
+    nodesSummaryBar.appendChild(disconnectedBadge);
     nodesSection.appendChild(nodesSummaryBar);
     nodesSection.appendChild(nodesList.element);
     element.appendChild(nodesSection);
@@ -856,6 +854,7 @@ export class SkeletonTab extends Tab {
               matchedNodeCount: 0,
               displayedNodeCount: 0,
               branchCount: 0,
+              connectedPartCount: 0,
               rows: [],
             }
           : buildSkeletonSegmentRenderState(segmentId, graph, {
@@ -962,6 +961,27 @@ export class SkeletonTab extends Tab {
       return segmentEntry;
     };
 
+    const makeLoopNeighborLine = (
+      loopNeighbors: readonly SkeletonNode[],
+    ): HTMLElement => {
+      const line = document.createElement("div");
+      line.className = "neuroglancer-skeleton-node-loop-neighbors";
+      line.textContent = "Loop:";
+      for (const neighbor of loopNeighbors) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = String(neighbor.nodeId);
+        button.title = `Go to node ${neighbor.nodeId} across a loop edge, which parent and child navigation does not follow.`;
+        button.disabled = !inspectionAllowed;
+        button.addEventListener("click", () => {
+          if (!ensureActionsAllowed(SpatialSkeletonActions.inspect)) return;
+          selectNode(neighbor, { moveView: true, pin: true });
+        });
+        line.appendChild(button);
+      }
+      return line;
+    };
+
     const makeNodeEntry = (rowInfo: SkeletonSegmentRenderRow) => {
       const { node, type, isLeaf } = rowInfo;
       const entry = document.createElement("div");
@@ -989,7 +1009,7 @@ export class SkeletonTab extends Tab {
           if (
             target instanceof HTMLElement &&
             target.closest(
-              ".neuroglancer-skeleton-node-actions, .neuroglancer-skeleton-node-type-toggle",
+              ".neuroglancer-skeleton-node-actions, .neuroglancer-skeleton-node-type-toggle, .neuroglancer-skeleton-node-loop-neighbors",
             ) !== null
           ) {
             return;
@@ -1004,7 +1024,7 @@ export class SkeletonTab extends Tab {
           if (
             target instanceof HTMLElement &&
             target.closest(
-              ".neuroglancer-skeleton-node-actions, .neuroglancer-skeleton-node-type-toggle",
+              ".neuroglancer-skeleton-node-actions, .neuroglancer-skeleton-node-type-toggle, .neuroglancer-skeleton-node-loop-neighbors",
             ) !== null
           ) {
             return;
@@ -1021,6 +1041,15 @@ export class SkeletonTab extends Tab {
         });
         row.addEventListener("keydown", (event: KeyboardEvent) => {
           if (event.key !== "Enter" && event.key !== " ") return;
+          const { target } = event;
+          if (
+            target instanceof HTMLElement &&
+            target.closest(
+              ".neuroglancer-skeleton-node-actions, .neuroglancer-skeleton-node-type-toggle, .neuroglancer-skeleton-node-loop-neighbors",
+            ) !== null
+          ) {
+            return;
+          }
           event.preventDefault();
           if (!ensureActionsAllowed(SpatialSkeletonActions.inspect)) {
             return;
@@ -1101,6 +1130,11 @@ export class SkeletonTab extends Tab {
         descriptionLine.className = "neuroglancer-skeleton-node-description";
         descriptionLine.textContent = description;
         coordinatesCell.appendChild(descriptionLine);
+      }
+      if (rowInfo.loopNeighbors.length > 0) {
+        coordinatesCell.appendChild(
+          makeLoopNeighborLine(rowInfo.loopNeighbors),
+        );
       }
 
       const actions = document.createElement("div");
@@ -1216,10 +1250,16 @@ export class SkeletonTab extends Tab {
       }
     };
 
+    const updateDisconnectedBadge = (connectedPartCount: number) => {
+      disconnectedBadge.hidden = connectedPartCount <= 1;
+      disconnectedBadge.title = `This skeleton has ${connectedPartCount} separate parts.`;
+    };
+
     const summarizeNodeState = (
       segmentState: SegmentDisplayState | undefined,
       summarySuffix = "",
     ) => {
+      updateDisconnectedBadge(segmentState?.connectedPartCount ?? 0);
       if (detailsPreparationState !== undefined && segmentState === undefined) {
         nodesSummary.textContent = PREPARATION_PENDING_LIST_MESSAGE;
         nodesSummary.removeAttribute("title");
@@ -1270,8 +1310,6 @@ export class SkeletonTab extends Tab {
       loadedNodeSummarySuffix = "";
       const parentsInferred =
         layer.skeletonNodeAccess.value?.parentsInferred ?? false;
-      inferredTopologyBadge.hidden =
-        !parentsInferred || cachedSelectedSegmentNodes === undefined;
       if (
         activeSegmentId === undefined ||
         cachedSelectedSegmentNodes === undefined
