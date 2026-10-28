@@ -55,7 +55,7 @@ The skeleton representation for a single segment ID is a binary file with the fo
 
 ### Parent and child of each vertex
 
-Neuroglancer treats each edge as undirected. To browse a skeleton as a tree in the viewer, Neuroglancer chooses a parent for each vertex following this strategy:
+Neuroglancer treats each edge as undirected. The Skeleton tab shows each vertex index as its node ID. To browse a skeleton as a tree in the viewer, Neuroglancer chooses a parent for each vertex following this strategy:
 
 - The root of each connected part is its lowest vertex index. Vertex 0 is the root of its part. If the whole skeleton is connected, vertex 0 is the only root.
 - The parent of a vertex is the neighbor that is closest to the root. If more than one neighbor is that near, the parent is the one with the lowest index. Two neighbors can be equally near only in a loop. In a skeleton without loops, each edge points away from the root.
