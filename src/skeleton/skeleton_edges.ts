@@ -69,15 +69,16 @@ export interface InferredSkeletonTopology {
   readonly loopEdgeIndices: readonly number[];
 }
 
-// Each pair of endpointIndices is one edge, given as node indices.
-// The root of each connected part is its lowest node index.
-// The parent of a node is its lowest-indexed neighbor one edge nearer the root.
-// Each other edge closes a loop.
-// A self edge, a repeated edge, and an edge to an index outside the nodes are ignored.
-export function inferSkeletonTopology(
+// Compressed adjacency: the neighbors of node i are neighbors[neighborOffsets[i]] up to neighbors[neighborOffsets[i + 1]], in edge order.
+interface NeighborLists {
+  readonly neighborOffsets: Int32Array;
+  readonly neighbors: Int32Array;
+}
+
+function getNeighborLists(
   numNodes: number,
   endpointIndices: ArrayLike<number>,
-): InferredSkeletonTopology {
+): NeighborLists {
   const isEdgeKnown = (edgeOffset: number) =>
     endpointIndices[edgeOffset] < numNodes &&
     endpointIndices[edgeOffset + 1] < numNodes &&
@@ -108,7 +109,14 @@ export function inferSkeletonTopology(
     neighbors[nextNeighborOffset[firstIndex]++] = secondIndex;
     neighbors[nextNeighborOffset[secondIndex]++] = firstIndex;
   }
+  return { neighborOffsets, neighbors };
+}
 
+function getDistancesFromRoots({
+  neighborOffsets,
+  neighbors,
+}: NeighborLists): Int32Array {
+  const numNodes = neighborOffsets.length - 1;
   const distanceByNode = new Int32Array(numNodes).fill(-1);
   const queue = new Int32Array(numNodes);
   for (let rootIndex = 0; rootIndex < numNodes; ++rootIndex) {
@@ -131,7 +139,14 @@ export function inferSkeletonTopology(
       }
     }
   }
+  return distanceByNode;
+}
 
+function chooseParents(
+  { neighborOffsets, neighbors }: NeighborLists,
+  distanceByNode: Int32Array,
+): Int32Array {
+  const numNodes = distanceByNode.length;
   const parentIndexByNode = new Int32Array(numNodes).fill(-1);
   for (let nodeIndex = 0; nodeIndex < numNodes; ++nodeIndex) {
     const parentDistance = distanceByNode[nodeIndex] - 1;
@@ -148,7 +163,14 @@ export function inferSkeletonTopology(
       }
     }
   }
+  return parentIndexByNode;
+}
 
+function getLoopEdges(
+  { neighborOffsets, neighbors }: NeighborLists,
+  parentIndexByNode: Int32Array,
+): number[] {
+  const numNodes = parentIndexByNode.length;
   const loopEdgeIndices: number[] = [];
   const lastLowerIndexByNode = new Int32Array(numNodes).fill(-1);
   for (let lowerIndex = 0; lowerIndex < numNodes; ++lowerIndex) {
@@ -170,6 +192,22 @@ export function inferSkeletonTopology(
       loopEdgeIndices.push(lowerIndex, higherIndex);
     }
   }
+  return loopEdgeIndices;
+}
+
+// Each pair of endpointIndices is one edge, given as node indices.
+// The root of each connected part is its lowest node index.
+// The parent of a node is its lowest-indexed neighbor one edge nearer the root.
+// Each other edge closes a loop.
+// A self edge, a repeated edge, and an edge to an index outside the nodes are ignored.
+export function inferSkeletonTopology(
+  numNodes: number,
+  endpointIndices: ArrayLike<number>,
+): InferredSkeletonTopology {
+  const neighborLists = getNeighborLists(numNodes, endpointIndices);
+  const distanceByNode = getDistancesFromRoots(neighborLists);
+  const parentIndexByNode = chooseParents(neighborLists, distanceByNode);
+  const loopEdgeIndices = getLoopEdges(neighborLists, parentIndexByNode);
   return { parentIndexByNode, loopEdgeIndices };
 }
 
