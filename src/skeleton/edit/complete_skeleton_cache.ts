@@ -32,8 +32,8 @@ import { createCompleteSkeleton } from "#src/skeleton/edit_queue/complete_skelet
 import type { SpatialSkeletonInspectionRequiredReason } from "#src/skeleton/edit_queue/edit_errors.js";
 import { SpatialSkeletonInspectionRequiredError } from "#src/skeleton/edit_queue/edit_errors.js";
 import type { SpatialSkeletonQueueInputRequirement } from "#src/skeleton/edit_queue/queue_input.js";
-import { resolveSkeletonParents } from "#src/skeleton/skeleton_edges.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
+import { resolveSkeletonParents } from "#src/skeleton/topology.js";
 import { bigintCompare } from "#src/util/bigint.js";
 import { PromiseConcurrencyLimiter } from "#src/util/promise_concurrency_limiter.js";
 

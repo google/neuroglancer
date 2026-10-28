@@ -51,15 +51,11 @@ import {
   SKELETON_LAYER_RPC_ID,
   type VertexAttributeInfo,
 } from "#src/skeleton/base.js";
+import type { SkeletonNodeAccess } from "#src/skeleton/navigation.js";
 import {
   getSkeletonChunkNodes,
   type SkeletonChunkNodes,
-} from "#src/skeleton/skeleton_chunk_nodes.js";
-import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
-import {
-  edgeColorGlsl,
-  nodeColorGlsl,
-} from "#src/skeleton/skeleton_shader_color.js";
+} from "#src/skeleton/topology.js";
 import type { SliceViewPanel } from "#src/sliceview/panel.js";
 import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js";
 import { SliceViewPanelRenderLayer } from "#src/sliceview/renderlayer.js";
@@ -222,6 +218,93 @@ interface SkeletonDrawParameters {
     readonly vertexIndex: number;
     readonly position: ArrayLike<number>;
   };
+}
+
+function edgeColorGlsl(
+  segmentAppearance: SegmentAppearanceParameters | undefined,
+): string {
+  if (segmentAppearance !== undefined) {
+    return `
+vec4 segmentColor() {
+  return getSegmentAppearance(uint64_t(vSegmentId));
+}
+void emitRGBA(vec4 color) {
+  vec4 baseColor = segmentColor();
+  highp float alpha = color.a * baseColor.a * getLineAlpha() * getCrossSectionFade();
+  if (alpha <= 0.0) discard;
+  emit(vec4(color.rgb * alpha, alpha), vPickID);
+}
+void emitRGB(vec3 color) {
+  vec4 baseColor = segmentColor();
+  highp float alpha = baseColor.a * getLineAlpha() * getCrossSectionFade();
+  if (alpha <= 0.0) discard;
+  emit(vec4(color * alpha, alpha), vPickID);
+}
+void emitDefault() {
+  vec4 baseColor = segmentColor();
+  highp float alpha = baseColor.a * getLineAlpha() * getCrossSectionFade();
+  if (alpha <= 0.0) discard;
+  emit(vec4(baseColor.rgb * alpha, alpha), vPickID);
+}
+`;
+  }
+  return `
+vec4 segmentColor() {
+  return uColor;
+}
+void emitRGBA(vec4 color) {
+  color.a *= uColor.a;
+  emit(vec4(color.rgb * color.a, color.a * getLineAlpha() * getCrossSectionFade()), vPickID);
+}
+void emitRGB(vec3 color) {
+  emit(vec4(color * uColor.a, uColor.a * getLineAlpha() * getCrossSectionFade()), vPickID);
+}
+void emitDefault() {
+  emit(vec4(uColor.rgb, uColor.a * getLineAlpha() * getCrossSectionFade()), vPickID);
+}
+`;
+}
+
+function nodeColorGlsl(
+  segmentAppearance: SegmentAppearanceParameters | undefined,
+): string {
+  if (segmentAppearance !== undefined) {
+    return `
+vec4 segmentColor() {
+  return getSegmentAppearance(uint64_t(vSegmentId));
+}
+void emitRGBA(vec4 color) {
+  vec4 baseColor = segmentColor();
+  highp float alpha = color.a * baseColor.a;
+  if (alpha <= 0.0) discard;
+  vec4 nodeColor = vec4(color.rgb, alpha);
+  vec4 finished = getCircleColor(nodeColor, nodeColor);
+  emit(vec4(finished.rgb * finished.a, finished.a), vPickID);
+}
+void emitRGB(vec3 color) {
+  emitRGBA(vec4(color, 1.0));
+}
+void emitDefault() {
+  emitRGBA(vec4(segmentColor().rgb, 1.0));
+}
+`;
+  }
+  return `
+vec4 segmentColor() {
+  return uColor;
+}
+void emitRGBA(vec4 color) {
+  color.a *= uColor.a;
+  color.rgb *= color.a;
+  emit(getCircleColor(color, color), vPickID);
+}
+void emitRGB(vec3 color) {
+  emitRGBA(vec4(color, 1.0));
+}
+void emitDefault() {
+  emit(getCircleColor(uColor, uColor), vPickID);
+}
+`;
 }
 
 export class RenderHelper extends RefCounted {

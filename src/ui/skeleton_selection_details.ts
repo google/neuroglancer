@@ -50,12 +50,10 @@ import {
   getSkeletonNodeConfidence,
   getSkeletonNodeRadius,
   isSkeletonNodeTrueEnd,
-} from "#src/skeleton/node_attributes.js";
-import {
   classifySkeletonDisplayNodeType,
   getSkeletonNodeTypeLabel,
   SkeletonDisplayNodeType,
-} from "#src/skeleton/node_types.js";
+} from "#src/skeleton/node_attributes.js";
 import { StatusMessage } from "#src/status.js";
 import { getSkeletonNodeTypeIcon } from "#src/ui/skeleton_node_icons.js";
 import { RefCounted } from "#src/util/disposable.js";

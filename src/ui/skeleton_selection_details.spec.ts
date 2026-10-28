@@ -35,7 +35,7 @@ import {
   executeSpatialSkeletonNodeRadiusUpdate,
   executeSpatialSkeletonReroot,
 } from "#src/skeleton/edit/submit_edits.js";
-import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
+import type { SkeletonNodeAccess } from "#src/skeleton/navigation.js";
 import { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { WatchableValue } from "#src/trackable_value.js";

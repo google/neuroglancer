@@ -65,8 +65,8 @@ import {
   committedSpatialSkeletonEditSettlement,
 } from "#src/skeleton/edit_queue/types.js";
 import { SpatialSkeletonUndoHistory } from "#src/skeleton/edit_queue/undo_history.js";
+import type { SkeletonNodeAccess } from "#src/skeleton/navigation.js";
 import { getSkeletonNodeConfidence } from "#src/skeleton/node_attributes.js";
-import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
 import type { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { StatusMessage } from "#src/status.js";

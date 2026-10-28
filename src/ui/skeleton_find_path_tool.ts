@@ -30,12 +30,12 @@ import {
 import {
   getPathBetweenNodes,
   type SkeletonNavigationGraph,
-} from "#src/skeleton/navigation_graph.js";
-import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
+} from "#src/skeleton/navigation.js";
 import {
+  isSkeletonNodeTrueEnd,
   classifySkeletonDisplayNodeType,
   SkeletonDisplayNodeType,
-} from "#src/skeleton/node_types.js";
+} from "#src/skeleton/node_attributes.js";
 import { StatusMessage } from "#src/status.js";
 import { makeAnnotationListElement } from "#src/ui/annotations.js";
 import { getDefaultAnnotationListBindings } from "#src/ui/default_input_event_bindings.js";

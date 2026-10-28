@@ -37,7 +37,7 @@ import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_
 import {
   SkeletonNavigation,
   type SkeletonNodeAccess,
-} from "#src/skeleton/skeleton_navigator.js";
+} from "#src/skeleton/navigation.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";

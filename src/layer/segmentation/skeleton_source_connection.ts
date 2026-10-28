@@ -41,7 +41,7 @@ import type { SpatialSkeletonResolvedPreviewUiHints } from "#src/skeleton/edit_q
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/types.js";
 import type { SkeletonFindPathState } from "#src/skeleton/find_path/find_path.js";
 import type { SpatialSkeletonFindPathAnnotationController } from "#src/skeleton/find_path/find_path_attachment.js";
-import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
+import type { SkeletonNodeAccess } from "#src/skeleton/navigation.js";
 import type { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
 import type { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";

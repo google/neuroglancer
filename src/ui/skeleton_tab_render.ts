@@ -24,14 +24,14 @@ import type { SpatialSkeletonPendingEdit } from "#src/skeleton/edit/spatial_skel
 import {
   getFlatListNodeIds,
   type SkeletonNavigationGraph,
-} from "#src/skeleton/navigation_graph.js";
-import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
+} from "#src/skeleton/navigation.js";
 import {
+  isSkeletonNodeTrueEnd,
   classifySkeletonDisplayNodeType as classifyNodeType,
   matchesSkeletonNodeFilter,
   SkeletonDisplayNodeType,
   SkeletonNodeFilterType,
-} from "#src/skeleton/node_types.js";
+} from "#src/skeleton/node_attributes.js";
 
 type SkeletonNodeType = SkeletonDisplayNodeType;
 

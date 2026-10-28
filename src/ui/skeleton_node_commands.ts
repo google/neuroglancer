@@ -36,8 +36,8 @@ import {
   SpatialSkeletonHistoryActions,
 } from "#src/skeleton/edit_commands.js";
 import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit_queue/types.js";
+import { SkeletonNavigation } from "#src/skeleton/navigation.js";
 import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
-import { SkeletonNavigation } from "#src/skeleton/skeleton_navigator.js";
 import { StatusMessage } from "#src/status.js";
 import { CallbackCommand } from "#src/ui/command.js";
 import { RefCounted } from "#src/util/disposable.js";

@@ -33,7 +33,7 @@ import { executeSpatialSkeletonDeleteNode } from "#src/skeleton/edit/submit_edit
 import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import type { SpatialSkeletonResolvedPreviewUiHints } from "#src/skeleton/edit_queue/preview_ui_hints.js";
 import { SkeletonFindPathState } from "#src/skeleton/find_path/find_path.js";
-import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
+import type { SkeletonNodeAccess } from "#src/skeleton/navigation.js";
 import type { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
 import type { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";

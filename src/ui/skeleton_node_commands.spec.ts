@@ -23,7 +23,7 @@ import {
   executeSpatialSkeletonNodeTrueEndUpdate,
   executeSpatialSkeletonReroot,
 } from "#src/skeleton/edit/submit_edits.js";
-import { SkeletonNavigation } from "#src/skeleton/skeleton_navigator.js";
+import { SkeletonNavigation } from "#src/skeleton/navigation.js";
 import { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";

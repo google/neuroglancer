@@ -39,7 +39,7 @@ import {
   type SkeletonNavigation,
   SkeletonNavigator,
   type SkeletonNodeAccess,
-} from "#src/skeleton/skeleton_navigator.js";
+} from "#src/skeleton/navigation.js";
 import type { SpatiallyIndexedSkeletonLayer } from "#src/skeleton/spatial/skeleton_render_layer.js";
 import { StatusMessage } from "#src/status.js";
 import {

@@ -93,8 +93,8 @@ import {
   SkeletonRenderingOptions,
   SliceViewPanelSkeletonLayer,
 } from "#src/skeleton/frontend.js";
-import { SkeletonBrowseState } from "#src/skeleton/node_types.js";
-import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
+import type { SkeletonNodeAccess } from "#src/skeleton/navigation.js";
+import { SkeletonBrowseState } from "#src/skeleton/node_attributes.js";
 import type { MultiscaleSpatiallyIndexedSkeletonSource } from "#src/skeleton/spatial/frontend.js";
 import { SkeletonOverlaySegments } from "#src/skeleton/spatial/overlay_segments.js";
 import {

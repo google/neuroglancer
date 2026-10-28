@@ -16,7 +16,8 @@
 
 /**
  * @file Reads and writes the known attributes of a skeleton node: radius,
- * confidence and true end.
+ * confidence and true end. Classifies nodes by display type and matches them
+ * against the node filter that `SkeletonBrowseState` saves.
  */
 
 import type {
@@ -24,6 +25,10 @@ import type {
   SkeletonNodeAttributes,
 } from "#src/skeleton/api.js";
 import { KnownSkeletonNodeAttribute } from "#src/skeleton/api.js";
+import { TrackableValue } from "#src/trackable_value.js";
+import { verifyString } from "#src/util/json.js";
+import { CompoundTrackable } from "#src/util/trackable.js";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
 
 export function getSkeletonNodeRadius(node: SkeletonNode): number | undefined {
   return node.attributes?.[KnownSkeletonNodeAttribute.RADIUS]?.[0];
@@ -76,4 +81,122 @@ export function setSkeletonNodeAttributes(
     );
   }
   return Object.keys(result).length === 0 ? undefined : Object.freeze(result);
+}
+
+export enum SkeletonDisplayNodeType {
+  ROOT = "root",
+  BRANCH_START = "branchStart",
+  REGULAR = "regular",
+  VIRTUAL_END = "virtualEnd",
+}
+
+export enum SkeletonNodeFilterType {
+  DEFAULT,
+  NONE,
+  LEAF,
+  VIRTUAL_END,
+  TRUE_END,
+  HAS_DESCRIPTION,
+}
+
+export function classifySkeletonDisplayNodeType(
+  node: SkeletonNode,
+  childCount: number | undefined,
+  parentInTree = true,
+): SkeletonDisplayNodeType {
+  if (node.parentNodeId === undefined || !parentInTree) {
+    return SkeletonDisplayNodeType.ROOT;
+  }
+  if (childCount === undefined) {
+    return SkeletonDisplayNodeType.REGULAR;
+  }
+  if (childCount > 1) {
+    return SkeletonDisplayNodeType.BRANCH_START;
+  }
+  if (childCount === 0) {
+    return SkeletonDisplayNodeType.VIRTUAL_END;
+  }
+  return SkeletonDisplayNodeType.REGULAR;
+}
+
+export function getSkeletonNodeFilterLabel(filterType: SkeletonNodeFilterType) {
+  switch (filterType) {
+    case SkeletonNodeFilterType.DEFAULT:
+      return "Default";
+    case SkeletonNodeFilterType.NONE:
+      return "None";
+    case SkeletonNodeFilterType.LEAF:
+      return "Leaf";
+    case SkeletonNodeFilterType.VIRTUAL_END:
+      return "Virtual end";
+    case SkeletonNodeFilterType.TRUE_END:
+      return "True end";
+    case SkeletonNodeFilterType.HAS_DESCRIPTION:
+      return "Has description";
+  }
+}
+
+const SKELETON_NODE_TYPE_LABELS: Record<SkeletonDisplayNodeType, string> = {
+  [SkeletonDisplayNodeType.ROOT]: "Root",
+  [SkeletonDisplayNodeType.BRANCH_START]: "Branch point",
+  [SkeletonDisplayNodeType.REGULAR]: "Node",
+  [SkeletonDisplayNodeType.VIRTUAL_END]: "Virtual end",
+};
+
+export function getSkeletonNodeTypeLabel(
+  nodeType: SkeletonDisplayNodeType,
+  nodeIsTrueEnd: boolean,
+): string {
+  return nodeIsTrueEnd ? "True end" : SKELETON_NODE_TYPE_LABELS[nodeType];
+}
+
+export class SkeletonBrowseState extends CompoundTrackable {
+  readonly nodeQuery = new TrackableValue<string>("", verifyString);
+  readonly nodeFilter = new TrackableEnum<SkeletonNodeFilterType>(
+    SkeletonNodeFilterType,
+    SkeletonNodeFilterType.DEFAULT,
+  );
+
+  constructor() {
+    super();
+    this.add("nodeQuery", this.nodeQuery);
+    this.add("nodeFilter", this.nodeFilter);
+  }
+
+  restoreState(obj: unknown) {
+    if (obj === undefined) return;
+    super.restoreState(obj);
+  }
+
+  toJSON(): any {
+    const obj = super.toJSON();
+    for (const value of Object.values(obj)) {
+      if (value !== undefined) return obj;
+    }
+    return undefined;
+  }
+}
+
+export function matchesSkeletonNodeFilter(
+  filterType: SkeletonNodeFilterType,
+  options: {
+    isLeaf: boolean;
+    nodeHasDescription: boolean;
+    nodeIsTrueEnd: boolean;
+    nodeType: SkeletonDisplayNodeType;
+  },
+) {
+  switch (filterType) {
+    case SkeletonNodeFilterType.DEFAULT:
+    case SkeletonNodeFilterType.NONE:
+      return true;
+    case SkeletonNodeFilterType.LEAF:
+      return options.isLeaf;
+    case SkeletonNodeFilterType.VIRTUAL_END:
+      return options.isLeaf && !options.nodeIsTrueEnd;
+    case SkeletonNodeFilterType.TRUE_END:
+      return options.nodeIsTrueEnd;
+    case SkeletonNodeFilterType.HAS_DESCRIPTION:
+      return options.nodeHasDescription;
+  }
 }

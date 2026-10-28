@@ -18,8 +18,8 @@ import { describe, expect, it } from "vitest";
 
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import type { SpatialSkeletonPendingEdit } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
-import { buildSkeletonNavigationGraph } from "#src/skeleton/navigation_graph.js";
-import { SkeletonNodeFilterType } from "#src/skeleton/node_types.js";
+import { buildSkeletonNavigationGraph } from "#src/skeleton/navigation.js";
+import { SkeletonNodeFilterType } from "#src/skeleton/node_attributes.js";
 import {
   buildSkeletonSegmentRenderState,
   buildSkeletonVirtualListItems,

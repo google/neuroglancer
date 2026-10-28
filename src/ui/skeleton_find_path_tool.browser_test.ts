@@ -19,8 +19,10 @@ import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import type { SkeletonNode } from "#src/skeleton/api.js";
 import { SpatialSkeletonActions } from "#src/skeleton/edit_commands.js";
 import { SkeletonFindPathState } from "#src/skeleton/find_path/find_path.js";
-import { buildSkeletonNavigationGraph } from "#src/skeleton/navigation_graph.js";
-import { SkeletonNavigator } from "#src/skeleton/skeleton_navigator.js";
+import {
+  buildSkeletonNavigationGraph,
+  SkeletonNavigator,
+} from "#src/skeleton/navigation.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { SKELETON_FIND_PATH_SELECT_ENDPOINT } from "#src/ui/skeleton_edit_tool_shortcuts.js";

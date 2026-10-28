@@ -23,7 +23,7 @@ import svg_flag from "ikonate/icons/flag.svg?raw";
 import svg_minus from "ikonate/icons/minus.svg?raw";
 import svg_origin from "ikonate/icons/origin.svg?raw";
 import svg_share_android from "ikonate/icons/share-android.svg?raw";
-import { SkeletonDisplayNodeType } from "#src/skeleton/node_types.js";
+import { SkeletonDisplayNodeType } from "#src/skeleton/node_attributes.js";
 
 const SKELETON_NODE_TYPE_ICONS: Record<SkeletonDisplayNodeType, string> = {
   [SkeletonDisplayNodeType.ROOT]: svg_origin,

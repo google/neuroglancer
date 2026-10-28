@@ -71,7 +71,7 @@ import {
   type VertexAttributeRenderInfo,
   type ViewSpecificSkeletonRenderingOptions,
 } from "#src/skeleton/frontend.js";
-import type { SkeletonNodeAccess } from "#src/skeleton/skeleton_navigator.js";
+import type { SkeletonNodeAccess } from "#src/skeleton/navigation.js";
 import {
   forEachSpatialSkeletonSourceScale,
   forEachVisibleSpatialSkeletonChunk,
