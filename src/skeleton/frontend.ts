@@ -17,8 +17,12 @@
 import { ChunkState, LayerChunkProgressInfo } from "#src/chunk_manager/base.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { Chunk, ChunkSource } from "#src/chunk_manager/frontend.js";
-import type { HashMapUint64, HashSetUint64 } from "#src/gpu_hash/hash_table.js";
-import { GPUHashTable, HashSetShaderManager } from "#src/gpu_hash/shader.js";
+import { HashMapUint64, type HashSetUint64 } from "#src/gpu_hash/hash_table.js";
+import {
+  GPUHashTable,
+  HashMapShaderManager,
+  HashSetShaderManager,
+} from "#src/gpu_hash/shader.js";
 import type { LayerView, VisibleLayerInfo } from "#src/layer/index.js";
 import type { PerspectivePanel } from "#src/perspective_view/panel.js";
 import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
@@ -63,7 +67,6 @@ import type { TrackableAlphaValue } from "#src/trackable_alpha.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { TrackableValue, WatchableValue } from "#src/trackable_value.js";
-import { Uint64Set } from "#src/uint64_set.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { mat4, type vec4 } from "#src/util/geom.js";
@@ -139,14 +142,22 @@ const vertexPositionTextureFormat = computeTextureFormat(
 export interface SegmentAppearanceParameters {
   readonly hasSegmentStatedColors: boolean;
   readonly hasSegmentDefaultColor: boolean;
-  readonly hasProvisionalSegmentColors: boolean;
   readonly hoverHighlight: boolean;
 }
 
 export interface SkeletonShaderParameters {
   // Undefined: one colour per draw, from `uColor`.
   readonly segmentAppearance: SegmentAppearanceParameters | undefined;
-  readonly spatialChunkCulling: boolean;
+  // Each draw is one spatial index chunk, culled to its bounds.
+  // It also hides segments flagged EXCLUDED_FROM_CHUNKS.
+  readonly spatialIndexChunks: boolean;
+}
+
+// Bit flags, combined per segment.
+export enum SkeletonSegmentState {
+  // Another pass draws the whole skeleton.
+  EXCLUDED_FROM_CHUNKS = 1,
+  PROVISIONAL = 2,
 }
 
 export interface SkeletonShaderContext {
@@ -155,8 +166,7 @@ export interface SkeletonShaderContext {
   fallbackShaderParameters: WatchableValue<ShaderControlsBuilderState>;
   displayState: SkeletonLayerDisplayState;
   skeletonShaderParameters: WatchableValueInterface<SkeletonShaderParameters>;
-  provisionalSegmentIds?: Uint64Set;
-  excludedSegmentIds?: Uint64Set;
+  segmentStates?: HashMapUint64;
 }
 
 export interface SkeletonGPUGeometry {
@@ -207,11 +217,8 @@ export class RenderHelper extends RefCounted {
   private visibleSegmentsShaderManager = new HashSetShaderManager(
     "visibleSegments",
   );
-  private excludedSegmentsShaderManager = new HashSetShaderManager(
-    "excludedSegments",
-  );
-  private provisionalSegmentsShaderManager = new HashSetShaderManager(
-    "provisionalSegments",
+  private segmentStatesShaderManager = new HashMapShaderManager(
+    "segmentStates",
   );
   private segmentColorShaderManager = new SegmentColorShaderManager(
     "segmentColorHash",
@@ -220,11 +227,10 @@ export class RenderHelper extends RefCounted {
     "segmentStatedColor",
   );
   private readonly clearedTextureUnits = new Set<number>();
-  private emptySegmentSet = new Uint64Set();
+  private emptySegmentStates = new HashMapUint64();
   private gpuVisibleSegmentsHashTable: GPUHashTable<HashSetUint64>;
   private gpuTemporaryVisibleSegmentsHashTable: GPUHashTable<HashSetUint64>;
-  private gpuExcludedSegmentsHashTable: GPUHashTable<HashSetUint64>;
-  private gpuProvisionalSegmentsHashTable: GPUHashTable<HashSetUint64>;
+  private gpuSegmentStatesHashTable: GPUHashTable<HashMapUint64>;
   private gpuSegmentStatedColorHashTable: GPUHashTable<HashMapUint64>;
   get vertexAttributes(): VertexAttributeRenderInfo[] {
     return this.base.vertexAttributes;
@@ -254,9 +260,11 @@ highp vec3 applyNodePositionOverride(highp uint vertexIndex, highp vec3 position
 }
 `);
     if (skeletonParams.segmentAppearance !== undefined) {
-      this.defineSegmentAppearance(builder, skeletonParams.segmentAppearance);
+      this.defineSegmentAppearance(builder, skeletonParams.segmentAppearance, {
+        spatialIndexChunks: skeletonParams.spatialIndexChunks,
+      });
     }
-    if (skeletonParams.spatialChunkCulling) {
+    if (skeletonParams.spatialIndexChunks) {
       builder.addUniform("highp vec3", "uChunkOrigin");
       builder.addUniform("highp vec3", "uChunkBound");
       builder.addVarying("highp vec3", "vCullPos");
@@ -307,13 +315,11 @@ void spatialChunkCull() {
   private defineSegmentAppearance(
     builder: ShaderBuilder,
     segmentAppearance: SegmentAppearanceParameters,
+    { spatialIndexChunks }: { readonly spatialIndexChunks: boolean },
   ) {
     this.visibleSegmentsShaderManager.defineShader(builder);
-    this.excludedSegmentsShaderManager.defineShader(builder);
+    this.segmentStatesShaderManager.defineShader(builder);
     this.segmentColorShaderManager.defineShader(builder);
-    if (segmentAppearance.hasProvisionalSegmentColors) {
-      this.provisionalSegmentsShaderManager.defineShader(builder);
-    }
     if (segmentAppearance.hasSegmentStatedColors) {
       this.segmentStatedColorShaderManager.defineShader(builder);
     }
@@ -360,35 +366,39 @@ void spatialChunkCull() {
   saturation += isHovered * (0.5 - step(0.5, saturation));`
       : "";
 
-    const provisionalColorFragment =
-      segmentAppearance.hasProvisionalSegmentColors
-        ? `
-  if (${this.provisionalSegmentsShaderManager.hasFunctionName}(segmentId)) {
-    return vec3(1.0, 0.0, 0.0);
+    const excludedAlphaFragment = spatialIndexChunks
+      ? `
+  if ((states & ${SkeletonSegmentState.EXCLUDED_FROM_CHUNKS}u) != 0u) {
+    return 0.0;
   }`
-        : "";
+      : "";
 
     builder.addFragmentCode(`
+uint getSegmentStates(uint64_t segmentId) {
+  uint64_t states;
+  return ${this.segmentStatesShaderManager.getFunctionName}(segmentId, states) ? states.value[0] : 0u;
+}
 vec3 getSegmentBaseColor(uint64_t segmentId) {
 ${statedColorFragment}
 ${defaultColorFragment}
 }
-vec3 getSegmentLookupColor(uint64_t segmentId) {
-${provisionalColorFragment}
+vec3 getSegmentLookupColor(uint64_t segmentId, uint states) {
+  if ((states & ${SkeletonSegmentState.PROVISIONAL}u) != 0u) {
+    return vec3(1.0, 0.0, 0.0);
+  }
   vec3 baseColor = getSegmentBaseColor(segmentId);
   float saturation = uSaturation;
 ${hoverAdjustFragment}
   return mix(vec3(1.0, 1.0, 1.0), baseColor, saturation);
 }
-float getSegmentLookupAlpha(uint64_t segmentId) {
-  if (${this.excludedSegmentsShaderManager.hasFunctionName}(segmentId)) {
-    return 0.0;
-  }
+float getSegmentLookupAlpha(uint64_t segmentId, uint states) {
+${excludedAlphaFragment}
   bool isVisible = ${this.visibleSegmentsShaderManager.hasFunctionName}(segmentId);
   return isVisible ? uVisibleAlpha : uHiddenAlpha;
 }
 vec4 getSegmentAppearance(uint64_t segmentId) {
-  return vec4(getSegmentLookupColor(segmentId), getSegmentLookupAlpha(segmentId));
+  uint states = getSegmentStates(segmentId);
+  return vec4(getSegmentLookupColor(segmentId, states), getSegmentLookupAlpha(segmentId, states));
 }
 `);
   }
@@ -407,10 +417,10 @@ vec4 getSegmentAppearance(uint64_t segmentId) {
         ? this.gpuTemporaryVisibleSegmentsHashTable
         : this.gpuVisibleSegmentsHashTable,
     );
-    this.excludedSegmentsShaderManager.enable(
+    this.segmentStatesShaderManager.enable(
       gl,
       shader,
-      this.gpuExcludedSegmentsHashTable,
+      this.gpuSegmentStatesHashTable,
     );
     gl.uniform1f(
       shader.uniform("uVisibleAlpha"),
@@ -426,13 +436,6 @@ vec4 getSegmentAppearance(uint64_t segmentId) {
       shader,
       colorGroupState.segmentColorHash.value,
     );
-    if (segmentAppearance.hasProvisionalSegmentColors) {
-      this.provisionalSegmentsShaderManager.enable(
-        gl,
-        shader,
-        this.gpuProvisionalSegmentsHashTable,
-      );
-    }
     if (segmentAppearance.hasSegmentDefaultColor) {
       const segmentDefaultColor = colorGroupState.segmentDefaultColor.value;
       if (segmentDefaultColor !== undefined) {
@@ -469,10 +472,7 @@ vec4 getSegmentAppearance(uint64_t segmentId) {
   ) {
     const { gl } = this;
     this.visibleSegmentsShaderManager.disable(gl, shader);
-    this.excludedSegmentsShaderManager.disable(gl, shader);
-    if (segmentAppearance.hasProvisionalSegmentColors) {
-      this.provisionalSegmentsShaderManager.disable(gl, shader);
-    }
+    this.segmentStatesShaderManager.disable(gl, shader);
     if (segmentAppearance.hasSegmentStatedColors) {
       this.segmentStatedColorShaderManager.disable(gl, shader);
     }
@@ -501,17 +501,8 @@ vec4 getSegmentAppearance(uint64_t segmentId) {
         segmentationGroupState.temporaryVisibleSegments.hashTable,
       ),
     );
-    this.gpuExcludedSegmentsHashTable = this.registerDisposer(
-      GPUHashTable.get(
-        this.gl,
-        (base.excludedSegmentIds ?? this.emptySegmentSet).hashTable,
-      ),
-    );
-    this.gpuProvisionalSegmentsHashTable = this.registerDisposer(
-      GPUHashTable.get(
-        this.gl,
-        (base.provisionalSegmentIds ?? this.emptySegmentSet).hashTable,
-      ),
+    this.gpuSegmentStatesHashTable = this.registerDisposer(
+      GPUHashTable.get(this.gl, base.segmentStates ?? this.emptySegmentStates),
     );
     this.gpuSegmentStatedColorHashTable = this.registerDisposer(
       GPUHashTable.get(this.gl, colorGroupState.segmentStatedColors.hashTable),
@@ -683,7 +674,7 @@ highp uint lineEndpointIndex = getLineEndpointIndex();
 highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexIndex.y * lineEndpointIndex;
 `;
     let fragmentSetup = "";
-    if (skeletonParams.spatialChunkCulling) {
+    if (skeletonParams.spatialIndexChunks) {
       vertexMain += `vCullPos = mix(vertexA, vertexB, float(lineEndpointIndex));\n`;
       fragmentSetup = `spatialChunkCull();\n`;
     }
@@ -704,7 +695,7 @@ vPickID = uPickID + pickOffset;
 highp vec3 vertexPosition = applyNodePositionOverride(vertexIndex, readAttribute0(vertexIndex));
 `;
     let fragmentSetup = "";
-    if (skeletonParams.spatialChunkCulling) {
+    if (skeletonParams.spatialIndexChunks) {
       vertexMain += `vCullPos = vertexPosition;\n`;
       fragmentSetup = `spatialChunkCull();\n`;
     }
@@ -1001,7 +992,7 @@ export class SkeletonLayer
   readonly skeletonShaderParameters =
     new WatchableValue<SkeletonShaderParameters>({
       segmentAppearance: undefined,
-      spatialChunkCulling: false,
+      spatialIndexChunks: false,
     });
   fallbackShaderParameters = new WatchableValue(
     getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)),

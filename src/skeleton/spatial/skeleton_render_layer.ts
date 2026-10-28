@@ -97,6 +97,7 @@ import {
   resolveSpatiallyIndexedSkeletonNodePick,
   resolveSpatiallyIndexedSkeletonSegmentPick,
 } from "#src/skeleton/spatial/picking.js";
+import { SpatialSkeletonSegmentStates } from "#src/skeleton/spatial/segment_states.js";
 import type { SkeletonNodeHighlightSelection } from "#src/skeleton/spatial/skeleton_overlay_primitives.js";
 import { SkeletonOverlayPrimitives } from "#src/skeleton/spatial/skeleton_overlay_primitives.js";
 import type { SkeletonPanelView } from "#src/skeleton/spatial/skeleton_panel_overlay.js";
@@ -122,7 +123,6 @@ import {
   WatchableValue,
   registerNested,
 } from "#src/trackable_value.js";
-import type { Uint64Set } from "#src/uint64_set.js";
 import { gatherUpdate } from "#src/util/array.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -313,7 +313,7 @@ export class SpatiallyIndexedSkeletonLayer
   readonly chunkManager: ChunkManager;
   readonly displayState: SpatiallyIndexedSkeletonLayerOptions["displayState"];
   readonly editSession: SpatialSkeletonEditSession;
-  readonly provisionalSegmentIds: Uint64Set;
+  private readonly segmentStateTable: SpatialSkeletonSegmentStates;
   readonly multiscaleSource: MultiscaleSpatiallyIndexedSkeletonSource;
   private readonly sources: SpatiallyIndexedSkeletonSourceEntry[];
   readonly source: SpatiallyIndexedSkeletonSource;
@@ -389,7 +389,6 @@ export class SpatiallyIndexedSkeletonLayer
     this.chunkManager = multiscaleSource.chunkManager;
     this.displayState = displayState;
     this.editSession = editSession;
-    this.provisionalSegmentIds = editSession.provisionalSegmentIds;
     this.fragmentSource = multiscaleSource.fragmentSource;
     this.editableSource = multiscaleSource.editableSource;
     this.registerDisposer(() => {
@@ -423,6 +422,10 @@ export class SpatiallyIndexedSkeletonLayer
       ),
     );
     this.overlaySegments = overlaySegments;
+    this.segmentStateTable = new SpatialSkeletonSegmentStates(
+      overlaySegments.browseExcludedSegments,
+      editSession.provisionalSegmentIds,
+    );
     this.overlayPrimitives = this.registerDisposer(
       new SkeletonOverlayPrimitives({
         displayState,
@@ -459,11 +462,9 @@ export class SpatiallyIndexedSkeletonLayer
             colorGroupState.segmentStatedColors.size !== 0,
           hasSegmentDefaultColor:
             colorGroupState.segmentDefaultColor.value !== undefined,
-          hasProvisionalSegmentColors:
-            editSession.provisionalSegmentIds.size !== 0,
           hoverHighlight: displayState.hoverHighlight.value,
         },
-        spatialChunkCulling: false,
+        spatialIndexChunks: false,
       };
     };
     this.skeletonShaderParameters = new WatchableValue(
@@ -491,17 +492,16 @@ export class SpatiallyIndexedSkeletonLayer
       displayState.hoverHighlight.changed.add(updateSkeletonShaderParameters),
     );
     this.registerDisposer(
-      editSession.spatialSkeletonDisplay.changed.add(() => {
-        updateSkeletonShaderParameters();
-        this.redrawNeeded.dispatch();
-      }),
+      editSession.spatialSkeletonDisplay.changed.add(
+        this.redrawNeeded.dispatch,
+      ),
     );
     this.registerDisposer(
       overlaySegments.changed.add(this.redrawNeeded.dispatch),
     );
     this.browsePassSkeletonShaderParameters = this.registerDisposer(
       makeCachedLazyDerivedWatchableValue(
-        (params) => ({ ...params, spatialChunkCulling: true }),
+        (params) => ({ ...params, spatialIndexChunks: true }),
         this.skeletonShaderParameters,
       ),
     );
@@ -512,13 +512,16 @@ export class SpatiallyIndexedSkeletonLayer
       fallbackShaderParameters: this.fallbackShaderParameters,
       displayState,
       skeletonShaderParameters: this.browsePassSkeletonShaderParameters,
-      provisionalSegmentIds: editSession.provisionalSegmentIds,
-      excludedSegmentIds: overlaySegments.browseExcludedSegments,
+      segmentStates: this.segmentStateTable.hashMap,
     };
   }
 
   get gl() {
     return this.chunkManager.chunkQueueManager.gl;
+  }
+
+  get segmentStates() {
+    return this.segmentStateTable.hashMap;
   }
 
   private forEachVisibleChunkSlot(
@@ -688,6 +691,7 @@ export class SpatiallyIndexedSkeletonLayer
   ) {
     if (visibleChunks.length === 0) return;
     this.overlaySegments.updateBrowseExcludedSegments();
+    this.segmentStateTable.update();
     const chunkOrigin = vec3.create();
     const chunkBound = vec3.create();
     renderHelper.draw(renderContext, options, (pass) => {
@@ -720,6 +724,7 @@ export class SpatiallyIndexedSkeletonLayer
   ) {
     const overlayChunks = this.getOverlayChunks();
     if (overlayChunks.length === 0) return;
+    this.segmentStateTable.update();
     renderHelper.draw(renderContext, options, (pass) => {
       for (const overlayChunk of overlayChunks) {
         if (renderContext.emitPickID) {

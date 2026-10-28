@@ -17,6 +17,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ChunkState } from "#src/chunk_manager/base.js";
+import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
 import {
   OffscreenTextures,
   perspectivePanelEmit,
@@ -32,6 +33,7 @@ import {
   SkeletonLayer,
   SkeletonRenderingOptions,
   SkeletonRenderMode,
+  SkeletonSegmentState,
   type SkeletonShaderContext,
   SkeletonSource,
   TrackableSkeletonLineWidth,
@@ -156,16 +158,18 @@ function makeRenderHelper(
   gl: GL,
   options: {
     segmentAppearance?: SegmentAppearanceParameters;
-    spatialChunkCulling?: boolean;
+    spatialIndexChunks?: boolean;
     visibleSegmentIds?: bigint[];
-    excludedSegmentIds?: bigint[];
+    segmentStates?: [bigint, SkeletonSegmentState][];
     objectAlpha?: number;
   } = {},
 ) {
   const visibleSegments = new Uint64Set();
   visibleSegments.add(options.visibleSegmentIds ?? []);
-  const excludedSegmentIds = new Uint64Set();
-  excludedSegmentIds.add(options.excludedSegmentIds ?? []);
+  const segmentStates = new HashMapUint64();
+  for (const [segmentId, state] of options.segmentStates ?? []) {
+    segmentStates.set(segmentId, BigInt(state));
+  }
   const displayState = {
     segmentationGroupState: new WatchableValue({
       visibleSegments,
@@ -192,9 +196,9 @@ function makeRenderHelper(
     displayState,
     skeletonShaderParameters: new WatchableValue({
       segmentAppearance: options.segmentAppearance,
-      spatialChunkCulling: options.spatialChunkCulling ?? false,
+      spatialIndexChunks: options.spatialIndexChunks ?? false,
     }),
-    excludedSegmentIds,
+    segmentStates,
   } as unknown as SkeletonShaderContext;
   return new RenderHelper(base, /*targetIsSliceView=*/ false);
 }
@@ -203,7 +207,6 @@ function makeSegmentAppearance(): SegmentAppearanceParameters {
   return {
     hasSegmentStatedColors: false,
     hasSegmentDefaultColor: false,
-    hasProvisionalSegmentColors: false,
     hoverHighlight: false,
   };
 }
@@ -389,13 +392,14 @@ describe("skeleton render helper", () => {
     });
   });
 
-  it("hides the skeletons excluded from the pass", () => {
+  it("hides, in spatial index chunks, the skeletons that another pass draws whole", () => {
     webglTest((gl) => {
       const framebuffer = makeFramebuffer(gl);
       const renderHelper = makeRenderHelper(gl, {
         segmentAppearance: makeSegmentAppearance(),
+        spatialIndexChunks: true,
         visibleSegmentIds: [1n, 2n],
-        excludedSegmentIds: [2n],
+        segmentStates: [[2n, SkeletonSegmentState.EXCLUDED_FROM_CHUNKS]],
       });
       const chunk = makeGeometry(
         gl,
@@ -410,7 +414,13 @@ describe("skeleton render helper", () => {
       renderHelper.draw(
         makeRenderContext(),
         makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
-        (pass) => pass.draw(chunk),
+        (pass) => {
+          pass.setChunkBounds(
+            Float32Array.of(-1, -1, -1),
+            Float32Array.of(1, 1, 1),
+          );
+          pass.draw(chunk);
+        },
       );
 
       expect(readPixel(framebuffer, OffscreenTextures.COLOR, -0.5, 0)[3]).toBe(
@@ -422,12 +432,62 @@ describe("skeleton render helper", () => {
     });
   });
 
+  it("draws, outside spatial index chunks, a skeleton that the chunks hide", () => {
+    webglTest((gl) => {
+      const framebuffer = makeFramebuffer(gl);
+      const renderHelper = makeRenderHelper(gl, {
+        segmentAppearance: makeSegmentAppearance(),
+        visibleSegmentIds: [2n],
+        segmentStates: [[2n, SkeletonSegmentState.EXCLUDED_FROM_CHUNKS]],
+      });
+      const skeleton = makeGeometry(gl, [[0.5, 0, 0]], [], [2n]);
+
+      renderHelper.draw(
+        makeRenderContext(),
+        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
+        (pass) => pass.draw(skeleton),
+      );
+
+      expect(readPixel(framebuffer, OffscreenTextures.COLOR, 0.5, 0)[3]).toBe(
+        1,
+      );
+    });
+  });
+
+  it("draws a provisional skeleton in red even when spatial index chunks hide it", () => {
+    webglTest((gl) => {
+      const framebuffer = makeFramebuffer(gl);
+      const renderHelper = makeRenderHelper(gl, {
+        segmentAppearance: makeSegmentAppearance(),
+        visibleSegmentIds: [3n],
+        segmentStates: [
+          [
+            3n,
+            SkeletonSegmentState.PROVISIONAL |
+              SkeletonSegmentState.EXCLUDED_FROM_CHUNKS,
+          ],
+        ],
+      });
+      const skeleton = makeGeometry(gl, [[0.5, 0, 0]], [], [3n]);
+
+      renderHelper.draw(
+        makeRenderContext(),
+        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
+        (pass) => pass.draw(skeleton),
+      );
+
+      expect([
+        ...readPixel(framebuffer, OffscreenTextures.COLOR, 0.5, 0),
+      ]).toEqual([1, 0, 0, 1]);
+    });
+  });
+
   it("draws an edge held by two chunks only once", () => {
     webglTest((gl) => {
       const framebuffer = makeFramebuffer(gl);
       const renderHelper = makeRenderHelper(gl, {
         segmentAppearance: makeSegmentAppearance(),
-        spatialChunkCulling: true,
+        spatialIndexChunks: true,
         visibleSegmentIds: [1n],
         objectAlpha: 0.5,
       });
