@@ -35,8 +35,8 @@ import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { layerDataSourceSpecificationFromJson } from "#src/layer/layer_data_source.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
 import { registerLayerControls } from "#src/layer/segmentation/layer_controls.js";
-import { registerVoxelEditingLayerControls } from "#src/layer/voxel_annotation/controls.js";
-import { UserLayerWithVoxelEditingMixin } from "#src/layer/voxel_annotation/index.js";
+import { registerVoxelEditingLayerControls } from "#src/layer/voxel_editing/controls.js";
+import { UserLayerWithVoxelEditingMixin } from "#src/layer/voxel_editing/index.js";
 import {
   MeshLayer,
   MeshSource,
@@ -110,7 +110,7 @@ import { SegmentDisplayTab } from "#src/ui/segment_list.js";
 import { registerSegmentSelectTools } from "#src/ui/segment_select_tools.js";
 import { registerSegmentSplitMergeTools } from "#src/ui/segment_split_merge_tools.js";
 import { DisplayOptionsTab } from "#src/ui/segmentation_display_options_tab.js";
-import { registerVoxelEditingTools } from "#src/ui/voxel_annotations.js";
+import { registerVoxelEditingTools } from "#src/ui/voxel_editing.js";
 import { Uint64Map } from "#src/uint64_map.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import { Uint64Set } from "#src/uint64_set.js";
@@ -138,8 +138,8 @@ import {
   SEGMENTATION_ERASE_SENTINEL,
   EMPTY_VOXEL_VALUE,
   type PaintValueGetter,
-} from "#src/voxel_annotation/base.js";
-import { VoxelEditingPreviewRenderLayerMixin } from "#src/voxel_annotation/preview_render_layer.js";
+} from "#src/voxel_editing/base.js";
+import { VoxelEditingPreviewRenderLayerMixin } from "#src/voxel_editing/preview_render_layer.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";

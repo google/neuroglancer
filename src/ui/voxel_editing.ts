@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import "#src/ui/voxel_annotations.css";
+import "#src/ui/voxel_editing.css";
 
 import type { MouseSelectionState } from "#src/layer/index.js";
 import {
   getEditingContext,
   VOXEL_EDITING_LAYER_CONTROLS,
-} from "#src/layer/voxel_annotation/controls.js";
+} from "#src/layer/voxel_editing/controls.js";
 import type {
   UserLayerWithVoxelEditing,
   VoxelEditingContext,
-} from "#src/layer/voxel_annotation/index.js";
+} from "#src/layer/voxel_editing/index.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
 import { SliceViewPanel } from "#src/sliceview/panel.js";
 import { StatusMessage } from "#src/status.js";
@@ -52,7 +52,7 @@ import {
   getBasisFromNormal,
   VALUE_PICKER_TOOL_ID,
   type PaintValueGetter,
-} from "#src/voxel_annotation/base.js";
+} from "#src/voxel_editing/base.js";
 
 const BRUSH_INPUT_MAP = EventActionMap.fromObject({
   ["at:control+mousedown0"]: "paint-voxels",

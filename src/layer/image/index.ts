@@ -34,8 +34,8 @@ import {
   UserLayer,
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import { registerVoxelEditingLayerControls } from "#src/layer/voxel_annotation/controls.js";
-import { UserLayerWithVoxelEditingMixin } from "#src/layer/voxel_annotation/index.js";
+import { registerVoxelEditingLayerControls } from "#src/layer/voxel_editing/controls.js";
+import { UserLayerWithVoxelEditingMixin } from "#src/layer/voxel_editing/index.js";
 import { Overlay } from "#src/overlay.js";
 import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import { getChannelSpace } from "#src/render_coordinate_transform.js";
@@ -64,7 +64,7 @@ import {
   WatchableValue,
 } from "#src/trackable_value.js";
 import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
-import { registerVoxelEditingTools } from "#src/ui/voxel_annotations.js";
+import { registerVoxelEditingTools } from "#src/ui/voxel_editing.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { makeValueOrError } from "#src/util/error.js";
@@ -79,8 +79,8 @@ import {
   VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE,
   VolumeRenderingRenderLayer,
 } from "#src/volume_rendering/volume_render_layer.js";
-import { EMPTY_VOXEL_VALUE } from "#src/voxel_annotation/base.js";
-import { VoxelEditingPreviewRenderLayerMixin } from "#src/voxel_annotation/preview_render_layer.js";
+import { EMPTY_VOXEL_VALUE } from "#src/voxel_editing/base.js";
+import { VoxelEditingPreviewRenderLayerMixin } from "#src/voxel_editing/preview_render_layer.js";
 import type { ParameterizedShaderGetterResult } from "#src/webgl/dynamic_shader.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";

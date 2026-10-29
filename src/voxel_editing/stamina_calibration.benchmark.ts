@@ -19,13 +19,13 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { DataType, DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import { vec3 } from "#src/util/geom.js";
-import { VoxelEditingController } from "#src/voxel_annotation/backend.js";
+import { VoxelEditingController } from "#src/voxel_editing/backend.js";
 import {
   BrushShape,
   EMPTY_VOXEL_VALUE,
   VoxelOperationType,
   makeLodChunkKey,
-} from "#src/voxel_annotation/base.js";
+} from "#src/voxel_editing/base.js";
 
 const NETWORK_LATENCY = 0;
 class RealisticInMemorySource extends VolumeChunkSource {

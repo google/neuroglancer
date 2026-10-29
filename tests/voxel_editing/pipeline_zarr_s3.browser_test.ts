@@ -27,7 +27,7 @@ import { makeLayer } from "#src/layer/index.js";
 import type {
   VoxelEditingContext,
   UserLayerWithVoxelEditing,
-} from "#src/layer/voxel_annotation/index.js";
+} from "#src/layer/voxel_editing/index.js";
 import { Viewer } from "#src/viewer.js";
 import { mswFixture } from "#tests/fixtures/msw";
 

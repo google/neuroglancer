@@ -4,7 +4,7 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR, DataType } from "#src/util/data_type.js";
 import { mat4 } from "#src/util/geom.js";
-import { VoxelEditingController } from "#src/voxel_annotation/backend.js";
+import { VoxelEditingController } from "#src/voxel_editing/backend.js";
 import {
   makeLodChunkKey,
   EMPTY_VOXEL_VALUE,
@@ -12,7 +12,7 @@ import {
   VOXEL_EDITING_HISTORY_UPDATE_RPC_ID,
   VoxelOperationType,
   BrushShape,
-} from "#src/voxel_annotation/base.js";
+} from "#src/voxel_editing/base.js";
 import type { RPC } from "#src/worker_rpc.js";
 
 // applyChunkEdits is a module function: give each source its own spy, which
@@ -34,7 +34,7 @@ const applyChunkEditsMock = vi.hoisted(() => {
   return state;
 });
 
-vi.mock("#src/voxel_annotation/chunk_edits.js", async (importOriginal) => {
+vi.mock("#src/voxel_editing/chunk_edits.js", async (importOriginal) => {
   const actual: any = await importOriginal();
   applyChunkEditsMock.actual = actual.applyChunkEdits;
   return {

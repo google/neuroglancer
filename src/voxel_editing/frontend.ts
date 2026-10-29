@@ -30,7 +30,7 @@ import type {
   LodResolution,
   VoxelOperation,
   PaintValueGetter,
-} from "#src/voxel_annotation/base.js";
+} from "#src/voxel_editing/base.js";
 import {
   BrushShape,
   getDiskStencilKernel,
@@ -45,8 +45,8 @@ import {
   VOXEL_EDITING_UNDO_RPC_ID,
   VOXEL_EDITING_CHUNK_RELOAD_RPC_ID,
   VoxelOperationType,
-} from "#src/voxel_annotation/base.js";
-import type { PreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
+} from "#src/voxel_editing/base.js";
+import type { PreviewMultiscaleSource } from "#src/voxel_editing/preview_multiscale_chunk_source.js";
 import type { RPC } from "#src/worker_rpc.js";
 import {
   registerRPC,

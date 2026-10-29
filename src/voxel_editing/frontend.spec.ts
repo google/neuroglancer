@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ChunkState } from "#src/chunk_manager/base.js";
 import { NullarySignal } from "#src/util/signal.js";
-import { makeLodChunkKey } from "#src/voxel_annotation/base.js";
-import { VoxelEditingController } from "#src/voxel_annotation/frontend.js";
+import { makeLodChunkKey } from "#src/voxel_editing/base.js";
+import { VoxelEditingController } from "#src/voxel_editing/frontend.js";
 import type { RPC } from "#src/worker_rpc.js";
 
 const mockRpc = {

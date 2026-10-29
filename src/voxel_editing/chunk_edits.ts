@@ -30,7 +30,7 @@ import type { WritableVolumeChunkSource } from "#src/sliceview/volume/base.js";
 import type { TypedArray } from "#src/util/array.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
-import type { VoxelChange } from "#src/voxel_annotation/base.js";
+import type { VoxelChange } from "#src/voxel_editing/base.js";
 
 function isWritableVolumeChunkSource(
   source: VolumeChunkSource,

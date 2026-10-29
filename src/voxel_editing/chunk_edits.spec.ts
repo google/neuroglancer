@@ -25,7 +25,7 @@ import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import { DataType } from "#src/util/data_type.js";
 import { HttpError } from "#src/util/http_request.js";
-import { applyChunkEdits } from "#src/voxel_annotation/chunk_edits.js";
+import { applyChunkEdits } from "#src/voxel_editing/chunk_edits.js";
 import type { RPC } from "#src/worker_rpc.js";
 
 vi.mock("#src/sliceview/compressed_segmentation/decode_uint64.js", () => ({

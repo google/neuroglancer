@@ -53,7 +53,7 @@ import type { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
 import {
   EMPTY_VOXEL_VALUE,
   SEGMENTATION_ERASE_SENTINEL,
-} from "#src/voxel_annotation/base.js";
+} from "#src/voxel_editing/base.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 
 function glslUint64Equals(name: string, value: bigint) {

@@ -26,7 +26,7 @@ import type {
   VoxelOperation,
   BrushOperation,
   FloodFillOperation,
-} from "#src/voxel_annotation/base.js";
+} from "#src/voxel_editing/base.js";
 import {
   EMPTY_VOXEL_VALUE,
   VOXEL_EDITING_STAMINA,
@@ -43,11 +43,11 @@ import {
   makeLodChunkKey,
   parseLodChunkKey,
   makeChunkKey,
-} from "#src/voxel_annotation/base.js";
+} from "#src/voxel_editing/base.js";
 import {
   applyChunkEdits,
   readChunkData,
-} from "#src/voxel_annotation/chunk_edits.js";
+} from "#src/voxel_editing/chunk_edits.js";
 import type { RPC } from "#src/worker_rpc.js";
 import {
   registerPromiseRPC,

@@ -22,10 +22,10 @@ import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import {
   drawBrushCursor,
   getEditingContext,
-} from "#src/layer/voxel_annotation/controls.js";
-import { VoxelEditingTab } from "#src/layer/voxel_annotation/draw_tab.js";
-import { getVoxelEditingIncompatibility } from "#src/layer/voxel_annotation/eligibility.js";
-import { PanelOverlay } from "#src/layer/voxel_annotation/panel_overlay.js";
+} from "#src/layer/voxel_editing/controls.js";
+import { VoxelEditingTab } from "#src/layer/voxel_editing/draw_tab.js";
+import { getVoxelEditingIncompatibility } from "#src/layer/voxel_editing/eligibility.js";
+import { PanelOverlay } from "#src/layer/voxel_editing/panel_overlay.js";
 import type {
   ChunkTransformParameters,
   RenderLayerTransformOrError,
@@ -56,7 +56,7 @@ import { vec3 } from "#src/util/geom.js";
 import { verifyInt, verifyOptionalObjectProperty } from "#src/util/json.js";
 import { CompoundTrackable } from "#src/util/trackable.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
-import type { PaintValueGetter } from "#src/voxel_annotation/base.js";
+import type { PaintValueGetter } from "#src/voxel_editing/base.js";
 import {
   VOXEL_EDITING_STAMINA,
   EMPTY_VOXEL_VALUE,
@@ -64,10 +64,10 @@ import {
   BRUSH_TOOL_ID,
   BrushShape,
   MAX_VOXEL_EDITING_STAMINA,
-} from "#src/voxel_annotation/base.js";
-import type { VoxelEditingControllerHost } from "#src/voxel_annotation/frontend.js";
-import { VoxelEditingController } from "#src/voxel_annotation/frontend.js";
-import { PreviewMultiscaleSource } from "#src/voxel_annotation/preview_multiscale_chunk_source.js";
+} from "#src/voxel_editing/base.js";
+import type { VoxelEditingControllerHost } from "#src/voxel_editing/frontend.js";
+import { VoxelEditingController } from "#src/voxel_editing/frontend.js";
+import { PreviewMultiscaleSource } from "#src/voxel_editing/preview_multiscale_chunk_source.js";
 
 const VOXEL_EDITING_JSON_KEY = "voxelEditing";
 const PAINT_VALUE_JSON_KEY = "paintValue";

@@ -19,7 +19,7 @@ import { LayerActionContext } from "#src/layer/index.js";
 import type {
   UserLayerWithVoxelEditing,
   VoxelEditingContext,
-} from "#src/layer/voxel_annotation/index.js";
+} from "#src/layer/voxel_editing/index.js";
 import type { RenderedDataPanel } from "#src/rendered_data_panel.js";
 import { SliceViewPanel } from "#src/sliceview/panel.js";
 import { observeWatchable } from "#src/trackable_value.js";
@@ -34,7 +34,7 @@ import {
   UNDO_TOOL_ID,
   getBasisFromNormal,
   VALUE_PICKER_TOOL_ID,
-} from "#src/voxel_annotation/base.js";
+} from "#src/voxel_editing/base.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
 import { registerLayerControl } from "#src/widget/layer_control.js";
 import { buttonLayerControl } from "#src/widget/layer_control_button.js";

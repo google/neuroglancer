@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import { VOXEL_EDITING_TAB_LAYOUT } from "#src/layer/voxel_annotation/controls.js";
-import type { UserLayerWithVoxelEditing } from "#src/layer/voxel_annotation/index.js";
+import { VOXEL_EDITING_TAB_LAYOUT } from "#src/layer/voxel_editing/controls.js";
+import type { UserLayerWithVoxelEditing } from "#src/layer/voxel_editing/index.js";
 import { observeWatchable } from "#src/trackable_value.js";
 import { makeToolButton } from "#src/ui/tool.js";
-import { REDO_TOOL_ID, UNDO_TOOL_ID } from "#src/voxel_annotation/base.js";
-import type { VoxelEditingController } from "#src/voxel_annotation/frontend.js";
+import { REDO_TOOL_ID, UNDO_TOOL_ID } from "#src/voxel_editing/base.js";
+import type { VoxelEditingController } from "#src/voxel_editing/frontend.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { addLayerControlToOptionsTab } from "#src/widget/layer_control.js";
 import { Tab } from "#src/widget/tab_view.js";
