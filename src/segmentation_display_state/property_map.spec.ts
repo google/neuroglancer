@@ -16,6 +16,7 @@
 
 import { describe, test, expect } from "vitest";
 import {
+  executeSegmentQuery,
   mergeSegmentPropertyMaps,
   parseSegmentQuery,
   PreprocessedSegmentPropertyMap,
@@ -64,6 +65,238 @@ describe("mergeSegmentPropertyMaps", () => {
         { type: "string", id: "prop2", values: ["a", "", "b", ""] },
       ],
     });
+  });
+
+  test("preserves numerical property type and zero-fills missing values", () => {
+    const a = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(5n, 8n),
+        properties: [
+          {
+            type: "number",
+            id: "score",
+            description: undefined,
+            dataType: DataType.INT32,
+            values: Int32Array.of(10, 20),
+            bounds: [10, 20],
+          },
+        ],
+      },
+    });
+    const b = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(6n, 7n),
+        properties: [],
+      },
+    });
+
+    const merged = mergeSegmentPropertyMaps([a, b]);
+
+    expect(merged?.inlineProperties).toEqual({
+      ids: BigUint64Array.of(5n, 6n, 7n, 8n),
+      properties: [
+        {
+          type: "number",
+          id: "score",
+          description: undefined,
+          dataType: DataType.INT32,
+          values: Int32Array.of(10, 0, 0, 20),
+          bounds: [0, 20],
+        },
+      ],
+    });
+
+    const preprocessed = new PreprocessedSegmentPropertyMap(merged!);
+    const result = executeSegmentQuery(
+      preprocessed,
+      parseSegmentQuery(preprocessed, "score=0"),
+    );
+    expect(result.indices).toEqual(Uint8Array.of(1, 2));
+  });
+
+  test("NaN-fills missing FLOAT32 property values", () => {
+    const a = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(5n, 8n),
+        properties: [
+          {
+            type: "number",
+            id: "score",
+            description: undefined,
+            dataType: DataType.FLOAT32,
+            values: Float32Array.of(10, 20),
+            bounds: [10, 20],
+          },
+        ],
+      },
+    });
+    const b = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(6n, 7n),
+        properties: [],
+      },
+    });
+
+    const merged = mergeSegmentPropertyMaps([a, b]);
+
+    expect(merged?.inlineProperties).toEqual({
+      ids: BigUint64Array.of(5n, 6n, 7n, 8n),
+      properties: [
+        {
+          type: "number",
+          id: "score",
+          description: undefined,
+          dataType: DataType.FLOAT32,
+          values: Float32Array.of(10, NaN, NaN, 20),
+          bounds: [10, 20],
+        },
+      ],
+    });
+  });
+
+  test("coalesces duplicate properties with equal overlapping values", () => {
+    const a = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(1n, 2n),
+        properties: [
+          {
+            type: "number",
+            id: "volume",
+            description: undefined,
+            dataType: DataType.FLOAT32,
+            values: Float32Array.of(10, 20),
+            bounds: [10, 20],
+          },
+        ],
+      },
+    });
+    const b = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(2n, 3n),
+        properties: [
+          {
+            type: "number",
+            id: "volume",
+            description: undefined,
+            dataType: DataType.FLOAT32,
+            values: Float32Array.of(20, 30),
+            bounds: [20, 30],
+          },
+        ],
+      },
+    });
+
+    expect(mergeSegmentPropertyMaps([a, b])?.inlineProperties).toEqual({
+      ids: BigUint64Array.of(1n, 2n, 3n),
+      properties: [
+        {
+          type: "number",
+          id: "volume",
+          description: undefined,
+          dataType: DataType.FLOAT32,
+          values: Float32Array.of(10, 20, 30),
+          bounds: [10, 30],
+        },
+      ],
+    });
+  });
+
+  test("renames every conflicting duplicate property deterministically", () => {
+    const a = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(1n, 2n),
+        properties: [
+          { type: "string", id: "volume", values: ["a", "same"] },
+          { type: "string", id: "volume1", values: ["reserved", ""] },
+        ],
+      },
+    });
+    const b = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(2n, 3n),
+        properties: [
+          { type: "string", id: "volume", values: ["different", "b"] },
+        ],
+      },
+    });
+    const c = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(3n, 4n),
+        properties: [{ type: "string", id: "volume", values: ["b", "c"] }],
+      },
+    });
+
+    expect(mergeSegmentPropertyMaps([a, b, c])?.inlineProperties).toEqual({
+      ids: BigUint64Array.of(1n, 2n, 3n, 4n),
+      properties: [
+        {
+          type: "string",
+          id: "volume",
+          values: ["a", "same", "", ""],
+        },
+        {
+          type: "string",
+          id: "volume1",
+          values: ["reserved", "", "", ""],
+        },
+        {
+          type: "string",
+          id: "volume2",
+          values: ["", "different", "b", ""],
+        },
+        {
+          type: "string",
+          id: "volume3",
+          values: ["", "", "b", "c"],
+        },
+      ],
+    });
+  });
+
+  test("does not coalesce duplicate numerical properties of different types", () => {
+    const a = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(1n),
+        properties: [
+          {
+            type: "number",
+            id: "score",
+            description: undefined,
+            dataType: DataType.UINT8,
+            values: Uint8Array.of(1),
+            bounds: [1, 1],
+          },
+        ],
+      },
+    });
+    const b = new SegmentPropertyMap({
+      inlineProperties: {
+        ids: BigUint64Array.of(2n),
+        properties: [
+          {
+            type: "number",
+            id: "score",
+            description: undefined,
+            dataType: DataType.UINT32,
+            values: Uint32Array.of(2),
+            bounds: [2, 2],
+          },
+        ],
+      },
+    });
+
+    expect(
+      mergeSegmentPropertyMaps([a, b])?.inlineProperties?.properties.map(
+        (property) => ({
+          id: property.id,
+          type: property.type,
+          dataType: property.type === "number" ? property.dataType : undefined,
+        }),
+      ),
+    ).toEqual([
+      { id: "score", type: "number", dataType: DataType.UINT8 },
+      { id: "score1", type: "number", dataType: DataType.UINT32 },
+    ]);
   });
 });
 

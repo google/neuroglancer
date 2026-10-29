@@ -988,6 +988,9 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     segment_default_color = segmentDefaultColor = wrapped_property(
         "segmentDefaultColor", optional(str)
     )
+    segment_color_shader = segmentColorShader = wrapped_property(
+        "segmentColorShader", optional(str)
+    )
 
     @property
     def segment_html_color_dict(self):
