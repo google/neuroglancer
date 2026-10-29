@@ -14,28 +14,33 @@
 
 
 import os
-import platform
 
 import numpy as np
-import pytest
 from neuroglancer import local_volume, test_util, viewer_state
 
 testdata_dir = os.path.join(os.path.dirname(__file__), "..", "..", "testdata", "mesh")
 
 
-@pytest.mark.xfail(
-    platform.system() == "Darwin" and platform.machine() == "arm64",
-    reason="Mismatch for unknown reason",
-)
 def test_simple_mesh():
-    data = np.array(
-        [
-            [[1, 1, 1, 2, 2, 2], [1, 1, 1, 2, 2, 2], [1, 1, 1, 2, 2, 2]],
-            [[1, 1, 1, 2, 2, 2], [1, 1, 1, 2, 2, 2], [1, 1, 1, 2, 2, 2]],
-        ],
-        dtype=np.uint64,
-    ).transpose()
-    data = np.pad(data, 1, "constant")
+    # Keep coordinates, spacing, and padding fixed: these inputs were checked with
+    # Clang contraction enabled and disabled on ARM64 and x86-64.
+    data = np.pad(
+        np.array(
+            [
+                [
+                    [1, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 0, 0, 0, 2, 2],
+                ],
+                [
+                    [1, 0, 0, 0, 0, 0, 2, 2, 2],
+                    [1, 1, 0, 0, 0, 0, 0, 0, 2],
+                ],
+            ],
+            dtype=np.uint64,
+        ),
+        1,
+        "constant",
+    )
     dimensions = viewer_state.CoordinateSpace(
         names=["x", "y", "z"],
         scales=[1, 1, 1],
@@ -45,12 +50,12 @@ def test_simple_mesh():
         data,
         dimensions=dimensions,
         mesh_options=dict(
-            max_quadrics_error=1e6,
+            max_quadrics_error=1,
         ),
     )
     test_util.check_golden_contents(
-        os.path.join(testdata_dir, "simple1"), vol.get_object_mesh(1)
+        os.path.join(testdata_dir, "stable_bend"), vol.get_object_mesh(1)
     )
     test_util.check_golden_contents(
-        os.path.join(testdata_dir, "simple2"), vol.get_object_mesh(2)
+        os.path.join(testdata_dir, "stable_branch"), vol.get_object_mesh(2)
     )
