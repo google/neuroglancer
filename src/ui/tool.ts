@@ -718,7 +718,7 @@ export class ToolBindingWidget<Context extends object> extends RefCounted {
         beginToolDrag(this);
         const { toolPaletteState } = this.localBinder.globalBinder;
         const self = this;
-        toolPaletteState.viewer.sidePanelManager.startDrag(
+        toolPaletteState.viewer.sidePanelManager?.startDrag(
           {
             dropAsNewPanel: (location, dropEffect) => {
               const palette = toolPaletteState.addNew({ location });
@@ -758,7 +758,7 @@ export class ToolBindingWidget<Context extends object> extends RefCounted {
         popDragStatus(event, dragElement, "drag");
         endToolDrag(this);
         const { toolPaletteState } = this.localBinder.globalBinder;
-        toolPaletteState.viewer.sidePanelManager.endDrag();
+        toolPaletteState.viewer.sidePanelManager?.endDrag();
         event.stopPropagation();
       });
     }
