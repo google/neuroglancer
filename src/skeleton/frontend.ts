@@ -699,6 +699,7 @@ export class SkeletonLayer extends RefCounted {
       gl,
       edgeShader,
       edgeShaderParameters.segmentColorShaderBuilderState,
+      { fallback: edgeShaderResult.fallback, binding: attachment },
     );
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth!);
 
@@ -722,6 +723,7 @@ export class SkeletonLayer extends RefCounted {
       gl,
       nodeShader,
       nodeShaderParameters.segmentColorShaderBuilderState,
+      { fallback: nodeShaderResult.fallback, binding: attachment },
     );
 
     const skeletons = source.chunks;

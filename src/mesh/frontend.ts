@@ -567,7 +567,9 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
     if (modelMatrix === undefined) {
       return;
     }
-    const { shader, parameters } = this.getShader(renderContext.emitter);
+    const { shader, parameters, fallback } = this.getShader(
+      renderContext.emitter,
+    );
     if (shader === null) return;
     shader.bind();
     meshShaderManager.beginLayer(gl, shader, renderContext, this.displayState);
@@ -576,6 +578,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
       gl,
       shader,
       parameters.shaderBuilderState,
+      { fallback, binding: attachment },
       parameters.segmentColorParameters,
     );
 
@@ -921,7 +924,9 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
       attachment,
     );
     if (modelMatrix === undefined) return;
-    const { shader, parameters } = this.getShader(renderContext.emitter);
+    const { shader, parameters, fallback } = this.getShader(
+      renderContext.emitter,
+    );
     if (shader === null) return;
     shader.bind();
     meshShaderManager.beginLayer(gl, shader, renderContext, this.displayState);
@@ -929,6 +934,7 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
       gl,
       shader,
       parameters.shaderBuilderState,
+      { fallback, binding: attachment },
       parameters.segmentColorParameters,
     );
 

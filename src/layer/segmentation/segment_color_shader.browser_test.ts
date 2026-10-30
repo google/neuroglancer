@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { DisplayContext } from "#src/display_context.js";
 import { makeLayer } from "#src/layer/index.js";
 import {
@@ -27,12 +27,16 @@ import {
   PreprocessedSegmentPropertyMap,
   SegmentPropertyMap,
 } from "#src/segmentation_display_state/property_map.js";
+import type { SliceView } from "#src/sliceview/frontend.js";
+import { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { packColor } from "#src/util/color.js";
 import { DataType } from "#src/util/data_type.js";
+import { type Disposer, invokeDisposers } from "#src/util/disposable.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { Viewer } from "#src/viewer.js";
 import { ShaderCompilationError } from "#src/webgl/shader.js";
+import { FragmentShaderTester } from "#src/webgl/shader_testing.js";
 import {
   ShaderControlState,
   type SegmentPropertyReference,
@@ -122,6 +126,135 @@ const expectColor = (
   expect(color!.length).toBe(4);
   expect([...color]).toEqual(expected.map((x) => expect.closeTo(x)));
 };
+
+describe("segment-color active controls", () => {
+  const shaderWithControls = `
+#uicontrol bool useTint checkbox(default=false)
+#uicontrol vec3 tint color
+#uicontrol float gain slider(min=0, max=2, default=1)
+vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
+  return (useTint ? tint : color) * gain;
+}`;
+
+  it.each([false, true])(
+    "tracks slice shaders with fallback=%s",
+    (fallback) => {
+      const segmentationUserLayer = setupSegmentationLayer();
+      const { displayState } = segmentationUserLayer;
+      displayState.fragmentSegmentColor.value = shaderWithControls;
+      const { segmentColorShaderControlState, segmentationColorUserShader } =
+        displayState;
+      const sourceControls = new Set(["useTint", "tint", "gain"]);
+      expect(segmentColorShaderControlState.activeControls.hint.value).toEqual(
+        sourceControls,
+      );
+      const binding = { disposers: [] as Disposer[] };
+      const gl =
+        segmentationUserLayer.manager.chunkManager.chunkQueueManager.gl;
+      const tester = new FragmentShaderTester(gl, {}, { outputValue: "float" });
+      try {
+        const parameters = {
+          segmentColorParameters:
+            segmentationColorUserShader.shaderParameters.value,
+          segmentColorProperties: [],
+          shaderBuilderState: segmentColorShaderControlState.builderState.value,
+          hasEquivalences: false,
+          baseSegmentColoring: false,
+          baseSegmentHighlighting: false,
+          hideSegmentZero: false,
+          hasHighlightColor: false,
+        };
+        segmentationColorUserShader.defineShader(
+          tester.builder,
+          true,
+          parameters.shaderBuilderState,
+          parameters.segmentColorParameters,
+        );
+        tester.builder.addUniform("highp float", "uSelectedAlpha");
+        tester.builder.addUniform("highp float", "uNotSelectedAlpha");
+        tester.builder.addUniform("bool", "uShowAllSegments");
+        tester.builder.setFragmentMain(
+          "outputValue = segmentColorUserShader(uint64_t(uvec2(1u, 0u))).r;",
+        );
+        tester.build();
+        tester.shader.bind();
+        const layer = {
+          gl: tester.gl,
+          displayState,
+          segmentationGroupState: displayState.segmentationGroupState.value,
+          hashTableManager: { enable: vi.fn() },
+        } as unknown as SegmentationRenderLayer;
+        const sliceView = {
+          visibleLayers: new Map([[layer, binding]]),
+        } as unknown as SliceView;
+        SegmentationRenderLayer.prototype.initializeShader.call(
+          layer,
+          sliceView,
+          tester.shader,
+          parameters,
+          fallback,
+        );
+        expect(
+          segmentColorShaderControlState.activeControls.hint.value,
+        ).toEqual(fallback ? sourceControls : new Set(["useTint", "gain"]));
+        expect(binding.disposers).toHaveLength(fallback ? 0 : 1);
+      } finally {
+        invokeDisposers(binding.disposers);
+        tester.dispose();
+      }
+    },
+  );
+
+  it("tracks offscreen colors with the layer lifetime", () => {
+    const layer = setupSegmentationLayer();
+    const { displayState } = layer;
+    displayState.fragmentSegmentColor.value = shaderWithControls;
+    const state = displayState.segmentColorShaderControlState;
+    const trackShader = vi.spyOn(state.activeControls, "trackShader");
+    try {
+      expect(displayState.getShaderBaseSegmentColor(1n)).toBeDefined();
+      expect(state.activeControls.hint.value).toEqual(
+        new Set(["useTint", "gain"]),
+      );
+      expect(trackShader).toHaveBeenLastCalledWith(
+        {
+          shader: expect.anything(),
+          parameters: state.builderState.value,
+          fallback: false,
+        },
+        layer,
+      );
+
+      state.state.get("useTint")!.trackable.value = true;
+      expect(displayState.getShaderBaseSegmentColor(1n)).toBeDefined();
+      expect(state.activeControls.hint.value).toEqual(
+        new Set(["useTint", "tint", "gain"]),
+      );
+    } finally {
+      trackShader.mockRestore();
+    }
+  });
+
+  it("does not replace control hints with an offscreen fallback shader", () => {
+    const layer = setupSegmentationLayer();
+    const { displayState } = layer;
+    displayState.fragmentSegmentColor.value = `${shaderWithControls}\n#error test fallback\n`;
+    const state = displayState.segmentColorShaderControlState;
+    const trackShader = vi.spyOn(state.activeControls, "trackShader");
+    try {
+      expect(displayState.getShaderBaseSegmentColor(1n)).toBeDefined();
+      expect(state.activeControls.hint.value).toEqual(
+        new Set(["useTint", "tint", "gain"]),
+      );
+      expect(trackShader).toHaveBeenLastCalledWith(
+        expect.objectContaining({ fallback: true }),
+        layer,
+      );
+    } finally {
+      trackShader.mockRestore();
+    }
+  });
+});
 
 describe("getShaderBaseSegmentColor", () => {
   it("restores property invlerp state after all property maps load", () => {

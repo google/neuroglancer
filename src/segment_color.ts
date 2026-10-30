@@ -42,6 +42,7 @@ import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import { shaderCodeWithLineDirective } from "#src/webgl/dynamic_shader.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+import type { ViewBinding } from "#src/webgl/shader_control_reachability.js";
 import {
   glsl_hsvToRgb,
   glsl_string,
@@ -912,12 +913,17 @@ vec4 segmentColorUserShader(uint64_t segmentId) {
     gl: GL,
     shader: ShaderProgram,
     builderState: ShaderControlsBuilderState,
+    tracking: { fallback: boolean; binding: ViewBinding },
     shaderParameters: SegmentationColorUserShaderManagerParameters = this
       .shaderParameters.value,
     inputs: SegmentationColorUserShaderManagerInputs = this.getDefaultInputs(),
   ) {
     const { parseResult } = builderState;
     const { displayState } = this;
+    displayState.segmentColorShaderControlState.activeControls.trackShader(
+      { shader, parameters: builderState, fallback: tracking.fallback },
+      tracking.binding,
+    );
     let selectedSegmentLow = 0;
     let selectedSegmentHigh = 0;
     const { segmentSelectionState } = this.displayState;
