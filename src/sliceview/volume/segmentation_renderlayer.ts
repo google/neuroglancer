@@ -346,9 +346,10 @@ uint64_t getMappedObjectId(uint64_t value) {
   }
 
   initializeShader(
-    _sliceView: SliceView,
+    sliceView: SliceView,
     shader: ShaderProgram,
     parameters: ShaderParameters,
+    fallback: boolean,
   ) {
     const { gl } = this;
     const { displayState, segmentationGroupState } = this;
@@ -407,6 +408,7 @@ uint64_t getMappedObjectId(uint64_t value) {
       gl,
       shader,
       parameters.shaderBuilderState,
+      { fallback, binding: sliceView.visibleLayers.get(this)! },
       parameters.segmentColorParameters,
       {
         segmentDefaultColor: activeSegmentDefaultColor,

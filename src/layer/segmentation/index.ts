@@ -733,7 +733,7 @@ vColor = segmentColorUserShader(uint64_t(aID));
     if (numIds === 0) return colors;
     const gl = this.layer.manager.chunkManager.chunkQueueManager.gl;
     try {
-      const { shader, parameters } = this.getSegmentColorShader(
+      const { shader, parameters, fallback } = this.getSegmentColorShader(
         emptySegmentColorShaderModule,
       );
       if (shader === null) return;
@@ -750,6 +750,7 @@ vColor = segmentColorUserShader(uint64_t(aID));
           gl,
           shader,
           parameters.shaderBuilderState,
+          { fallback, binding: this.layer },
           parameters.segmentColorParameters,
           {
             segmentDefaultColor: this.segmentDefaultColor.value,

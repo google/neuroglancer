@@ -694,7 +694,13 @@ export class SkeletonLayer extends RefCounted {
 
     edgeShader.bind();
     renderHelper.beginLayer(gl, edgeShader, renderContext, modelMatrix);
-    shaderControlState.activeControls.trackShader(edgeShaderResult, attachment);
+    shaderControlState.activeControls.trackShader(
+      {
+        ...edgeShaderResult,
+        parameters: edgeShaderParameters.skeletonShaderBuilderState,
+      },
+      attachment,
+    );
     setControlsInShader(
       gl,
       edgeShader,
@@ -705,13 +711,20 @@ export class SkeletonLayer extends RefCounted {
       gl,
       edgeShader,
       edgeShaderParameters.segmentColorShaderBuilderState,
+      { fallback: edgeShaderResult.fallback, binding: attachment },
     );
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth!);
 
     nodeShader.bind();
     renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
     gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
-    shaderControlState.activeControls.trackShader(nodeShaderResult, attachment);
+    shaderControlState.activeControls.trackShader(
+      {
+        ...nodeShaderResult,
+        parameters: nodeShaderParameters.skeletonShaderBuilderState,
+      },
+      attachment,
+    );
     setControlsInShader(
       gl,
       nodeShader,
@@ -722,6 +735,7 @@ export class SkeletonLayer extends RefCounted {
       gl,
       nodeShader,
       nodeShaderParameters.segmentColorShaderBuilderState,
+      { fallback: nodeShaderResult.fallback, binding: attachment },
     );
 
     const skeletons = source.chunks;
