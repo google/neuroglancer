@@ -25,6 +25,7 @@ import type {
 } from "#src/sliceview/volume/frontend.js";
 import { StatusMessage } from "#src/status.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import { DataType } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
 import type {
   LodResolution,
@@ -33,9 +34,11 @@ import type {
 } from "#src/voxel_editing/base.js";
 import {
   BrushShape,
+  EMPTY_VOXEL_VALUE,
   getDiskStencilKernel,
   getSphereRowRangesKernel,
   parseLodChunkKey,
+  SEGMENTATION_ERASE_SENTINEL,
   VOXEL_EDITING_BACKEND_RPC_ID,
   VOXEL_EDITING_CASCADE_DONE_RPC_ID,
   VOXEL_EDITING_FAILURE_RPC_ID,
@@ -558,6 +561,14 @@ export class VoxelEditingController extends SharedObject {
     const startZ = Math.round(startPositionCanonical[2]);
 
     const tempPos = new Float32Array(3);
+    const { dataType } = previewChunkSource.spec;
+    const eraseSentinel =
+      dataType === DataType.UINT64 || dataType === DataType.UINT32
+        ? BigInt.asUintN(
+            dataType === DataType.UINT64 ? 64 : 32,
+            SEGMENTATION_ERASE_SENTINEL,
+          )
+        : undefined;
 
     const getValue = (x: number, y: number, z: number): bigint | null => {
       tempPos[0] = x;
@@ -569,7 +580,10 @@ export class VoxelEditingController extends SharedObject {
         this.singleChannelAccess,
       );
       if (previewVal != null) {
-        return typeof previewVal === "bigint" ? previewVal : BigInt(previewVal);
+        const value =
+          typeof previewVal === "bigint" ? previewVal : BigInt(previewVal);
+        if (value === eraseSentinel) return EMPTY_VOXEL_VALUE;
+        if (value !== EMPTY_VOXEL_VALUE) return value;
       }
 
       const primaryVal = primaryChunkSource.getValueAt(
