@@ -68,7 +68,10 @@ import {
   enableLerpShaderFunction,
 } from "#src/webgl/lerp.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
-import { ActiveShaderControls } from "#src/webgl/shader_control_reachability.js";
+import {
+  ActiveShaderControls,
+  getShaderControlUniformName,
+} from "#src/webgl/shader_control_reachability.js";
 import { glsl_string } from "#src/webgl/shader_lib.js";
 import {
   preprocessStrings,
@@ -1061,21 +1064,21 @@ export function parseShaderUiControls(
 
 export type Controls = Map<string, ShaderUiControl>;
 
-function uniformName(controlName: string) {
-  return `u_shaderControl_${controlName}`;
-}
-
 export function addControlsToBuilder(
   builderState: ShaderControlsBuilderState,
   builder: ShaderBuilder,
   fragment = true,
+  uniformPrefix?: string,
 ) {
   const addCode = fragment
     ? builder.addFragmentCode.bind(builder)
     : builder.addVertexCode.bind(builder);
   const { builderValues } = builderState;
   for (const [name, control] of builderState.parseResult.controls) {
-    const uName = uniformName(name);
+    const uName = getShaderControlUniformName(name, uniformPrefix);
+    const defineName = uniformPrefix === undefined ? name : uName;
+    const defineAlias =
+      defineName === name ? "" : `#define ${name} ${defineName}\n`;
     const builderValue = builderValues[name];
     switch (control.type) {
       case "imageInvlerp": {
@@ -1117,20 +1120,20 @@ float ${uName}() {
       case "property": {
         if (builderValue) {
           const { type, id } = builderValue;
-          let code = `#define ${name} ${type}${id}\n`;
+          let code = `#define ${defineName} ${type}${id}\n`;
           if (type === "tag") {
-            code = `#define ${name} (${type}${id} == 1u)\n`;
+            code = `#define ${defineName} (${type}${id} == 1u)\n`;
           }
           if (type === "string") {
             addCode(glsl_string);
-            code = `#define ${name} string_t(${type}${id})\n`;
+            code = `#define ${defineName} string_t(${type}${id})\n`;
           }
-          addCode(code);
+          addCode(`${code}${defineAlias}`);
         }
         break;
       }
       case "checkbox": {
-        const code = `#define ${name} ${builderValue.value}\n`;
+        const code = `#define ${defineName} ${builderValue.value}\n${defineAlias}`;
         addCode(code);
         break;
       }
@@ -2176,8 +2179,9 @@ function setControlInShader(
   control: ShaderUiControl,
   value: any,
   stringLiteralIds?: ReadonlyMap<string, number>,
+  uniformPrefix?: string,
 ) {
-  const uName = uniformName(name);
+  const uName = getShaderControlUniformName(name, uniformPrefix);
   switch (control.type) {
     case "slider": {
       const uniform = shader.uniform(uName);
@@ -2248,6 +2252,7 @@ export function setControlsInShader(
   shader: ShaderProgram,
   shaderControlState: ShaderControlState,
   parseResult: ShaderControlsParseResult,
+  uniformPrefix?: string,
 ) {
   const {
     controls,
@@ -2265,6 +2270,7 @@ export function setControlsInShader(
         controlState.control,
         controlState.trackable.value,
         stringLiteralIds,
+        uniformPrefix,
       );
     }
   } else {
@@ -2277,7 +2283,15 @@ export function setControlsInShader(
         shaderUiControlsEqual(controlState.control, control)
           ? controlState.trackable.value
           : control.default;
-      setControlInShader(gl, shader, name, control, value, stringLiteralIds);
+      setControlInShader(
+        gl,
+        shader,
+        name,
+        control,
+        value,
+        stringLiteralIds,
+        uniformPrefix,
+      );
     }
   }
 }
