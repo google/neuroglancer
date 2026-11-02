@@ -221,6 +221,7 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
           shader: expect.anything(),
           parameters: state.builderState.value,
           fallback: false,
+          uniformPrefix: "u_segmentColorShaderControl_",
         },
         layer,
       );
