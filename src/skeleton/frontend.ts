@@ -241,7 +241,7 @@ void emitRGBA(vec4 color) {
   emit(vec4(color.rgb, color.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
 }
 void emitRGB(vec3 color) {
-  float alpha = segmentColor().a * uAlpha * getLineAlpha() * ${this.getCrossSectionFadeFactor()};
+  float alpha = uAlpha * getLineAlpha() * ${this.getCrossSectionFadeFactor()};
   emit(vec4(color${this.targetIsSliceView ? "" : " * alpha"}, alpha), uPickID);
 }
 void emitDefault() {
