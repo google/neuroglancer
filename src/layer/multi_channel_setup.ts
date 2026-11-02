@@ -19,7 +19,10 @@ import {
   makeCoordinateSpace,
   permuteCoordinateSpace,
 } from "#src/coordinate_transform.js";
-import type { SingleChannelMetadata } from "#src/datasource/index.js";
+import type {
+  RelatedDataSource,
+  SingleChannelMetadata,
+} from "#src/datasource/index.js";
 import type { ImageUserLayer } from "#src/layer/image/index.js";
 import {
   type LayerListSpecification,
@@ -166,6 +169,33 @@ function getLayerChannelMetadata(
 ): SingleChannelMetadata | undefined {
   const channels = getChannelMetadata(layer);
   return channels?.[channelIndex];
+}
+
+function getRelatedSources(layer: ManagedUserLayer): RelatedDataSource[] {
+  const loadState = getLoadState(layer);
+  if (!loadState || loadState.error) return [];
+  return loadState.dataSource.relatedSources ?? [];
+}
+
+function makeRelatedLayers(
+  managedLayer: ManagedUserLayer,
+  makeLayer: MakeLayerFn,
+  startingName: string,
+  insertionIndex: number | undefined,
+): ManagedUserLayer[] {
+  return getRelatedSources(managedLayer).map((relatedSource, relatedIndex) => {
+    const newLayer = makeLayer(
+      managedLayer.manager,
+      `${startingName} ${relatedSource.name}`,
+      { type: relatedSource.suggestedLayerType, source: relatedSource.url },
+    );
+    managedLayer.manager.add(
+      newLayer,
+      insertionIndex === undefined ? undefined : insertionIndex + relatedIndex,
+    );
+    newLayer.setArchived(relatedIndex > 3);
+    return newLayer;
+  });
 }
 
 function checkLayerInputMetadataForErrors(layer: ManagedUserLayer): boolean {
@@ -367,7 +397,7 @@ export function createImageLayerAsMultiChannel(
       "Input omera metadata is not set up correctly. Colors are either missing or all close to black, and all ranges are the same or missing. Using default values for display purposes.",
     );
   }
-  const newChannelLayers: ManagedUserLayer[] = [];
+  const newLayers: ManagedUserLayer[] = [];
   for (let i = 0; i < totalLocalChannels; i++) {
     const channelMetadata = getLayerChannelMetadata(managedLayer, i);
     const { localPosition, chanName } = getAdjustedLocalPositionAndName(i);
@@ -394,7 +424,7 @@ export function createImageLayerAsMultiChannel(
         parentIndex !== -1 ? parentIndex + i : undefined,
       );
       addedLayer = newLayer;
-      newChannelLayers.push(newLayer);
+      newLayers.push(newLayer);
     }
     setupLayerPostCreation(
       addedLayer,
@@ -405,20 +435,30 @@ export function createImageLayerAsMultiChannel(
       ignoreInputMetadata,
     );
   }
-  // Propagate new channel layers to all layer group subsets that contain the original managed layer
+  const parentIndex =
+    managedLayer.manager.layerManager.managedLayers.indexOf(managedLayer);
+  newLayers.push(
+    ...makeRelatedLayers(
+      managedLayer,
+      makeLayer,
+      startingName,
+      parentIndex !== -1 ? parentIndex + totalLocalChannels : undefined,
+    ),
+  );
+  // Propagate new layers to all layer group subsets that contain the original managed layer
   // The initial manager.add() above only adds to the layer's own manager and its owner
   // Update other subsets referencing the original layer
   const { root } = managedLayer.manager;
-  if (newChannelLayers.length > 0) {
+  if (newLayers.length > 0) {
     for (const subset of root.subsets) {
       // Skip the subset that is the current manager
       if (subset === managedLayer.manager) continue;
       const subsetIndex =
         subset.layerManager.managedLayers.indexOf(managedLayer);
       if (subsetIndex === -1) continue;
-      for (let j = 0; j < newChannelLayers.length; j++) {
+      for (let j = 0; j < newLayers.length; j++) {
         subset.layerManager.addManagedLayer(
-          newChannelLayers[j].addRef(),
+          newLayers[j].addRef(),
           subsetIndex + 1 + j,
         );
       }

@@ -268,6 +268,12 @@ class ShaderCodeOverlay extends Overlay {
   }
 }
 
+declare module "#src/layer/index.js" {
+  interface RegisteredLayerTypes {
+    mesh: SingleMeshUserLayer;
+  }
+}
+
 registerLayerType(SingleMeshUserLayer);
 registerLayerTypeDetector((subsource) => {
   if (subsource.singleMesh !== undefined) {

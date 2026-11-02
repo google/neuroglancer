@@ -598,6 +598,12 @@ class ShaderCodeOverlay extends Overlay {
   }
 }
 
+declare module "#src/layer/index.js" {
+  interface RegisteredLayerTypes {
+    image: ImageUserLayer;
+  }
+}
+
 registerLayerType(ImageUserLayer);
 registerVolumeLayerType(VolumeType.IMAGE, ImageUserLayer);
 // Use ImageUserLayer as a fallback layer type if there is a `volume` subsource.

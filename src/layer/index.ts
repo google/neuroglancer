@@ -2355,6 +2355,13 @@ export class LayerSubsetSpecification extends LayerListSpecification {
 export type UserLayerConstructor<LayerType extends UserLayer = UserLayer> =
   typeof UserLayer & AnyConstructor<LayerType>;
 
+export interface RegisteredLayerTypes {
+  new: NewUserLayer;
+  auto: AutoUserLayer;
+}
+
+export type LayerTypeName = keyof RegisteredLayerTypes;
+
 export const layerTypes = new Map<string, UserLayerConstructor>();
 const volumeLayerTypes = new Map<VolumeType, UserLayerConstructor>();
 export interface LayerTypeGuess {
