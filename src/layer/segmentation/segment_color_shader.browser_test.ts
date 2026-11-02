@@ -258,6 +258,97 @@ vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
 });
 
 describe("getShaderBaseSegmentColor", () => {
+  it.each(["property", "helper", "invlerp"])(
+    "updates %s shader dependencies when linking to another segmentation group",
+    (controlType) => {
+      const layer = setupSegmentationLayer();
+      const otherLayer = makeLayer(layer.manager, "other", {
+        type: "segmentation",
+      }).layer! as SegmentationUserLayer;
+      const { displayState } = layer;
+      setSegmentPropertyMap(layer, {
+        ids: new BigUint64Array([1n]),
+        properties: [
+          {
+            id: "foo",
+            type: "number",
+            dataType: DataType.FLOAT32,
+            values: new Float32Array([25]),
+            description: undefined,
+            bounds: [0, 100],
+          },
+        ],
+      });
+      setSegmentPropertyMap(otherLayer, {
+        ids: new BigUint64Array([1n]),
+        properties: [
+          {
+            id: "bar",
+            type: "number",
+            dataType: DataType.FLOAT32,
+            values: new Float32Array([50]),
+            description: undefined,
+            bounds: [0, 100],
+          },
+          {
+            id: "foo",
+            type: "number",
+            dataType: DataType.UINT8,
+            values: new Uint8Array([75]),
+            description: undefined,
+            bounds: [0, 100],
+          },
+        ],
+      });
+      const directive =
+        controlType === "property"
+          ? '#uicontrol property fooProperty(type="number")'
+          : controlType === "invlerp"
+            ? '#uicontrol invlerp normalized(property="foo", range=[0, 100])'
+            : "";
+      const expression =
+        controlType === "property"
+          ? "float(fooProperty) / 100.0"
+          : controlType === "invlerp"
+            ? "normalized()"
+            : 'float(prop("foo")) / 100.0';
+      displayState.fragmentSegmentColor.value = `
+${directive}
+vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
+  return vec3(${expression}, 0.0, 0.0);
+}`;
+      if (controlType === "property") {
+        setSegmentPropertyControl(layer, "fooProperty", {
+          type: "numerical",
+          id: "foo",
+        });
+      }
+      const { segmentationColorUserShader, segmentColorShaderControlState } =
+        displayState;
+      expect(segmentationColorUserShader.usedProperties.value).toEqual([
+        { identifier: "numerical0", dataType: DataType.FLOAT32 },
+      ]);
+      expectColor(displayState.getShaderBaseSegmentColor(1n)!, [0.25, 0, 0, 1]);
+      const previousBuilderState =
+        segmentColorShaderControlState.builderState.value;
+
+      displayState.linkedSegmentationGroup.linkToLayer(otherLayer);
+
+      expect(displayState.segmentationGroupState.value).toBe(
+        otherLayer.displayState.segmentationGroupState.value,
+      );
+      expect(segmentationColorUserShader.usedProperties.value).toEqual([
+        { identifier: "numerical1", dataType: DataType.UINT8 },
+      ]);
+      if (controlType !== "helper") {
+        expect(segmentColorShaderControlState.builderState.value).not.toBe(
+          previousBuilderState,
+        );
+      }
+      expectColor(displayState.getShaderBaseSegmentColor(1n)!, [0.75, 0, 0, 1]);
+    },
+  );
+
   it("restores property invlerp state after all property maps load", () => {
     const makePropertyMap = (propertyIds: string[]) =>
       new PreprocessedSegmentPropertyMap(

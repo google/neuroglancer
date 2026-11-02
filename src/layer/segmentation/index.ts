@@ -610,7 +610,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
         this.fragmentSegmentColor,
         makeCachedLazyDerivedWatchableValue(
           getSegmentColorShaderDataContext,
-          this.segmentationGroupState.value.segmentPropertyMap,
+          this.segmentPropertyMap,
           this.layer.isReadyWatchable,
         ),
         undefined,
