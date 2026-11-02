@@ -225,6 +225,9 @@ export interface SegmentationDisplayState {
 
   // Indirect properties
   hideSegmentZero: WatchableValueInterface<boolean>;
+  segmentPropertyMap: WatchableValueInterface<
+    PreprocessedSegmentPropertyMap | undefined
+  >;
   segmentColorHash: WatchableValueInterface<number>;
   segmentStatedColors: WatchableValueInterface<Uint64Map>;
   tempSegmentStatedColors2d: WatchableValueInterface<Uint64Map>;

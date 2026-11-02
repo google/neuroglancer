@@ -368,14 +368,13 @@ export class SegmentColorUserShaderManager extends RefCounted {
           return definitions;
         },
         this.displayState.segmentColorShaderControlState.builderState,
-        this.displayState.segmentationGroupState.value.segmentPropertyMap,
+        this.displayState.segmentPropertyMap,
       ),
     );
   }
 
   private getSegmentPropertyMap() {
-    return this.displayState.segmentationGroupState.value.segmentPropertyMap
-      .value;
+    return this.displayState.segmentPropertyMap.value;
   }
 
   get mayReturnAlpha() {
