@@ -66,6 +66,7 @@ import {
 } from "#src/webgl/texture_access.js";
 
 const NUM_COMPONENTS = 2;
+const SEGMENT_COLOR_CONTROL_PREFIX = "u_segmentColorShaderControl_";
 
 export const DEFAULT_USER_MAIN_SEGMENT_COLOR = `
 vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
@@ -855,7 +856,12 @@ ${parseResult.code}`;
         );
         addCode(`highp ${getShaderOutputType(dataType)} ${identifier};\n`);
       }
-      addControlsToBuilder(builderState, builder, fragment);
+      addControlsToBuilder(
+        builderState,
+        builder,
+        fragment,
+        SEGMENT_COLOR_CONTROL_PREFIX,
+      );
       const loadSegmentPropertiesCode = `
 bool loadSegmentProperties(uint64_t id) {
   uint64_t propertyIndex_64;
@@ -907,6 +913,24 @@ vec4 segmentColorUserShader(uint64_t segmentId) {
   return segmentColorUserShader(segmentId, 0.5);
 }
 `);
+    if (userCode) {
+      addCode(
+        [...parseResult.controls.keys()]
+          .map((name) => `#undef ${name}\n`)
+          .join(""),
+      );
+      const selectAliases = [...parseResult.controls]
+        .filter(([, control]) => control.type === "select")
+        .map(([name]) => `#undef ${name}\n`)
+        .join("");
+      if (selectAliases) {
+        if (fragment) {
+          builder.addVertexCode(selectAliases);
+        } else {
+          builder.addFragmentCode(selectAliases);
+        }
+      }
+    }
   }
 
   enable(
@@ -921,7 +945,12 @@ vec4 segmentColorUserShader(uint64_t segmentId) {
     const { parseResult } = builderState;
     const { displayState } = this;
     displayState.segmentColorShaderControlState.activeControls.trackShader(
-      { shader, parameters: builderState, fallback: tracking.fallback },
+      {
+        shader,
+        parameters: builderState,
+        fallback: tracking.fallback,
+        uniformPrefix: SEGMENT_COLOR_CONTROL_PREFIX,
+      },
       tracking.binding,
     );
     let selectedSegmentLow = 0;
@@ -971,6 +1000,7 @@ vec4 segmentColorUserShader(uint64_t segmentId) {
       shader,
       this.displayState.segmentColorShaderControlState,
       parseResult,
+      SEGMENT_COLOR_CONTROL_PREFIX,
     );
     const activeSegmentPropertyIdentifiers =
       this.updateSegmentPropertyTextures(builderState);

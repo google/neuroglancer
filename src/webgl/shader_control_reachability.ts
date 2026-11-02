@@ -24,10 +24,11 @@ import type {
   ShaderControlsParseResult,
 } from "#src/webgl/shader_ui_controls.js";
 
-const UNIFORM_PREFIX = "u_shaderControl_";
-
-function uniformName(controlName: string): string {
-  return `${UNIFORM_PREFIX}${controlName}`;
+export function getShaderControlUniformName(
+  controlName: string,
+  uniformPrefix = "u_shaderControl_",
+): string {
+  return `${uniformPrefix}${controlName}`;
 }
 
 function escapeRegExp(text: string): string {
@@ -54,6 +55,7 @@ function isNamedInCode(
 export function computeActiveControls(
   shader: ShaderProgram,
   parseResult: ShaderControlsParseResult,
+  uniformPrefix?: string,
 ): Set<string> {
   const active = new Set<string>();
   const { uniforms } = shader;
@@ -75,7 +77,7 @@ export function computeActiveControls(
       // (bound/interval uniforms for invlerp, texture sampler for transfer
       // function), each named `<kind>_u_shaderControl_<name>`.
       // Matching the whole suffix keeps control `c` from matching `ca`.
-      const suffix = `_${uniformName(name)}`;
+      const suffix = `_${getShaderControlUniformName(name, uniformPrefix)}`;
       let found = false;
       for (const [uName, location] of uniforms) {
         if (location !== null && uName.endsWith(suffix)) {
@@ -87,7 +89,9 @@ export function computeActiveControls(
       continue;
     }
     // slider, color: single uniform per control.
-    if (uniforms.get(uniformName(name)) != null) {
+    if (
+      uniforms.get(getShaderControlUniformName(name, uniformPrefix)) != null
+    ) {
       active.add(name);
     }
   }
@@ -111,6 +115,7 @@ export type ViewBinding = RefCounted | { readonly disposers: Disposer[] };
 export interface TrackedShader {
   readonly shader: ShaderProgram | null;
   readonly parameters: ShaderControlsBuilderState;
+  readonly uniformPrefix?: string;
   // A fallback shader is built from older shader text.
   readonly fallback: boolean;
 }
@@ -172,7 +177,7 @@ export class ActiveShaderControls extends RefCounted {
   }
 
   trackShader(
-    { shader, parameters, fallback }: TrackedShader,
+    { shader, parameters, fallback, uniformPrefix }: TrackedShader,
     binding: ViewBinding,
   ) {
     if (fallback || shader === null) return;
@@ -194,7 +199,7 @@ export class ActiveShaderControls extends RefCounted {
     }
     record.controlsByProgram.set(
       shader.program,
-      computeActiveControls(shader, parameters.parseResult),
+      computeActiveControls(shader, parameters.parseResult, uniformPrefix),
     );
     this.updateLastDraw();
   }
