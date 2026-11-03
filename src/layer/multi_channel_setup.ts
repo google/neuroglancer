@@ -421,7 +421,7 @@ export function createImageLayerAsMultiChannel(
     const relatedSource = relatedSources[i];
     const newLayer = makeLayer(
       managedLayer.manager,
-      `${startingName} ${relatedSource.name}`,
+      `${startingName} labels ${relatedSource.name}`,
       { type: relatedSource.suggestedLayerType, source: relatedSource.url },
     );
     managedLayer.manager.add(
