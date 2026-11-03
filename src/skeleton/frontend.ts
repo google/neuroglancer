@@ -184,7 +184,8 @@ vec4 segmentColor() {
 }
 void emitRGBA(vec4 color) {
   color.a *= uColor.a;
-  emit(vec4(color.rgb * color.a, color.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
+  color.rgb *= ${this.getPremultiplyAlphaFactor()};
+  emit(vec4(color.rgb, color.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
 }
 void emitRGB(vec3 color) {
   emit(vec4(color * uColor.a, uColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
@@ -254,7 +255,7 @@ vec4 segmentColor() {
 }
 void emitRGBA(vec4 color) {
   color.a *= uColor.a;
-  color.rgb *= color.a;
+  color.rgb *= ${this.getPremultiplyAlphaFactor()};
   vec4 borderColor = color;
   vec4 circleColor = getCircleColor(color, borderColor);
   emit(circleColor, uPickID);
@@ -316,6 +317,10 @@ void emitDefault() {
         ),
       );
     });
+  }
+
+  getPremultiplyAlphaFactor() {
+    return this.targetIsSliceView ? "1.0" : "color.a";
   }
 
   getCrossSectionFadeFactor() {
