@@ -24,17 +24,20 @@ import type {
   SingleChannelMetadata,
 } from "#src/datasource/index.js";
 import type { ImageUserLayer } from "#src/layer/image/index.js";
-import {
-  type LayerListSpecification,
-  type ManagedUserLayer,
-  type UserLayer,
+import type {
+  LayerListSpecification,
+  LayerTypeName,
+  ManagedUserLayer,
+  UserLayer,
 } from "#src/layer/index.js";
+import { SELECTED_ALPHA_JSON_KEY } from "#src/layer/segmentation/json_keys.js";
 import { BLEND_MODES } from "#src/trackable_blend.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import type { vec3 } from "#src/util/geom.js";
 import { dataTypeIntervalEqual, defaultDataTypeRange } from "#src/util/lerp.js";
 import type { ShaderImageInvlerpControl } from "#src/webgl/shader_ui_controls.js";
+import { SHADER_CONTROL_TOOL_ID } from "#src/widget/shader_controls.js";
 
 function changeLayerName(managedLayer: ManagedUserLayer, newName: string) {
   newName = managedLayer.manager.root.layerManager.getUniqueLayerName(newName);
@@ -175,6 +178,21 @@ function getRelatedSources(layer: ManagedUserLayer): RelatedDataSource[] {
   const loadState = getLoadState(layer);
   if (!loadState || loadState.error) return [];
   return loadState.dataSource.relatedSources ?? [];
+}
+
+function getPaletteToolsJson(layers: readonly ManagedUserLayer[]): object[] {
+  const toolsByLayerType: Partial<Record<LayerTypeName, object[]>> = {
+    image: [
+      { type: SHADER_CONTROL_TOOL_ID, control: "contrast" },
+      { type: SHADER_CONTROL_TOOL_ID, control: "color" },
+    ],
+    segmentation: [{ type: SELECTED_ALPHA_JSON_KEY }],
+  };
+  return layers.flatMap((layer) =>
+    (toolsByLayerType[layer.layer?.type as LayerTypeName] ?? []).map(
+      (toolJson) => ({ layer: layer.name, ...toolJson }),
+    ),
+  );
 }
 
 function checkLayerInputMetadataForErrors(layer: ManagedUserLayer): boolean {
@@ -451,7 +469,10 @@ export function createImageLayerAsMultiChannel(
       }
     }
   }
-  root.display.multiChannelSetupFinished.dispatch();
+  root.display.multiChannelSetupFinished.dispatch({
+    name: startingName,
+    toolsJson: getPaletteToolsJson([managedLayer, ...newLayers]),
+  });
   postCreationSetupFunctions.forEach((fn) => fn());
   reverseGlobalDimOrderIfNeeded(managedLayer);
 }
