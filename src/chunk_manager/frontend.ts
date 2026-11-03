@@ -242,12 +242,6 @@ export class ChunkQueueManager extends SharedObject {
     }
     if (update.promise !== undefined) {
       this.handleFetch_(source, update);
-    } else if (update.id === undefined) {
-      // Invalidate source.
-      for (const chunkKey of source.chunks.keys()) {
-        source.deleteChunk(chunkKey);
-      }
-      visibleChunksChanged = true;
     } else {
       const newState: number = update.state;
       if (newState === ChunkState.EXPIRED) {
@@ -257,6 +251,10 @@ export class ChunkQueueManager extends SharedObject {
         let chunk: Chunk;
         const key = update.id;
         if (update.new) {
+          if (source.chunks.has(key)) {
+            // Replace the copy retained when the source was invalidated.
+            source.deleteChunk(key);
+          }
           chunk = source.getChunk(update);
           source.addChunk(key, chunk);
         } else {
