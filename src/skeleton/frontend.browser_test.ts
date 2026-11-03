@@ -28,6 +28,7 @@ import { mat4 } from "#src/util/geom.js";
 import { NullarySignal } from "#src/util/signal.js";
 import { VisibilityPriorityAggregator } from "#src/visibility_priority/frontend.js";
 import { GLBuffer } from "#src/webgl/buffer.js";
+import { drawCircles, initializeCircleShader } from "#src/webgl/circles.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import { drawLines, initializeLineShader } from "#src/webgl/lines.js";
 import {
@@ -51,10 +52,15 @@ void emit(vec4 color, highp uint pickId) {
 `);
 }
 
-describe("skeleton edge RGBA", () => {
-  it.each([true, false])(
-    "applies opacity once with targetIsSliceView=%s",
-    (targetIsSliceView) => {
+describe("skeleton RGBA", () => {
+  it.each([
+    [true, "edge"],
+    [false, "edge"],
+    [true, "node"],
+    [false, "node"],
+  ] as const)(
+    "applies opacity once with targetIsSliceView=%s and primitive=%s",
+    (targetIsSliceView, primitive) => {
       webglTest((gl) => {
         const resources = new RefCounted();
         try {
@@ -119,7 +125,9 @@ describe("skeleton edge RGBA", () => {
           setOneDimensionalTextureData(
             gl,
             computeTextureFormat(new TextureFormat(), DataType.FLOAT32, 3),
-            new Float32Array([-1, 0, 0, 1, 0, 0]),
+            new Float32Array(
+              primitive === "edge" ? [-1, 0, 0, 1, 0, 0] : [0, 0, 0],
+            ),
           );
 
           for (const [shaderAlpha, layerAlpha] of [
@@ -131,28 +139,47 @@ describe("skeleton edge RGBA", () => {
             skeletonRenderingOptions.shader.value = `void main() {
   emitRGBA(vec4(1.0, 0.5, 0.25, ${shaderAlpha.toFixed(1)}));
 }`;
-            const result = renderHelper.edgeShaderGetter(emitColor);
+            const result =
+              primitive === "edge"
+                ? renderHelper.edgeShaderGetter(emitColor)
+                : renderHelper.nodeShaderGetter(emitColor);
             expect(result.fallback).toBe(false);
             const shader = result.shader!;
             expect(shader).not.toBeNull();
             shader.bind();
             renderHelper.beginLayer(gl, shader, renderContext, mat4.create());
             gl.uniform4f(shader.uniform("uColor"), 1, 1, 1, layerAlpha);
-            gl.uniform1f(shader.uniform("uLineWidth"), 3);
-            initializeLineShader(
-              shader,
-              renderContext.projectionParameters,
-              targetIsSliceView ? 1 : 0,
-            );
+            if (primitive === "edge") {
+              gl.uniform1f(shader.uniform("uLineWidth"), 3);
+              initializeLineShader(
+                shader,
+                renderContext.projectionParameters,
+                targetIsSliceView ? 1 : 0,
+              );
+            } else {
+              gl.uniform1f(shader.uniform("uNodeDiameter"), 3);
+              initializeCircleShader(
+                shader,
+                renderContext.projectionParameters,
+                {
+                  featherWidthInPixels: targetIsSliceView ? 1 : 0,
+                },
+              );
+            }
             const textureUnit = gl.getUniform(
               shader.program,
               shader.uniform("uVertexAttributeSampler0")!,
             ) as number;
             gl.activeTexture(gl.TEXTURE0 + textureUnit);
             gl.bindTexture(gl.TEXTURE_2D, texture);
-            const attribute = shader.attribute("aVertexIndex");
-            indexBuffer.bindToVertexAttribI(attribute, 2);
-            gl.vertexAttribDivisor(attribute, 1);
+            const attribute =
+              primitive === "edge"
+                ? shader.attribute("aVertexIndex")
+                : undefined;
+            if (attribute !== undefined) {
+              indexBuffer.bindToVertexAttribI(attribute, 2);
+              gl.vertexAttribDivisor(attribute, 1);
+            }
             framebuffer.bind(9, 9);
 
             for (const blend of [false, true]) {
@@ -166,7 +193,11 @@ describe("skeleton edge RGBA", () => {
                   gl.ONE_MINUS_SRC_ALPHA,
                 );
               }
-              drawLines(gl, 1, 1);
+              if (primitive === "edge") {
+                drawLines(gl, 1, 1);
+              } else {
+                drawCircles(gl, 1, 1);
+              }
               const pixel = new Uint8Array(4);
               gl.readPixels(4, 4, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
               const alpha = shaderAlpha * layerAlpha;
@@ -180,8 +211,10 @@ describe("skeleton edge RGBA", () => {
                 expect(Math.abs(pixel[3] / 255 - alpha)).toBeLessThan(2 / 255);
               }
             }
-            gl.vertexAttribDivisor(attribute, 0);
-            gl.disableVertexAttribArray(attribute);
+            if (attribute !== undefined) {
+              gl.vertexAttribDivisor(attribute, 0);
+              gl.disableVertexAttribArray(attribute);
+            }
             renderHelper.endLayer(gl, shader);
           }
         } finally {

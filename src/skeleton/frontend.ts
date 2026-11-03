@@ -254,7 +254,7 @@ vec4 segmentColor() {
 }
 void emitRGBA(vec4 color) {
   color.a *= uColor.a;
-  color.rgb *= color.a;
+  ${this.targetIsSliceView ? "" : "color.rgb *= color.a;"}
   vec4 borderColor = color;
   vec4 circleColor = getCircleColor(color, borderColor);
   emit(circleColor, uPickID);
