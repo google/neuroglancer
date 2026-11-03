@@ -177,27 +177,6 @@ function getRelatedSources(layer: ManagedUserLayer): RelatedDataSource[] {
   return loadState.dataSource.relatedSources ?? [];
 }
 
-function makeRelatedLayers(
-  managedLayer: ManagedUserLayer,
-  makeLayer: MakeLayerFn,
-  startingName: string,
-  insertionIndex: number | undefined,
-): ManagedUserLayer[] {
-  return getRelatedSources(managedLayer).map((relatedSource, relatedIndex) => {
-    const newLayer = makeLayer(
-      managedLayer.manager,
-      `${startingName} ${relatedSource.name}`,
-      { type: relatedSource.suggestedLayerType, source: relatedSource.url },
-    );
-    managedLayer.manager.add(
-      newLayer,
-      insertionIndex === undefined ? undefined : insertionIndex + relatedIndex,
-    );
-    newLayer.setArchived(relatedIndex > 3);
-    return newLayer;
-  });
-}
-
 function checkLayerInputMetadataForErrors(layer: ManagedUserLayer): boolean {
   // If all the ranges are the same and the colors are black, then we can
   // assume that the input metadata is not set up correctly
@@ -414,11 +393,11 @@ export function createImageLayerAsMultiChannel(
       changeLayerName(managedLayer, name);
       managedLayer.localPosition.value = new Float32Array(localPosition);
     }
+    const parentIndex =
+      managedLayer.manager.layerManager.managedLayers.indexOf(managedLayer);
     if (i !== 0) {
       const thisSpec = { ...spec, localPosition };
       const newLayer = makeLayer(managedLayer.manager, name, thisSpec);
-      const parentIndex =
-        managedLayer.manager.layerManager.managedLayers.indexOf(managedLayer);
       managedLayer.manager.add(
         newLayer,
         parentIndex !== -1 ? parentIndex + i : undefined,
@@ -437,14 +416,21 @@ export function createImageLayerAsMultiChannel(
   }
   const parentIndex =
     managedLayer.manager.layerManager.managedLayers.indexOf(managedLayer);
-  newLayers.push(
-    ...makeRelatedLayers(
-      managedLayer,
-      makeLayer,
-      startingName,
-      parentIndex !== -1 ? parentIndex + totalLocalChannels : undefined,
-    ),
-  );
+  const relatedSources = getRelatedSources(managedLayer);
+  for (let i = 0; i < relatedSources.length; i++) {
+    const relatedSource = relatedSources[i];
+    const newLayer = makeLayer(
+      managedLayer.manager,
+      `${startingName} ${relatedSource.name}`,
+      { type: relatedSource.suggestedLayerType, source: relatedSource.url },
+    );
+    managedLayer.manager.add(
+      newLayer,
+      parentIndex !== -1 ? parentIndex + totalLocalChannels + i : undefined,
+    );
+    newLayer.setArchived(i > 3);
+  }
+
   // Propagate new layers to all layer group subsets that contain the original managed layer
   // The initial manager.add() above only adds to the layer's own manager and its owner
   // Update other subsets referencing the original layer
