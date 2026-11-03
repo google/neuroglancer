@@ -429,6 +429,7 @@ export function createImageLayerAsMultiChannel(
       parentIndex !== -1 ? parentIndex + totalLocalChannels + i : undefined,
     );
     newLayer.setArchived(i > 3);
+    newLayers.push(newLayer);
   }
 
   // Propagate new layers to all layer group subsets that contain the original managed layer
