@@ -480,26 +480,25 @@ function resolveUrl(options: GetKvStoreBasedDataSourceOptions) {
 
 async function getOmeLabelSources(
   sharedKvStoreContext: SharedKvStoreContext,
-  imageUrl: string,
-  zarrVersion: 2 | 3,
-  options: Partial<ProgressOptions>,
+  url: string,
+  options: { zarrVersion: 2 | 3 } & Partial<ProgressOptions>,
 ): Promise<RelatedDataSource[] | undefined> {
   const labelsGroupUrl = kvstoreEnsureDirectoryPipelineUrl(
-    joinBaseUrlAndPath(imageUrl, "labels"),
+    joinBaseUrlAndPath(url, "labels"),
   );
   try {
     const metadata = await getMetadata(sharedKvStoreContext, labelsGroupUrl, {
       ...options,
-      zarrVersion,
       expectedNodeType: "group",
     });
     if (metadata === undefined) return undefined;
     return parseOmeLabelsGroup(
       labelsGroupUrl,
       metadata.userAttributes,
-      zarrVersion,
+      options.zarrVersion,
     );
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
     // A bad labels group must not stop the image from opening.
     console.warn(`Ignoring OME labels group ${labelsGroupUrl}:`, error);
     return undefined;
@@ -569,12 +568,10 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
               zarrVersion: metadata.zarrVersion,
               explicitDimensionSeparator: dimensionSeparator,
             }),
-            getOmeLabelSources(
-              sharedKvStoreContext,
-              kvStoreUrl,
-              metadata.zarrVersion,
-              progressOptions,
-            ),
+            getOmeLabelSources(sharedKvStoreContext, kvStoreUrl, {
+              ...progressOptions,
+              zarrVersion: metadata.zarrVersion,
+            }),
           ]);
         } else {
           multiscaleInfo = getMultiscaleInfoForSingleArray(
