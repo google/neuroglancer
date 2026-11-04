@@ -19,6 +19,7 @@ import { makeCoordinateSpace } from "#src/coordinate_transform.js";
 import type {
   SingleChannelMetadata,
   ChannelMetadata,
+  RelatedDataSource,
 } from "#src/datasource/index.js";
 import {
   joinBaseUrlAndPath,
@@ -38,6 +39,7 @@ import {
   verifyObject,
   verifyObjectProperty,
   verifyOptionalObjectProperty,
+  verifyStringArray,
   verifyString,
 } from "#src/util/json.js";
 import { clampToInterval } from "#src/util/lerp.js";
@@ -828,6 +830,26 @@ function parseOmeMultiscale(
       },
     };
   }
+}
+
+export function parseOmeLabelsGroup(
+  labelsGroupUrl: string,
+  attrs: unknown,
+  zarrVersion: 2 | 3,
+): RelatedDataSource[] | undefined {
+  verifyObject(attrs);
+  const metadata =
+    verifyOptionalObjectProperty(attrs, "ome", verifyObject) ?? attrs;
+  const paths = verifyOptionalObjectProperty(
+    metadata,
+    "labels",
+    verifyStringArray,
+  );
+  return paths?.map((path) => ({
+    name: path,
+    url: `${kvstoreEnsureDirectoryPipelineUrl(joinBaseUrlAndPath(labelsGroupUrl, path))}|zarr${zarrVersion}:`,
+    suggestedLayerType: "segmentation",
+  }));
 }
 
 export function parseOmeMetadata(

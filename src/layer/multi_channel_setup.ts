@@ -19,19 +19,25 @@ import {
   makeCoordinateSpace,
   permuteCoordinateSpace,
 } from "#src/coordinate_transform.js";
-import type { SingleChannelMetadata } from "#src/datasource/index.js";
+import type {
+  RelatedDataSource,
+  SingleChannelMetadata,
+} from "#src/datasource/index.js";
 import type { ImageUserLayer } from "#src/layer/image/index.js";
-import {
-  type LayerListSpecification,
-  type ManagedUserLayer,
-  type UserLayer,
+import type {
+  LayerListSpecification,
+  LayerTypeName,
+  ManagedUserLayer,
+  UserLayer,
 } from "#src/layer/index.js";
+import { SELECTED_ALPHA_JSON_KEY } from "#src/layer/segmentation/json_keys.js";
 import { BLEND_MODES } from "#src/trackable_blend.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import type { vec3 } from "#src/util/geom.js";
 import { dataTypeIntervalEqual, defaultDataTypeRange } from "#src/util/lerp.js";
 import type { ShaderImageInvlerpControl } from "#src/webgl/shader_ui_controls.js";
+import { SHADER_CONTROL_TOOL_ID } from "#src/widget/shader_controls.js";
 
 function changeLayerName(managedLayer: ManagedUserLayer, newName: string) {
   newName = managedLayer.manager.root.layerManager.getUniqueLayerName(newName);
@@ -166,6 +172,27 @@ function getLayerChannelMetadata(
 ): SingleChannelMetadata | undefined {
   const channels = getChannelMetadata(layer);
   return channels?.[channelIndex];
+}
+
+function getRelatedSources(layer: ManagedUserLayer): RelatedDataSource[] {
+  const loadState = getLoadState(layer);
+  if (!loadState || loadState.error) return [];
+  return loadState.dataSource.relatedSources ?? [];
+}
+
+function getPaletteToolsJson(layers: readonly ManagedUserLayer[]): object[] {
+  const toolsByLayerType: Partial<Record<LayerTypeName, object[]>> = {
+    image: [
+      { type: SHADER_CONTROL_TOOL_ID, control: "contrast" },
+      { type: SHADER_CONTROL_TOOL_ID, control: "color" },
+    ],
+    segmentation: [{ type: SELECTED_ALPHA_JSON_KEY }],
+  };
+  return layers.flatMap((layer) =>
+    (toolsByLayerType[layer.layer?.type as LayerTypeName] ?? []).map(
+      (toolJson) => ({ layer: layer.name, ...toolJson }),
+    ),
+  );
 }
 
 function checkLayerInputMetadataForErrors(layer: ManagedUserLayer): boolean {
@@ -367,7 +394,7 @@ export function createImageLayerAsMultiChannel(
       "Input omera metadata is not set up correctly. Colors are either missing or all close to black, and all ranges are the same or missing. Using default values for display purposes.",
     );
   }
-  const newChannelLayers: ManagedUserLayer[] = [];
+  const newLayers: ManagedUserLayer[] = [];
   for (let i = 0; i < totalLocalChannels; i++) {
     const channelMetadata = getLayerChannelMetadata(managedLayer, i);
     const { localPosition, chanName } = getAdjustedLocalPositionAndName(i);
@@ -384,17 +411,17 @@ export function createImageLayerAsMultiChannel(
       changeLayerName(managedLayer, name);
       managedLayer.localPosition.value = new Float32Array(localPosition);
     }
+    const parentIndex =
+      managedLayer.manager.layerManager.managedLayers.indexOf(managedLayer);
     if (i !== 0) {
       const thisSpec = { ...spec, localPosition };
       const newLayer = makeLayer(managedLayer.manager, name, thisSpec);
-      const parentIndex =
-        managedLayer.manager.layerManager.managedLayers.indexOf(managedLayer);
       managedLayer.manager.add(
         newLayer,
         parentIndex !== -1 ? parentIndex + i : undefined,
       );
       addedLayer = newLayer;
-      newChannelLayers.push(newLayer);
+      newLayers.push(newLayer);
     }
     setupLayerPostCreation(
       addedLayer,
@@ -405,26 +432,47 @@ export function createImageLayerAsMultiChannel(
       ignoreInputMetadata,
     );
   }
-  // Propagate new channel layers to all layer group subsets that contain the original managed layer
+  const parentIndex =
+    managedLayer.manager.layerManager.managedLayers.indexOf(managedLayer);
+  const relatedSources = getRelatedSources(managedLayer);
+  for (let i = 0; i < relatedSources.length; i++) {
+    const relatedSource = relatedSources[i];
+    const newLayer = makeLayer(
+      managedLayer.manager,
+      `${startingName} labels ${relatedSource.name}`,
+      { type: relatedSource.suggestedLayerType, source: relatedSource.url },
+    );
+    managedLayer.manager.add(
+      newLayer,
+      parentIndex !== -1 ? parentIndex + totalLocalChannels + i : undefined,
+    );
+    newLayer.setArchived(i > 3);
+    newLayers.push(newLayer);
+  }
+
+  // Propagate new layers to all layer group subsets that contain the original managed layer
   // The initial manager.add() above only adds to the layer's own manager and its owner
   // Update other subsets referencing the original layer
   const { root } = managedLayer.manager;
-  if (newChannelLayers.length > 0) {
+  if (newLayers.length > 0) {
     for (const subset of root.subsets) {
       // Skip the subset that is the current manager
       if (subset === managedLayer.manager) continue;
       const subsetIndex =
         subset.layerManager.managedLayers.indexOf(managedLayer);
       if (subsetIndex === -1) continue;
-      for (let j = 0; j < newChannelLayers.length; j++) {
+      for (let j = 0; j < newLayers.length; j++) {
         subset.layerManager.addManagedLayer(
-          newChannelLayers[j].addRef(),
+          newLayers[j].addRef(),
           subsetIndex + 1 + j,
         );
       }
     }
   }
-  root.display.multiChannelSetupFinished.dispatch();
+  root.display.multiChannelSetupFinished.dispatch({
+    name: startingName,
+    toolsJson: getPaletteToolsJson([managedLayer, ...newLayers]),
+  });
   postCreationSetupFunctions.forEach((fn) => fn());
   reverseGlobalDimOrderIfNeeded(managedLayer);
 }

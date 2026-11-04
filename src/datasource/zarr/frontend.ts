@@ -29,6 +29,7 @@ import type {
   DataSource,
   GetKvStoreBasedDataSourceOptions,
   KvStoreBasedDataSourceProvider,
+  RelatedDataSource,
 } from "#src/datasource/index.js";
 import { getKvStorePathCompletions } from "#src/datasource/kvstore_completions.js";
 import { VolumeChunkSourceParameters } from "#src/datasource/zarr/base.js";
@@ -50,7 +51,10 @@ import {
   parseV3Metadata,
 } from "#src/datasource/zarr/metadata/parse.js";
 import type { OmeMultiscaleMetadata } from "#src/datasource/zarr/ome.js";
-import { parseOmeMetadata } from "#src/datasource/zarr/ome.js";
+import {
+  parseOmeLabelsGroup,
+  parseOmeMetadata,
+} from "#src/datasource/zarr/ome.js";
 import type { AutoDetectRegistry } from "#src/kvstore/auto_detect.js";
 import { simpleFilePresenceAutoDetectDirectorySpec } from "#src/kvstore/auto_detect.js";
 import { WithSharedKvStoreContext } from "#src/kvstore/chunk_source_frontend.js";
@@ -474,6 +478,33 @@ function resolveUrl(options: GetKvStoreBasedDataSourceOptions) {
   };
 }
 
+async function getOmeLabelSources(
+  sharedKvStoreContext: SharedKvStoreContext,
+  url: string,
+  options: { zarrVersion: 2 | 3 } & Partial<ProgressOptions>,
+): Promise<RelatedDataSource[] | undefined> {
+  const labelsGroupUrl = kvstoreEnsureDirectoryPipelineUrl(
+    joinBaseUrlAndPath(url, "labels"),
+  );
+  try {
+    const metadata = await getMetadata(sharedKvStoreContext, labelsGroupUrl, {
+      ...options,
+      expectedNodeType: "group",
+    });
+    if (metadata === undefined) return undefined;
+    return parseOmeLabelsGroup(
+      labelsGroupUrl,
+      metadata.userAttributes,
+      options.zarrVersion,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") throw error;
+    // A bad labels group must not stop the image from opening.
+    console.warn(`Ignoring OME labels group ${labelsGroupUrl}:`, error);
+    return undefined;
+  }
+}
+
 export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
   constructor(public zarrVersion: 2 | 3 | undefined = undefined) {}
   get scheme() {
@@ -515,6 +546,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
           explicitDimensionSeparator: dimensionSeparator,
         });
         let channelMetadata: ChannelMetadata | undefined;
+        let relatedSources: RelatedDataSource[] | undefined;
         if (metadata === undefined) {
           throw new Error("No zarr metadata found");
         }
@@ -530,15 +562,17 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
             throw new Error("Neither array nor OME multiscale metadata found");
           }
           channelMetadata = omeMetadata.channels;
-          multiscaleInfo = await resolveOmeMultiscale(
-            sharedKvStoreContext,
-            omeMetadata.multiscale,
-            {
+          [multiscaleInfo, relatedSources] = await Promise.all([
+            resolveOmeMultiscale(sharedKvStoreContext, omeMetadata.multiscale, {
               ...progressOptions,
               zarrVersion: metadata.zarrVersion,
               explicitDimensionSeparator: dimensionSeparator,
-            },
-          );
+            }),
+            getOmeLabelSources(sharedKvStoreContext, kvStoreUrl, {
+              ...progressOptions,
+              zarrVersion: metadata.zarrVersion,
+            }),
+          ]);
         } else {
           multiscaleInfo = getMultiscaleInfoForSingleArray(
             kvStoreUrl,
@@ -560,6 +594,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
           canonicalUrl: `${kvStoreUrl}|zarr${metadata.zarrVersion}:`,
           modelTransform,
           channelMetadata,
+          relatedSources,
           subsources: [
             {
               id: "default",
