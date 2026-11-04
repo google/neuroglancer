@@ -20,6 +20,8 @@ import {
   AccordionTab,
   type AccordionOptions,
 } from "#src/widget/accordion.js";
+import { VirtualList } from "#src/widget/virtual_list.js";
+import "#src/ui/annotations.css";
 
 function makeAccordionOptions(): AccordionOptions {
   return {
@@ -90,5 +92,60 @@ describe("accordion", () => {
     // With no section specified, appends to default section
     tab.appendChild(child);
     expect(tab.sections[0].body.contains(child)).toBe(true);
+  });
+
+  it("keeps the annotation list bounded and scrollable", async () => {
+    const state = new AccordionState(makeAccordionOptions());
+    const tab = new AccordionTab(state);
+    const panel = document.createElement("div");
+    panel.className = "neuroglancer-tab-view";
+    panel.style.cssText = "height: 500px; width: 300px; overflow: hidden";
+    const stack = document.createElement("div");
+    stack.className = "neuroglancer-stack-view";
+    const annotationTab = document.createElement("div");
+    annotationTab.className =
+      "neuroglancer-tab-content neuroglancer-annotations-tab";
+    tab.element.classList.add("neuroglancer-annotation-layer-view");
+    const list = new VirtualList({
+      source: {
+        length: 100,
+        render(index) {
+          const row = document.createElement("div");
+          row.textContent = `Annotation ${index}`;
+          row.style.height = "20px";
+          return row;
+        },
+      },
+    });
+    list.element.classList.add("neuroglancer-annotation-list");
+    const controls = document.createElement("div");
+    controls.textContent = "Annotation controls";
+    tab.appendChild(controls, "second");
+    tab.appendChild(list.element, "second");
+    annotationTab.appendChild(tab.element);
+    stack.appendChild(annotationTab);
+    panel.appendChild(stack);
+    document.body.appendChild(panel);
+
+    try {
+      await expect.poll(() => list.element.scrollHeight).toBe(2000);
+      expect(list.element.clientHeight).toBeGreaterThan(0);
+      expect(list.element.clientHeight).toBeLessThan(panel.clientHeight);
+      list.element.scrollTop = list.element.scrollHeight;
+      await expect
+        .poll(() => list.element.textContent)
+        .toContain("Annotation 99");
+
+      tab.sections[1].header.click();
+      expect(list.element.clientHeight).toBe(0);
+      tab.sections[1].header.click();
+      await expect.poll(() => list.element.clientHeight).toBeGreaterThan(0);
+      expect(list.element.clientHeight).toBeLessThan(panel.clientHeight);
+    } finally {
+      list.dispose();
+      tab.dispose();
+      state.dispose();
+      panel.remove();
+    }
   });
 });

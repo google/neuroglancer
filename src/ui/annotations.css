@@ -29,6 +29,7 @@
   overflow-y: auto;
   height: 0px;
   flex: 1;
+  flex-basis: 0px;
   min-height: 0px;
 }
 
@@ -47,7 +48,27 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0px;
   align-items: stretch;
+}
+
+.neuroglancer-annotation-layer-view
+  > .neuroglancer-accordion-item[data-expanded="true"]:has(
+    .neuroglancer-annotation-list
+  ) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0px;
+}
+
+.neuroglancer-annotation-layer-view
+  > .neuroglancer-accordion-item[data-expanded="true"]:has(
+    .neuroglancer-annotation-list
+  )
+  > .neuroglancer-accordion-body {
+  flex: 1;
+  min-height: 0px;
 }
 
 .neuroglancer-annotation-list-header {
