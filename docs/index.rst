@@ -7,6 +7,7 @@ Neuroglancer
    :caption: User Guide
 
    user-guide/navigation
+   user-guide/voxel_annotation
 
 .. toctree::
    :hidden:

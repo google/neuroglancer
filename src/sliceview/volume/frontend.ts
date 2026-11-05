@@ -14,29 +14,55 @@
  * limitations under the License.
  */
 
-import type { ChunkManager } from "#src/chunk_manager/frontend.js";
+import { ChunkState } from "#src/chunk_manager/base.js";
+import type { Chunk, ChunkManager } from "#src/chunk_manager/frontend.js";
 import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
-import type {
-  DataType,
-  SliceViewChunkSpecification,
-} from "#src/sliceview/base.js";
+import type { SliceViewChunkSpecification } from "#src/sliceview/base.js";
+import { DataType } from "#src/sliceview/base.js";
+import type { SliceViewChunk } from "#src/sliceview/frontend.js";
 import {
   MultiscaleSliceViewChunkSource,
-  SliceViewChunk,
   SliceViewChunkSource,
 } from "#src/sliceview/frontend.js";
+import type { UncompressedVolumeChunk } from "#src/sliceview/uncompressed_chunk_format.js";
 import type {
   VolumeChunkSource as VolumeChunkSourceInterface,
   VolumeChunkSpecification,
   VolumeSourceOptions,
   VolumeType,
 } from "#src/sliceview/volume/base.js";
+import {
+  computeChunkGridPosition,
+  IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID,
+} from "#src/sliceview/volume/base.js";
+import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
+import { getChunkFormatHandler } from "#src/sliceview/volume/registry.js";
+import type { TypedArray } from "#src/util/array.js";
+import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { getShaderType, glsl_mixLinear } from "#src/webgl/shader_lib.js";
+import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
-export type VolumeChunkKey = string;
+export interface LocalVolumeEdit {
+  indices: number[];
+  indexRanges?: number[];
+  value: bigint;
+  chunkGridPosition?: Float32Array;
+}
+
+function parseChunkGridPositionKey(key: string): Float32Array {
+  const pos = new Float32Array(3);
+  let component = 0;
+  let start = 0;
+  for (let i = 0; i <= key.length && component < 3; ++i) {
+    if (i !== key.length && key.charCodeAt(i) !== 44) continue;
+    pos[component++] = Number(key.slice(start, i));
+    start = i + 1;
+  }
+  return pos;
+}
 
 export interface ChunkFormat {
   shaderKey: string;
@@ -154,27 +180,6 @@ export interface ChunkFormatHandler extends Disposable {
   getChunk(source: SliceViewChunkSource, x: any): SliceViewChunk;
 }
 
-export type ChunkFormatHandlerFactory = (
-  gl: GL,
-  spec: VolumeChunkSpecification,
-) => ChunkFormatHandler | null;
-
-const chunkFormatHandlers = new Array<ChunkFormatHandlerFactory>();
-
-export function registerChunkFormatHandler(factory: ChunkFormatHandlerFactory) {
-  chunkFormatHandlers.push(factory);
-}
-
-export function getChunkFormatHandler(gl: GL, spec: VolumeChunkSpecification) {
-  for (const handler of chunkFormatHandlers) {
-    const result = handler(gl, spec);
-    if (result != null) {
-      return result;
-    }
-  }
-  throw new Error("No chunk format handler found.");
-}
-
 export class VolumeChunkSource
   extends SliceViewChunkSource<VolumeChunkSpecification, VolumeChunk>
   implements VolumeChunkSourceInterface
@@ -196,6 +201,18 @@ export class VolumeChunkSource
     this.tempPositionWithinChunk = new Uint32Array(rank);
   }
 
+  addChunk(key: string, chunk: Chunk) {
+    // A `new` chunk update can replace a chunk kept on display by a lazy
+    // invalidation. Free the replaced chunk's texture right before the swap:
+    // it happens in a single tick with no intermediate frame, and the plain
+    // `chunks.set` would otherwise orphan the texture.
+    const existing = this.chunks.get(key);
+    if (existing !== undefined && existing.state === ChunkState.GPU_MEMORY) {
+      existing.freeGPUMemory(this.gl);
+    }
+    super.addChunk(key, chunk);
+  }
+
   static encodeSpec(spec: SliceViewChunkSpecification) {
     const s = spec as VolumeChunkSpecification;
     return {
@@ -210,6 +227,22 @@ export class VolumeChunkSource
 
   get chunkFormat() {
     return this.chunkFormatHandler.chunkFormat;
+  }
+
+  computeChunkIndices(voxelCoord: Float32Array): {
+    chunkGridPosition: Float32Array;
+    positionWithinChunk: Uint32Array;
+  } {
+    computeChunkGridPosition(
+      this.tempChunkGridPosition,
+      this.tempPositionWithinChunk,
+      voxelCoord,
+      this.spec.chunkDataSize,
+    );
+    return {
+      chunkGridPosition: this.tempChunkGridPosition,
+      positionWithinChunk: this.tempPositionWithinChunk,
+    };
   }
 
   getValueAt(
@@ -267,20 +300,123 @@ export class VolumeChunkSource
   }
 }
 
-export abstract class VolumeChunk extends SliceViewChunk {
-  declare source: VolumeChunkSource;
-  chunkDataSize: Uint32Array;
-  declare CHUNK_FORMAT_TYPE: ChunkFormat;
+@registerSharedObjectOwner(IN_MEMORY_VOLUME_CHUNK_SOURCE_RPC_ID)
+export class InMemoryVolumeChunkSource extends VolumeChunkSource {
+  // Stroke seq of the last local edit that touched each chunk. A reload may
+  // clear a chunk only once its write coverage reaches this seq. Entries live
+  // and die with the chunk (purged in deleteChunk), so the map never outgrows
+  // the set of live overlay chunks.
+  private overlaySeqs = new Map<string, number>();
 
-  get chunkFormat(): this["CHUNK_FORMAT_TYPE"] {
-    return this.source.chunkFormat;
+  setOverlaySeq(key: string, seq: number): void {
+    this.overlaySeqs.set(key, seq);
   }
 
-  constructor(source: VolumeChunkSource, x: any) {
-    super(source, x);
-    this.chunkDataSize = x.chunkDataSize || source.spec.chunkDataSize;
+  getOverlaySeq(key: string): number {
+    return this.overlaySeqs.get(key) ?? 0;
   }
-  abstract getValueAt(dataPosition: Uint32Array): any;
+
+  clearOverlaySeq(key: string): void {
+    this.overlaySeqs.delete(key);
+  }
+
+  keysWithOverlaySeq(seq: number): string[] {
+    const keys: string[] = [];
+    for (const [key, s] of this.overlaySeqs) {
+      if (s === seq) keys.push(key);
+    }
+    return keys;
+  }
+
+  deleteChunk(key: string) {
+    this.overlaySeqs.delete(key);
+    super.deleteChunk(key);
+  }
+
+  constructor(
+    chunkManager: ChunkManager,
+    options: { spec: VolumeChunkSpecification },
+  ) {
+    super(chunkManager, options);
+    this.initializeCounterpart(this.chunkManager.rpc!, {});
+  }
+
+  private invalidateGpuData(chunks: Set<VolumeChunk>): void {
+    if (chunks.size === 0) return;
+    for (const chunk of chunks) {
+      chunk.updateFromCpuData(this.chunkManager.chunkQueueManager.gl);
+    }
+    this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
+  }
+
+  invalidateChunks(keys: string[], _options?: { lazy?: boolean }): void {
+    // Signature matches the base `ChunkSource.invalidateChunks`, but `lazy` does
+    // not apply here: an in-memory source has no backend refetch to swap in, so
+    // there is nothing to keep the stale chunk on screen for. Deletion is always
+    // immediate; the crossfade with the real data is timed by the caller (the
+    // overlay is dropped when its pending swap resolves, or as a rollback on
+    // write failure or an undispatched stroke), not by a blind delay here.
+    const validKeys: string[] = [];
+    for (const key of keys) {
+      const chunk = this.chunks.get(key);
+      if (chunk) {
+        validKeys.push(key);
+        this.deleteChunk(key);
+      }
+    }
+
+    if (validKeys.length > 0) {
+      this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
+    }
+  }
+
+  applyLocalEdits(edits: Map<string, LocalVolumeEdit>): void {
+    const chunksToUpdate = new Set<VolumeChunk>();
+    const { dataType } = this.spec;
+    const isUint64 = dataType === DataType.UINT64;
+
+    for (const [key, edit] of edits.entries()) {
+      const chunkGridPosition =
+        edit.chunkGridPosition ?? parseChunkGridPositionKey(key);
+
+      let chunk = this.chunks.get(key) as UncompressedVolumeChunk | undefined;
+      if (chunk === undefined) {
+        chunk = this.getChunk({
+          chunkGridPosition,
+        }) as UncompressedVolumeChunk;
+        this.addChunk(key, chunk);
+      }
+
+      if (chunk.data == undefined) {
+        const numElements = chunk.chunkDataSize.reduce((a, b) => a * b, 1);
+        const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[dataType];
+        chunk.data = new (Ctor as any)(numElements) as TypedArray;
+      }
+      chunksToUpdate.add(chunk);
+
+      const cpuArray = chunk.data!;
+      const fillValue = isUint64 ? edit.value : Number(edit.value);
+
+      const { indexRanges } = edit;
+      if (indexRanges !== undefined) {
+        for (let i = 0; i < indexRanges.length; i += 2) {
+          const start = indexRanges[i]!;
+          const length = indexRanges[i + 1]!;
+          (cpuArray as any).fill(fillValue, start, start + length);
+        }
+      }
+
+      for (const index of edit.indices) {
+        if (isUint64) {
+          (cpuArray as BigUint64Array)[index] = edit.value;
+        } else {
+          cpuArray[index] = fillValue as number;
+        }
+      }
+    }
+
+    this.invalidateGpuData(chunksToUpdate);
+  }
 }
 
 export abstract class MultiscaleVolumeChunkSource extends MultiscaleSliceViewChunkSource<
@@ -290,3 +426,5 @@ export abstract class MultiscaleVolumeChunkSource extends MultiscaleSliceViewChu
   abstract dataType: DataType;
   abstract volumeType: VolumeType;
 }
+
+export { VolumeChunk };

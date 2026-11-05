@@ -265,6 +265,14 @@ function drawChunk(
   chunkPosition: vec3,
   wireFrame: boolean,
 ) {
+  if (chunkPosition.some(isNaN)) {
+    throw new Error(
+      `Attempted to draw chunk with NaN position: [${chunkPosition.join(
+        ",",
+      )}]. This indicates a problem with the layer's coordinate transforms.`,
+    );
+  }
+
   gl.uniform3fv(shader.uniform("uTranslation"), chunkPosition);
   if (wireFrame) {
     drawLines(shader.gl, 6, 1);

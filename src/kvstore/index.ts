@@ -38,6 +38,11 @@ export interface ReadResponse {
 export interface DriverReadOptions extends Partial<ProgressOptions> {
   byteRange?: ByteRangeRequest;
   throwIfMissing?: boolean;
+  // Fetch cache mode for HTTP-backed stores. Use "no-cache" for data that may
+  // be mutated by this or another session: the browser's heuristic freshness
+  // (no Cache-Control header) can otherwise serve stale content for hours
+  // without revalidating.
+  cacheMode?: RequestCache;
 }
 
 export class NotFoundError extends Error {
@@ -91,7 +96,15 @@ export interface ListableKvStore {
   list?: (prefix: string, options: DriverListOptions) => Promise<ListResponse>;
 }
 
-export interface KvStore extends ReadableKvStore, ListableKvStore {
+export interface WritableKvStore<Key = string> {
+  write?: (key: Key, value: ArrayBuffer) => Promise<void>;
+  delete?: (key: Key) => Promise<void>;
+}
+
+export interface KvStore<Key = string>
+  extends ReadableKvStore<Key>,
+    ListableKvStore,
+    WritableKvStore<Key> {
   // Indicates that the only valid key is the empty string.
   singleKey?: boolean;
 }

@@ -72,3 +72,31 @@ such as the following:
            "MaxAgeSeconds": 3000
        }
    ]
+
+If the bucket also needs to support write operations (e.g. for :ref:`voxel-annotation`), ``PUT`` and ``DELETE`` must be added to ``AllowedMethods``:
+
+.. code-block:: json
+
+   [
+       {
+           "AllowedHeaders": [
+               "*"
+           ],
+           "AllowedMethods": [
+               "GET",
+               "HEAD",
+               "PUT",
+               "DELETE"
+           ],
+           "AllowedOrigins": [
+               "*"
+           ],
+           "ExposeHeaders": [
+               "ETag",
+               "Content-Range",
+               "Content-Encoding",
+               "Content-Length"
+           ],
+           "MaxAgeSeconds": 3000
+       }
+   ]

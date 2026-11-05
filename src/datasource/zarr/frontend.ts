@@ -485,6 +485,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
       this.zarrVersion === undefined ? "" : ` v${this.zarrVersion}`;
     return `Zarr${versionStr} data source`;
   }
+
   get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
     let { kvStoreUrl, additionalPath, fragment } = resolveUrl(options);
     kvStoreUrl = kvstoreEnsureDirectoryPipelineUrl(
@@ -507,6 +508,9 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
       options,
       async (progressOptions) => {
         const { sharedKvStoreContext } = options.registry;
+        const isPotentiallyWritable =
+          sharedKvStoreContext.kvStoreContext.getKvStore(kvStoreUrl).store
+            .write !== undefined;
         const metadata = await getMetadata(sharedKvStoreContext, kvStoreUrl, {
           ...progressOptions,
           zarrVersion: this.zarrVersion,
@@ -556,7 +560,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
               id: "default",
               default: true,
               url: undefined,
-              subsource: { volume },
+              subsource: { volume, isPotentiallyWritable },
             },
             {
               id: "bounds",

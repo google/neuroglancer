@@ -19,6 +19,7 @@ import type {
   LayerChunkProgressInfo,
 } from "#src/chunk_manager/base.js";
 import {
+  CHUNK_SOURCE_INVALIDATE_CHUNKS_RPC_ID,
   CHUNK_LAYER_STATISTICS_RPC_ID,
   CHUNK_MANAGER_RPC_ID,
   CHUNK_QUEUE_MANAGER_RPC_ID,
@@ -461,6 +462,30 @@ export class ChunkSource extends SharedObject {
       chunk.freeGPUMemory(this.gl);
     }
     this.chunks.delete(key);
+  }
+
+  invalidateChunks(keys: string[], options?: { lazy?: boolean }): void {
+    // When `lazy` is set, the frontend chunk is kept on display while the
+    // backend cache is invalidated and refetched; the fresh data replaces it
+    // in place on arrival, avoiding the lower-resolution fallback flicker.
+    const lazy = options?.lazy ?? false;
+    const validKeys: string[] = [];
+    for (const key of keys) {
+      const chunk = this.chunks.get(key);
+      if (chunk) {
+        validKeys.push(key);
+        if (!lazy) this.deleteChunk(key);
+      }
+    }
+
+    if (validKeys.length > 0) {
+      this.rpc!.invoke(CHUNK_SOURCE_INVALIDATE_CHUNKS_RPC_ID, {
+        id: this.rpcId,
+        keys: validKeys,
+      });
+
+      this.chunkManager.chunkQueueManager.visibleChunksChanged.dispatch();
+    }
   }
 
   addChunk(key: string, chunk: Chunk) {

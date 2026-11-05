@@ -16,6 +16,11 @@
 
 import type { DataType } from "#src/util/data_type.js";
 
+export interface Codec {
+  name: string;
+  kind: CodecKind;
+}
+
 export enum CodecKind {
   arrayToArray = 0,
   arrayToBytes = 1,
