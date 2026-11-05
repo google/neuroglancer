@@ -28,8 +28,8 @@ import type {
 import { DATA_TYPE_BYTES, DataType } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
 import {
-  getFrustrumPlanes,
-  getViewFrustrumDepthRange,
+  getFrustumPlanes,
+  getViewFrustumDepthRange,
   isAABBIntersectingPlane,
   isAABBVisible,
   mat4,
@@ -809,7 +809,7 @@ const tempVisibleVolumetricChunkUpper = new Float32Array(3);
 const tempVisibleVolumetricModelViewProjection = mat4.create();
 const tempVisibleVolumetricClippingPlanes = new Float32Array(24);
 
-function forEachVolumetricChunkWithinFrustrum<
+function forEachVolumetricChunkWithinFrustum<
   RLayer extends MultiscaleVolumetricDataRenderLayer,
 >(
   clippingPlanes: Float32Array,
@@ -913,12 +913,12 @@ export function forEachVisibleVolumetricChunk<
   }
 
   const clippingPlanes = tempVisibleVolumetricClippingPlanes;
-  getFrustrumPlanes(clippingPlanes, modelViewProjection);
+  getFrustumPlanes(clippingPlanes, modelViewProjection);
   const lower = tempVisibleVolumetricChunkLower;
   const upper = tempVisibleVolumetricChunkUpper;
   lower.fill(Number.NEGATIVE_INFINITY);
   upper.fill(Number.POSITIVE_INFINITY);
-  forEachVolumetricChunkWithinFrustrum(
+  forEachVolumetricChunkWithinFrustum(
     clippingPlanes,
     transformedSource,
     callback,
@@ -1034,7 +1034,7 @@ export function forEachPlaneIntersectingVolumetricChunk<
             : candidate[chunkDim];
         upper[i] = lower[i] + 1;
       }
-      forEachVolumetricChunkWithinFrustrum(
+      forEachVolumetricChunkWithinFrustum(
         clippingPlanes,
         transformedSource,
         callback,
@@ -1043,7 +1043,7 @@ export function forEachPlaneIntersectingVolumetricChunk<
     }
     return;
   }
-  forEachVolumetricChunkWithinFrustrum(
+  forEachVolumetricChunkWithinFrustum(
     clippingPlanes,
     transformedSource,
     callback,
@@ -1070,7 +1070,7 @@ export function getNormalizedChunkLayout(
   );
   tempChunkLayout.detTransform = chunkLayout.detTransform;
   const { invViewMatrix, width, height } = projectionParameters;
-  const depth = getViewFrustrumDepthRange(projectionParameters.projectionMat);
+  const depth = getViewFrustumDepthRange(projectionParameters.projectionMat);
   for (let chunkRenderDim = finiteRank; chunkRenderDim < 3; ++chunkRenderDim) {
     // we want to ensure chunk [0] fully covers the viewport
     const offset = invViewMatrix[12 + chunkRenderDim];

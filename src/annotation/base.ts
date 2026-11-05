@@ -23,7 +23,7 @@ import type {
 } from "#src/sliceview/base.js";
 import { forEachVisibleVolumetricChunk } from "#src/sliceview/base.js";
 import {
-  getViewFrustrumVolume,
+  getViewFrustumVolume,
   mat3,
   mat3FromMat4,
   prod3,
@@ -95,8 +95,8 @@ export function forEachVisibleAnnotationChunk<
     mat3.determinant(mat3FromMat4(tempMat3, viewMatrix)),
   );
   const canonicalToPhysicalScale = prod3(voxelPhysicalScales);
-  const viewFrustrumVolume =
-    (getViewFrustrumVolume(projectionMat) / viewDet) * canonicalToPhysicalScale;
+  const viewFrustumVolume =
+    (getViewFrustumVolume(projectionMat) / viewDet) * canonicalToPhysicalScale;
 
   if (transformedSources.length === 0) return;
   const baseSource = transformedSources[0];
@@ -107,7 +107,7 @@ export function forEachVisibleAnnotationChunk<
     sourceVolume *= upperClipDisplayBound[i] - lowerClipDisplayBound[i];
   }
 
-  const effectiveVolume = Math.min(sourceVolume, viewFrustrumVolume);
+  const effectiveVolume = Math.min(sourceVolume, viewFrustumVolume);
   const viewportArea = width * height;
   const targetNumAnnotations = viewportArea / renderScaleTarget ** 2;
   const physicalDensityTarget = targetNumAnnotations / effectiveVolume;

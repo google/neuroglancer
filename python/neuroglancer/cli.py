@@ -61,15 +61,21 @@ def add_state_arguments(ap, required=False, dest="state"):
         import json
 
         from . import viewer_state
+        from .url_state import parse_url
 
         with open(path) as f:
-            return viewer_state.ViewerState(json.load(f))
+            content = f.read()
+        try:
+            j = json.loads(content)
+            return viewer_state.ViewerState(j)
+        except json.JSONDecodeError:
+            return parse_url(content.strip())
 
     g.add_argument(
         "--json",
         type=json_state,
         dest=dest,
-        help="Path to file containing Neuroglancer JSON state.",
+        help="Path to file containing Neuroglancer JSON state or URL.",
     )
 
 

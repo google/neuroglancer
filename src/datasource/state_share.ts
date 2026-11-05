@@ -1,6 +1,7 @@
 import { ReadableHttpKvStore } from "#src/kvstore/http/common.js";
 import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import { StatusMessage } from "#src/status.js";
+import { setClipboard, setClipboardFromPromise } from "#src/util/clipboard.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { bigintToStringJsonReplacer } from "#src/util/json.js";
 import type { Viewer } from "#src/viewer.js";
@@ -19,6 +20,31 @@ declare const STATE_SERVERS: StateServers | undefined;
 
 export const stateShareEnabled =
   typeof STATE_SERVERS !== "undefined" && Object.keys(STATE_SERVERS).length > 0;
+
+function showShareLinkFallback(link: string) {
+  const status = StatusMessage.showMessage(
+    "Could not copy share link automatically. ",
+  );
+  const input = document.createElement("input");
+  input.value = link;
+  input.readOnly = true;
+  input.size = 40;
+  input.title = "Share link";
+  input.addEventListener("focus", () => input.select());
+
+  const button = document.createElement("button");
+  button.textContent = "Copy";
+  button.addEventListener("click", () => {
+    if (!setClipboard(link)) {
+      StatusMessage.showTemporaryMessage("Failed to copy share link");
+      return;
+    }
+    status.dispose();
+    StatusMessage.showTemporaryMessage("Share link copied to clipboard");
+  });
+
+  status.element.append(input, " ", button);
+}
 
 export class StateShare extends RefCounted {
   // call it a widget? no because it doesn't pop out?
@@ -87,35 +113,39 @@ export class StateShare extends RefCounted {
         );
       }
 
+      const linkPromise = store
+        .fetchOkImpl(joinBaseUrlAndPath(store.baseUrl, path), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            viewer.state.toJSON(),
+            bigintToStringJsonReplacer,
+          ),
+        })
+        .then((response) => response.json())
+        .then((res) => {
+          const stateUrlProtcol = new URL(res).protocol;
+          const stateUrlWithoutProtocol = res.substring(stateUrlProtcol.length);
+          const protocol = new URL(selectedStateServer).protocol;
+          return `${window.location.origin}/#!${protocol}${stateUrlWithoutProtocol}`;
+        });
+
       StatusMessage.forPromise(
-        store
-          .fetchOkImpl(joinBaseUrlAndPath(store.baseUrl, path), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(
-              viewer.state.toJSON(),
-              bigintToStringJsonReplacer,
-            ),
-          })
-          .then((response) => response.json())
-          .then((res) => {
-            const stateUrlProtcol = new URL(res).protocol;
-            const stateUrlWithoutProtocol = res.substring(
-              stateUrlProtcol.length,
-            );
-            const protocol = new URL(selectedStateServer).protocol;
-            const link = `${window.location.origin}/#!${protocol}${stateUrlWithoutProtocol}`;
-            navigator.clipboard.writeText(link).then(() => {
-              StatusMessage.showTemporaryMessage(
-                "Share link copied to clipboard",
-              );
-            });
-          })
-          .catch(() => {
+        setClipboardFromPromise(linkPromise)
+          .then(() => {
             StatusMessage.showTemporaryMessage(
-              "Could not access state server.",
-              4000,
+              "Share link copied to clipboard",
             );
+          })
+          .catch(async () => {
+            try {
+              showShareLinkFallback(await linkPromise);
+            } catch {
+              StatusMessage.showTemporaryMessage(
+                "Could not access state server.",
+                4000,
+              );
+            }
           }),
         {
           initialMessage: `Posting state to ${selectedStateServer}.`,

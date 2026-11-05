@@ -22,7 +22,6 @@ import { WithParameters } from "#src/chunk_manager/frontend.js";
 import type { CoordinateSpace } from "#src/coordinate_transform.js";
 import {
   makeCoordinateSpace,
-  makeIdentityTransform,
   makeIdentityTransformedBoundingBox,
 } from "#src/coordinate_transform.js";
 import type {
@@ -132,7 +131,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
           const decodedDim = physicalToLogicalDimension[rank - 1 - i];
           permutedChunkShape[i] = readChunkShape[decodedDim];
           permutedDataShape[i] = shape[decodedDim];
-          orderTransform[i + decodedDim * (rank + 1)] = 1;
+          orderTransform[decodedDim + i * (rank + 1)] = 1;
         }
         const transform = new Float32Array((rank + 1) ** 2);
         matrix.multiply<Float32Array | Float64Array>(
@@ -225,6 +224,7 @@ interface ZarrMultiscaleInfo {
   coordinateSpace: CoordinateSpace;
   dataType: DataType;
   scales: ZarrScaleInfo[];
+  baseTransform: Float64Array;
 }
 
 function getNormalizedDimensionNames(
@@ -292,6 +292,7 @@ function getMultiscaleInfoForSingleArray(
         metadata,
       },
     ],
+    baseTransform: transform,
   };
 }
 
@@ -374,6 +375,7 @@ async function resolveOmeMultiscale(
         metadata: zarrMetadata,
       };
     }),
+    baseTransform: multiscale.baseInfo.baseTransform,
   };
 }
 
@@ -559,9 +561,16 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
           : "Writing is not supported for arrays whose codec chain includes " +
             "sharding_indexed, an array-to-array codec such as transpose, or " +
             "a codec without an encoder such as zstd or crc32c.";
+        const modelTransform = {
+          rank: volume.modelSpace.rank,
+          sourceRank: volume.modelSpace.rank,
+          inputSpace: volume.modelSpace,
+          outputSpace: volume.modelSpace,
+          transform: multiscaleInfo.baseTransform,
+        };
         return {
           canonicalUrl: `${kvStoreUrl}|zarr${metadata.zarrVersion}:`,
-          modelTransform: makeIdentityTransform(volume.modelSpace),
+          modelTransform,
           channelMetadata,
           subsources: [
             {

@@ -14,8 +14,45 @@
  * limitations under the License.
  */
 
-import "#src/datasource/deepzoom/register_default";
+import "#src/datasource/deepzoom/register_default.js";
 import "#src/sliceview/uncompressed_chunk_format.js";
+import { test } from "vitest";
+import { DeepzoomImageTileSource } from "#src/datasource/deepzoom/backend.js";
+import { ImageTileEncoding } from "#src/datasource/deepzoom/base.js";
 import { datasourceMetadataSnapshotTests } from "#tests/datasource/metadata_snapshot_test_util.js";
 
 datasourceMetadataSnapshotTests("deepzoom", ["14122_mPPC_BDA_s186.dzi"]);
+
+test("download reads tiles relative to trailing-slash directory paths", async ({
+  expect,
+}) => {
+  let readPath: string | undefined;
+  let readSignal: AbortSignal | undefined;
+  const source = {
+    parameters: {
+      url: "image_files/12/",
+      encoding: ImageTileEncoding.JPG,
+      format: "jpg",
+      overlap: 0,
+      tilesize: 256,
+    },
+    tileKvStore: {
+      path: "image_files/12/",
+      store: {
+        read(path: string, options: { signal: AbortSignal }) {
+          readPath = path;
+          readSignal = options.signal;
+          return Promise.resolve(undefined);
+        },
+      },
+    },
+  };
+  const controller = new AbortController();
+  await DeepzoomImageTileSource.prototype.download.call(
+    source as never,
+    { chunkGridPosition: Uint32Array.of(3, 4) } as never,
+    controller.signal,
+  );
+  expect(readPath).toBe("image_files/12/3_4.jpg");
+  expect(readSignal).toBe(controller.signal);
+});

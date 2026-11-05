@@ -162,7 +162,7 @@ class WebdriverBase:
     def action_chain(self):
         import selenium.webdriver
 
-        return selenium.webdriver.common.action_chains.ActionChains(self.driver)
+        return selenium.webdriver.ActionChains(self.driver)
 
 
 class Webdriver(WebdriverBase):

@@ -97,6 +97,35 @@ function asyncMemoizeTests(asyncMemoizeImpl: typeof asyncMemoize) {
     expect(getter).toHaveBeenCalledTimes(2); // still 2
   });
 
+  test("aborted call that settles late does not discard the retry", async () => {
+    // The first getter call only rejects some time after its signal is aborted,
+    // like a fetch whose abort settles asynchronously.
+    const first = Promise.withResolvers<string>();
+    const second = Promise.withResolvers<string>();
+    const getter = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+      .mockResolvedValue("unexpected third call");
+    const memoizedGetter = asyncMemoizeImpl(getter);
+
+    const controller1 = new AbortController();
+    const promise1 = memoizedGetter({ signal: controller1.signal });
+    controller1.abort("reason");
+    await expect(promise1).rejects.toBe("reason");
+
+    const promise2 = memoizedGetter({});
+    first.reject(new Error("aborted"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const promise3 = memoizedGetter({});
+    second.resolve("result");
+    await expect(promise2).resolves.toBe("result");
+    await expect(promise3).resolves.toBe("result");
+    expect(getter).toHaveBeenCalledTimes(2);
+  });
+
   test("getter receives abort signal on abort", async () => {
     const abortPromise = Promise.withResolvers<void>();
     const memoizedGetter = asyncMemoizeImpl(async ({ signal }) => {

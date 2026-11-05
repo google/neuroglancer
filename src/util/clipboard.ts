@@ -16,6 +16,24 @@
 
 import { registerEventListener } from "#src/util/disposable.js";
 
+/**
+ * Starts a clipboard write while the data to copy is still being generated.
+ *
+ * This must be called directly from a user gesture handler. In particular,
+ * Safari rejects clipboard writes that are started only after awaiting the
+ * data, but accepts a ClipboardItem containing a promise for that data.
+ */
+export function setClipboardFromPromise(
+  data: Promise<string>,
+  format = "text/plain",
+) {
+  return navigator.clipboard.write([
+    new ClipboardItem({
+      [format]: data.then((value) => new Blob([value], { type: format })),
+    }),
+  ]);
+}
+
 export function setClipboard(data: string, format = "text/plain") {
   let success = false;
   const cleanup = registerEventListener(

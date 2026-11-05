@@ -28,6 +28,7 @@ export enum VolumeChunkEncoding {
   COMPRESSO = 3,
   PNG = 4,
   JXL = 5,
+  CRACKLE = 6,
 }
 
 export class VolumeChunkSourceParameters {

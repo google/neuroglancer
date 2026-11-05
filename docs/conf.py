@@ -131,17 +131,23 @@ default_role = "any"
 # Warn about missing references
 nitpicky = True
 
+nitpick_ignore = [
+    ("py:class", "osteoid.skeleton.Skeleton"),
+]
+
 python_apigen_modules = {
     "neuroglancer.viewer_state": "python/api/",
     "neuroglancer.viewer_config_state": "python/api/",
     "neuroglancer.trackable_state": "python/api/",
     "neuroglancer.json_wrappers": "python/api/",
     "neuroglancer.read_precomputed_annotations": "python/api/read_precomputed_annotations.",
+    "neuroglancer.read_precomputed_skeletons": "python/api/read_precomputed_skeletons.",
+    "neuroglancer.read_precomputed_segment_properties": "python/api/read_precomputed_segment_properties.",
     "neuroglancer": "python/api/",
 }
 
 python_apigen_default_groups = [
-    (r"class:neuroglancer\.viewer_state\..*", "viewer-state"),
+    (r"(class|function):neuroglancer\.viewer_state\..*", "viewer-state"),
     (r"(class|function):neuroglancer\.viewer_config_state\..*", "viewer-config-state"),
     (r"class:neuroglancer\.coordinate_space\..*", "coordinate-space"),
     (r"class:neuroglancer\.viewer_state\..*Tool", "viewer-state-tools"),
@@ -149,7 +155,7 @@ python_apigen_default_groups = [
     (r"class:neuroglancer\.viewer\..*", "core"),
     (r"class:neuroglancer\.server\..*", "server"),
     (
-        r"(class|data|function):neuroglancer\.read_precomputed_annotations\..*",
+        r"(class|data|function):neuroglancer\.read_precomputed_(annotations|skeletons|segment_properties)\..*",
         "annotation-io",
     ),
 ]

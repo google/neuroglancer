@@ -48,6 +48,7 @@ import {
 } from "#src/webgl/lerp.js";
 import type { ShaderModule, ShaderProgram } from "#src/webgl/shader.js";
 import { ShaderBuilder } from "#src/webgl/shader.js";
+import { glsl_string } from "#src/webgl/shader_lib.js";
 import type {
   ShaderControlsBuilderState,
   ShaderControlState,
@@ -68,6 +69,7 @@ export interface AnnotationRenderContext {
   buffer: GLBuffer;
   annotationLayer: AnnotationLayer;
   renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext;
+  attachment: RefCounted;
   bufferOffset: number;
   count: number;
   basePickId: number;
@@ -217,6 +219,11 @@ const annotationPropertyTypeRenderHandlers: {
     "highp int",
     1,
     WebGL2RenderingContext.BYTE,
+  ),
+  bool: makeIntegerPropertyRenderHandler(
+    "highp uint",
+    1,
+    WebGL2RenderingContext.UNSIGNED_BYTE,
   ),
 };
 
@@ -553,6 +560,7 @@ void userMain();
           renderHandler.defineShaderNoOpSetters(builder);
         }
         defineShader(builder);
+        builder.addVertexCode(glsl_string);
         builder.addVertexCode(
           "\n#define main userMain\n" +
             shaderCodeWithLineDirective(parameters.parseResult.code) +
@@ -619,17 +627,22 @@ if (ng_discardValue) {
     context: AnnotationRenderContext,
     callback: (shader: ShaderProgram) => void,
   ) {
-    const { shader, parameters } = shaderGetter(context.renderContext.emitter);
+    const shaderResult = shaderGetter(context.renderContext.emitter);
+    const { shader, parameters } = shaderResult;
     if (shader === null) return;
     shader.bind();
     const { gl } = this;
     const { renderContext } = context;
     const { annotationLayer } = context;
+    this.shaderControlState.activeControls.trackShader(
+      shaderResult,
+      context.attachment,
+    );
     setControlsInShader(
       gl,
       shader,
       this.shaderControlState,
-      parameters.parseResult.controls,
+      parameters.parseResult,
     );
     gl.uniform3fv(shader.uniform("uSubspaceMatrix"), context.subspaceMatrix);
     gl.uniform1fv(shader.uniform("uModelClipBounds"), context.modelClipBounds);

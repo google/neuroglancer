@@ -41,6 +41,7 @@ import { SKELETON_LAYER_RPC_ID } from "#src/skeleton/base.js";
 import type { SliceViewPanel } from "#src/sliceview/panel.js";
 import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js";
 import { SliceViewPanelRenderLayer } from "#src/sliceview/renderlayer.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { TrackableValue, WatchableValue } from "#src/trackable_value.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -75,6 +76,7 @@ import type {
   ShaderProgram,
   ShaderSamplerType,
 } from "#src/webgl/shader.js";
+import { glsl_string } from "#src/webgl/shader_lib.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 import {
   addControlsToBuilder,
@@ -82,6 +84,7 @@ import {
   parseShaderUiControls,
   setControlsInShader,
   ShaderControlState,
+  stripComments,
 } from "#src/webgl/shader_ui_controls.js";
 import {
   computeTextureFormat,
@@ -179,6 +182,11 @@ highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexInde
 vec4 segmentColor() {
   return uColor;
 }
+void emitRGBA(vec4 color) {
+  color.a *= uColor.a;
+  color.rgb *= ${this.getPremultiplyAlphaFactor()};
+  emit(vec4(color.rgb, color.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
+}
 void emitRGB(vec3 color) {
   emit(vec4(color * uColor.a, uColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
 }
@@ -200,6 +208,7 @@ void emitDefault() {
           }
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);
+          builder.addFragmentCode(glsl_string);
           builder.setFragmentMainFunction(
             shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
           );
@@ -245,14 +254,18 @@ vec4 segmentColor() {
   return uColor;
 }
 void emitRGBA(vec4 color) {
+  color.a *= uColor.a;
+  color.rgb *= ${this.getPremultiplyAlphaFactor()};
   vec4 borderColor = color;
-  emit(getCircleColor(color, borderColor), uPickID);
+  vec4 circleColor = getCircleColor(color, borderColor);
+  emit(circleColor, uPickID);
 }
 void emitRGB(vec3 color) {
   emitRGBA(vec4(color, 1.0));
 }
 void emitDefault() {
-  emitRGBA(uColor);
+  vec4 circleColor = getCircleColor(uColor, uColor);
+  emit(circleColor, uPickID);
 }
 `);
           builder.addFragmentCode(glsl_COLORMAPS);
@@ -269,6 +282,7 @@ void emitDefault() {
           }
           builder.setVertexMain(vertexMain);
           addControlsToBuilder(shaderBuilderState, builder);
+          builder.addFragmentCode(glsl_string);
           builder.setFragmentMainFunction(
             shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
           );
@@ -305,6 +319,10 @@ void emitDefault() {
     });
   }
 
+  getPremultiplyAlphaFactor() {
+    return this.targetIsSliceView ? "1.0" : "color.a";
+  }
+
   getCrossSectionFadeFactor() {
     if (this.targetIsSliceView) {
       return "(clamp(1.0 - 2.0 * abs(0.5 - gl_FragCoord.z), 0.0, 1.0))";
@@ -335,7 +353,7 @@ void emitDefault() {
   drawSkeleton(
     gl: GL,
     edgeShader: ShaderProgram,
-    nodeShader: ShaderProgram | null,
+    nodeShader: ShaderProgram,
     skeletonChunk: SkeletonChunk,
     projectionParameters: { width: number; height: number },
   ) {
@@ -373,12 +391,15 @@ void emitDefault() {
       gl.disableVertexAttribArray(aVertexIndex);
     }
 
-    if (nodeShader !== null) {
+    // Draw nodes - this is performed also in line render mode
+    // so that there are no visible gaps between the edges
+    // as the point size is set to the line width
+    {
       nodeShader.bind();
       initializeCircleShader(nodeShader, projectionParameters, {
         featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
       });
-      drawCircles(nodeShader.gl, 2, skeletonChunk.numVertices);
+      drawCircles(nodeShader.gl, 1, skeletonChunk.numVertices);
     }
   }
 
@@ -429,6 +450,7 @@ export class SkeletonRenderingOptions implements Trackable {
 
   shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
   shaderControlState = new ShaderControlState(this.shader);
+  hideInactiveShaderControls = new TrackableBoolean(false);
   params2d: ViewSpecificSkeletonRenderingOptions = {
     mode: new TrackableSkeletonRenderMode(SkeletonRenderMode.LINES_AND_POINTS),
     lineWidth: new TrackableSkeletonLineWidth(2),
@@ -442,6 +464,7 @@ export class SkeletonRenderingOptions implements Trackable {
     const { compound } = this;
     compound.add("shader", this.shader);
     compound.add("shaderControls", this.shaderControlState);
+    compound.add("hideInactiveShaderControls", this.hideInactiveShaderControls);
     compound.add("mode2d", this.params2d.mode);
     compound.add("lineWidth2d", this.params2d.lineWidth);
     compound.add("mode3d", this.params3d.mode);
@@ -580,22 +603,24 @@ export class SkeletonLayer extends RefCounted {
 
     edgeShader.bind();
     renderHelper.beginLayer(gl, edgeShader, renderContext, modelMatrix);
+    shaderControlState.activeControls.trackShader(edgeShaderResult, attachment);
     setControlsInShader(
       gl,
       edgeShader,
       shaderControlState,
-      edgeShaderParameters.parseResult.controls,
+      edgeShaderParameters.parseResult,
     );
     gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth!);
 
     nodeShader.bind();
     renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
     gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
+    shaderControlState.activeControls.trackShader(nodeShaderResult, attachment);
     setControlsInShader(
       gl,
       nodeShader,
       shaderControlState,
-      nodeShaderParameters.parseResult.controls,
+      nodeShaderParameters.parseResult,
     );
 
     const skeletons = source.chunks;
@@ -692,7 +717,13 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   }
 
   get isTransparent() {
-    return this.base.displayState.objectAlpha.value < 1.0;
+    const { displayState } = this.base;
+    return (
+      displayState.objectAlpha.value < 1.0 ||
+      stripComments(
+        displayState.skeletonRenderingOptions.shader.value,
+      ).includes("emitRGBA")
+    );
   }
 
   draw(

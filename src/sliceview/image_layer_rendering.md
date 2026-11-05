@@ -87,6 +87,43 @@ The `checkbox` control type specifies a checkbox. Directive syntax:
 The default is `false` if not specified. The variable `<name>` is defined at _compile time_ as
 either `false` or `true` according to the state of the checkbox.
 
+### `select` controls
+
+The `select` control type specifies a dropdown for choosing one value from a fixed set. Directive syntax:
+
+```glsl
+#uicontrol string_t <name> select(options={"Label": "value"}, default="value")
+#uicontrol int <name> select(options={"Label": 1}, default=1)
+#uicontrol uint <name> select(options={"Label": 1}, default=1)
+#uicontrol float <name> select(options={"Label": 1.0}, default=1.0)
+```
+
+The `<type>` must be `string_t`, `int`, `uint`, or `float`. The `options` parameter is required and
+may be specified either as an array of values, or as an object mapping display labels to values. The
+option values must be unique. The `default` parameter indicates the initial value and is optional;
+if not specified, defaults to the first option value.
+
+For `string_t` controls, the selected value can be compared against a quoted string literal in the
+shader:
+
+```glsl
+#uicontrol string_t mode select(options=["gray", "jet"], default="gray")
+```
+
+Labels can also be specified separately from values:
+
+```glsl
+#uicontrol string_t mode select(options={"Grayscale": "gray", "Jet": "jet"}, default="gray")
+void main() {
+  float value = toNormalized(getDataValue());
+  if (mode == "jet") {
+    emitRGB(colormapJet(value));
+  } else {
+    emitGrayscale(value);
+  }
+}
+```
+
 ### `invlerp` controls
 
 The `invlerp` control type allows the user to specify an numerical interval that is linearly mapped

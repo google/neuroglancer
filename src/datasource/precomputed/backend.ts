@@ -71,6 +71,7 @@ import { SkeletonSource } from "#src/skeleton/backend.js";
 import { decodeSkeletonChunk } from "#src/skeleton/decode_precomputed_skeleton.js";
 import { decodeCompressedSegmentationChunk } from "#src/sliceview/backend_chunk_decoders/compressed_segmentation.js";
 import { decodeCompressoChunk } from "#src/sliceview/backend_chunk_decoders/compresso.js";
+import { decodeCrackleChunk } from "#src/sliceview/backend_chunk_decoders/crackle.js";
 import type { ChunkDecoder } from "#src/sliceview/backend_chunk_decoders/index.js";
 import { decodeJpegChunk } from "#src/sliceview/backend_chunk_decoders/jpeg.js";
 import { decodeJxlChunk } from "#src/sliceview/backend_chunk_decoders/jxl.js";
@@ -103,6 +104,7 @@ chunkDecoders.set(
   decodeCompressedSegmentationChunk,
 );
 chunkDecoders.set(VolumeChunkEncoding.COMPRESSO, decodeCompressoChunk);
+chunkDecoders.set(VolumeChunkEncoding.CRACKLE, decodeCrackleChunk);
 chunkDecoders.set(VolumeChunkEncoding.PNG, decodePngChunk);
 chunkDecoders.set(VolumeChunkEncoding.JXL, decodeJxlChunk);
 

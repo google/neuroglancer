@@ -15,18 +15,14 @@
 
 import base64
 import io
-import numbers
 import os
 import traceback
-import typing
 
 import numpy as np
 
 from . import viewer_state
 from .json_wrappers import (
     JsonObjectWrapper,
-    Map,
-    _set_type_annotation,
     array_wrapper,
     optional,
     typed_list,
@@ -34,6 +30,7 @@ from .json_wrappers import (
     typed_set,
     wrapped_property,
 )
+from .viewer_state import LayerSelectedValues, LayerSelectionState, SegmentIdMapEntry
 
 _uint64_keys = frozenset(["t", "v"])
 _map_entry_keys = frozenset(["key", "value"])
@@ -42,57 +39,19 @@ _map_entry_keys = frozenset(["key", "value"])
 _BUILDING_DOCS = os.environ.get("NEUROGLANCER_BUILDING_DOCS") == "1"
 
 
-__all__ = []
+__all__ = [
+    # Rexported for backwards compatibility
+    "LayerSelectedValues",
+    # Rexported for backwards compatibility
+    "SegmentIdMapEntry",
+    # Rexported for backwards compatibility
+    "LayerSelectionState",
+]
 
 
 def export(obj):
     __all__.append(obj.__name__)
     return obj
-
-
-@export
-class SegmentIdMapEntry(typing.NamedTuple):
-    key: int
-    value: int | None = None
-    label: str | None = None
-
-
-@export
-def layer_selected_value(x):
-    if isinstance(x, numbers.Number):
-        return x
-    if isinstance(x, str):
-        return int(x)
-    if isinstance(x, dict):
-        value = x.get("value")
-        if value is not None:
-            value = int(value)
-        return SegmentIdMapEntry(int(x["key"]), value, x.get("label"))
-    return None
-
-
-_set_type_annotation(layer_selected_value, None | numbers.Number | SegmentIdMapEntry)
-
-
-@export
-class LayerSelectionState(JsonObjectWrapper):
-    __slots__ = ()
-    supports_validation = True
-    local_position = wrapped_property(
-        "localPosition", optional(array_wrapper(np.float32))
-    )
-    value = wrapped_property("value", optional(layer_selected_value))
-
-
-if typing.TYPE_CHECKING or _BUILDING_DOCS:
-    _LayerSelectedValuesBase = Map[str, LayerSelectionState]
-else:
-    _LayerSelectedValuesBase = typed_map(str, LayerSelectionState)
-
-
-@export
-class LayerSelectedValues(_LayerSelectedValuesBase):
-    """Specifies the data values associated with the current mouse position."""
 
 
 @export
@@ -352,6 +311,9 @@ class ConfigState(JsonObjectWrapper):
     show_location = showLocation = wrapped_property(
         "showLocation", optional(bool, True)
     )
+    show_annotation_tool_status = showAnnotationToolStatus = wrapped_property(
+        "showAnnotationToolStatus", optional(bool, True)
+    )
     show_layer_panel = showLayerPanel = wrapped_property(
         "showLayerPanel", optional(bool, True)
     )
@@ -360,6 +322,9 @@ class ConfigState(JsonObjectWrapper):
     )
     show_settings_button = showSettingsButton = wrapped_property(
         "showSettingsButton", optional(bool, True)
+    )
+    show_edit_state_button = showEditStateButton = wrapped_property(
+        "showEditStateButton", optional(bool, True)
     )
     show_layer_side_panel_button = showLayerSidePanelButton = wrapped_property(
         "showLayerSidePanelButton", optional(bool, True)
@@ -376,9 +341,19 @@ class ConfigState(JsonObjectWrapper):
     show_selection_panel_button = showSelectionPanelButton = wrapped_property(
         "showSelectionPanelButton", optional(bool, True)
     )
+    show_copy_url_button = showCopyUrlButton = wrapped_property(
+        "showCopyUrlButton", optional(bool, True)
+    )
     show_panel_borders = showPanelBorders = wrapped_property(
         "showPanelBorders", optional(bool, True)
     )
+    show_panel_controls = showPanelControls = wrapped_property(
+        "showPanelControls", optional(bool, True)
+    )
+    show_all_dimension_plot_bounds = showAllDimensionPlotBounds = wrapped_property(
+        "showAllDimensionPlotBounds", optional(bool, True)
+    )
+    pick_radius = pickRadius = wrapped_property("pickRadius", optional(int, 5))
     scale_bar_options = scaleBarOptions = wrapped_property(
         "scaleBarOptions", ScaleBarOptions
     )

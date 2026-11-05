@@ -478,16 +478,22 @@ function AnnotationRenderLayer<
     private renderHelpers: AnnotationRenderHelper[] = [];
     private tempChunkPosition: Float32Array;
 
-    handleRankChanged() {
+    handlePropertiesChanged = () => {
+      this.handleRankChanged(true /* forceUpdate */);
+    };
+
+    handleRankChanged(forceUpdate = false) {
       const { rank } = this.base.source;
-      if (rank === this.curRank) return;
+      if (!forceUpdate && rank === this.curRank) return;
       this.curRank = rank;
       this.tempChunkPosition = new Float32Array(rank);
       const { renderHelpers, gl } = this;
       for (const oldHelper of renderHelpers) {
         oldHelper.dispose();
       }
-      const { properties } = this.base.source;
+      const {
+        properties: { value: properties },
+      } = this.base.source;
       const { displayState } = this.base.state;
       for (const annotationType of annotationTypes) {
         const handler = getAnnotationTypeRenderHandler(annotationType);
@@ -526,6 +532,9 @@ function AnnotationRenderLayer<
       });
       this.role = base.state.role;
       this.registerDisposer(base.redrawNeeded.add(this.redrawNeeded.dispatch));
+      this.registerDisposer(
+        base.source.properties.changed.add(this.handlePropertiesChanged),
+      );
       this.handleRankChanged();
       this.registerDisposer(
         this.base.state.displayState.shaderControls.histogramSpecifications.producerVisibility.add(
@@ -604,7 +613,7 @@ function AnnotationRenderLayer<
     drawGeometryChunkData(
       chunk: AnnotationGeometryData,
       renderContext: PerspectiveViewRenderContext | SliceViewPanelRenderContext,
-      state: AnnotationChunkRenderParameters,
+      attachment: VisibleLayerInfo<LayerView, AttachmentState>,
       drawFraction = 1,
     ) {
       if (!chunk.bufferValid) {
@@ -620,7 +629,7 @@ function AnnotationRenderLayer<
       this.drawGeometry(
         chunk as AnnotationGeometryDataInterface,
         renderContext,
-        state,
+        attachment,
         drawFraction,
       );
     }
@@ -628,9 +637,10 @@ function AnnotationRenderLayer<
     drawGeometry(
       chunk: AnnotationGeometryDataInterface,
       renderContext: PerspectiveViewRenderContext | SliceViewPanelRenderContext,
-      state: AnnotationChunkRenderParameters,
+      attachment: VisibleLayerInfo<LayerView, AttachmentState>,
       drawFraction = 1,
     ) {
+      const state = attachment.state!.chunkRenderParameters!;
       const { base } = this;
       const { chunkDisplayTransform } = state;
       const { serializedAnnotations } = chunk;
@@ -654,6 +664,7 @@ function AnnotationRenderLayer<
       const context: AnnotationRenderContext = {
         annotationLayer: base,
         renderContext,
+        attachment,
         selectedIndex: 0,
         basePickId: pickId,
         buffer: chunk.buffer!,
@@ -819,7 +830,9 @@ function AnnotationRenderLayer<
     transformPickedValue(pickState: PickState) {
       const { pickedAnnotationBuffer } = pickState;
       if (pickedAnnotationBuffer === undefined) return undefined;
-      const { properties } = this.base.source;
+      const {
+        properties: { value: properties },
+      } = this.base.source;
       if (properties.length === 0) return undefined;
       const {
         pickedAnnotationBufferBaseOffset,
@@ -870,7 +883,7 @@ const NonSpatiallyIndexedAnnotationRenderLayer = <
         this.drawGeometry(
           base as AnnotationGeometryDataInterface,
           renderContext,
-          chunkRenderParameters,
+          attachment,
         );
       } else {
         const { renderScaleHistogram } = this;
@@ -881,7 +894,7 @@ const NonSpatiallyIndexedAnnotationRenderLayer = <
         this.drawGeometryChunkData(
           source.temporary.data!,
           renderContext,
-          chunkRenderParameters,
+          attachment,
         );
         const { value: segmentationStates } = this.base.segmentationStates;
         let presentChunks = 0;
@@ -902,11 +915,7 @@ const NonSpatiallyIndexedAnnotationRenderLayer = <
                 ) {
                   const { data } = chunk;
                   if (data === undefined) return;
-                  this.drawGeometryChunkData(
-                    data,
-                    renderContext,
-                    chunkRenderParameters,
-                  );
+                  this.drawGeometryChunkData(data, renderContext, attachment);
                   ++presentChunks;
                 } else {
                   ++notPresentChunks;
@@ -1131,7 +1140,7 @@ const SpatiallyIndexedAnnotationLayer = <
               this.drawGeometryChunkData(
                 data,
                 renderContext,
-                chunkRenderParameters,
+                attachment,
                 drawFraction,
               );
             }

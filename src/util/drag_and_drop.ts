@@ -30,6 +30,10 @@
 
 import { registerEventListener } from "#src/util/disposable.js";
 import { hexEncode, hexDecode } from "#src/util/hex.js";
+import {
+  commandOrControlLabel,
+  hasCommandOrControl,
+} from "#src/util/platform.js";
 
 export function encodeStringAsDragType(s: string) {
   return hexEncode(new TextEncoder().encode(s));
@@ -81,6 +85,43 @@ export function decodeParametersFromDragTypeList(
 
 let savedDropEffect: DataTransfer["dropEffect"] | undefined;
 
+// Chrome on Wayland seems to report an `effectAllowed` of `copyMove` regardless
+// of what the dragstart handler sets.  Convert the actual drop effect to an
+// allowed value to avoid Chrome rejecting the drop.  The actual drop effect is
+// still stored separately by `setDropEffect` to ensure the correct drop action
+// is performed.
+function getAllowedDropEffect(
+  effectAllowed: string,
+  dropEffect: string,
+): string {
+  if (effectAllowed == dropEffect) return dropEffect;
+  switch (effectAllowed) {
+    case "all":
+      return dropEffect;
+    case "copyMove":
+      return dropEffect == "copy" || dropEffect == "move" ? dropEffect : "copy";
+    case "copyLink":
+      return dropEffect == "copy" || dropEffect == "link" ? dropEffect : "copy";
+    case "linkMove":
+      return dropEffect == "link" || dropEffect == "move" ? dropEffect : "link";
+  }
+  return effectAllowed;
+}
+
+/**
+ * Declares the drop effects this drag source supports.
+ *
+ * macOS intersects this mask with the operation its own drag modifiers request,
+ * and reports "none" when the two do not overlap, which rejects the drop. A
+ * source that leaves the mask unset can therefore never be moved with Command.
+ */
+export function declareAllowedDropEffects(
+  event: DragEvent,
+  allowed: DataTransfer["effectAllowed"],
+) {
+  event.dataTransfer!.effectAllowed = allowed;
+}
+
 /**
  * On Chrome 62, the dataTransfer.dropEffect property is reset to 'none' when the 'drop' event is
  * dispatched.  As a workaround, we store it in a global variable.
@@ -93,7 +134,10 @@ export function setDropEffect<T extends DataTransfer["dropEffect"]>(
   event: DragEvent,
   dropEffect: T,
 ) {
-  event.dataTransfer!.dropEffect = dropEffect;
+  event.dataTransfer!.dropEffect = getAllowedDropEffect(
+    event.dataTransfer!.effectAllowed,
+    dropEffect,
+  ) as any;
   savedDropEffect = dropEffect;
   return dropEffect;
 }
@@ -110,38 +154,129 @@ export function preventDrag(element: HTMLElement) {
   });
 }
 
+// False except on Wayland.
+let mustRestartDragToChangeModifiers = false;
+
+// When `modifiersReportedDuringDrag == false`, this stores the initial
+// modifiers reported to the `dragstart` handler.
+let savedModifiers:
+  | {
+      shiftKey: boolean;
+      ctrlKey: boolean;
+      altKey: boolean;
+      metaKey: boolean;
+    }
+  | undefined = undefined;
+
+// Apply Linux Wayland-specific workarounds.
+if (
+  navigator.platform.startsWith("Linux ") &&
+  !navigator.userAgent.includes("CrOs") &&
+  !navigator.userAgent.includes("Android") &&
+  // On Wayland, screenX and screenY are always reported as 0.  However, this
+  // does not definitively rule out X11.
+  window.screenX === 0 &&
+  window.screenY === 0
+) {
+  // On Linux under Wayland, Chrome does not report any modifier keys after the
+  // initial `dragstart` event, while Firefox saves the modifier keys that were
+  // held during `dragstart` and continues to report them on all drag-related
+  // events, even if the user releases the modifiers.
+  //
+  // We will emulate the and Firefox do not report modifier keys
+  // during drag operations due to Wayland limitations, only on the initial
+  // dragstart event.  There is no way to directly detect Wayland vs X11 but we
+  // on Chrome can check if any modifiers have been observed in drag events other than
+  // `dragstart`.
+  mustRestartDragToChangeModifiers = true;
+
+  if (navigator.userAgent.includes("Chrome")) {
+    // Under Chrome, effectively emulate the Firefox behavior by storing the
+    // modifiers that are reported to `dragstart` and make them available.
+    //
+    // Additionally, if any modifier is reported to a drag event other than
+    // `dragstart`, the platform must not be Wayland and the workaround and
+    // warning can be disabled.
+    const eventTypes = [
+      "dragstart",
+      "dragend",
+      "drag",
+      "dragenter",
+      "dragover",
+      "dragleave",
+    ];
+    function dragHandler(event: DragEvent) {
+      if (event.type == "dragstart") {
+        savedModifiers = {
+          shiftKey: event.shiftKey,
+          altKey: event.altKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+        };
+      } else if (event.type == "dragend") {
+        savedModifiers = undefined;
+      } else if (
+        event.ctrlKey ||
+        event.altKey ||
+        event.shiftKey ||
+        event.metaKey
+      ) {
+        // Non-Wayland platform detected, disable workaround.
+        savedModifiers = undefined;
+        mustRestartDragToChangeModifiers = false;
+        for (const eventType of eventTypes) {
+          window.removeEventListener(eventType, dragHandler, { capture: true });
+        }
+      }
+    }
+    for (const eventType of eventTypes) {
+      window.addEventListener(eventType, dragHandler, { capture: true });
+    }
+  }
+}
+
 export function getDropEffectFromModifiers<DropEffect extends string>(
   event: DragEvent,
   defaultDropEffect: DropEffect,
   moveAllowed: boolean,
 ): { dropEffect: DropEffect | "move" | "copy"; dropEffectMessage: string } {
+  const modifiers = savedModifiers ?? event;
+  const moveModifierActive = hasCommandOrControl(modifiers);
+  const moveModifierLabel = commandOrControlLabel().toUpperCase();
   let dropEffect: DropEffect | "move" | "copy";
-  if (event.shiftKey) {
+  if (modifiers.shiftKey) {
     dropEffect = "copy";
-  } else if (event.ctrlKey && moveAllowed) {
+  } else if (moveModifierActive && moveAllowed) {
     dropEffect = "move";
   } else {
     dropEffect = defaultDropEffect;
   }
   let message = "";
   const addMessage = (msg: string) => {
-    if (message !== "") {
+    if (message === "" && mustRestartDragToChangeModifiers) {
+      message = "restart drag and ";
+    } else if (message !== "") {
       message += ", ";
     }
     message += msg;
   };
   if (defaultDropEffect !== "none" && dropEffect !== defaultDropEffect) {
-    if (event.shiftKey) {
+    if (modifiers.shiftKey) {
       addMessage(`release SHIFT to ${defaultDropEffect}`);
     } else {
-      addMessage(`release CONTROL to ${defaultDropEffect}`);
+      addMessage(`release ${moveModifierLabel} to ${defaultDropEffect}`);
     }
   }
   if (dropEffect !== "copy") {
     addMessage("hold SHIFT to copy");
   }
   if (dropEffect !== "move" && moveAllowed && defaultDropEffect !== "move") {
-    addMessage("hold CONTROL to move");
+    addMessage(`hold ${moveModifierLabel} to move`);
+  }
+
+  if (message !== "" && mustRestartDragToChangeModifiers) {
+    message +=
+      "; due to Wayland limitation, modifier keys cannot be changed during drag";
   }
   return { dropEffect, dropEffectMessage: message };
 }

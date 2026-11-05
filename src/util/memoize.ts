@@ -98,18 +98,23 @@ export function asyncMemoize<T>(
             signal: curAbortController.signal,
           });
         } catch (e) {
-          if (curAbortController.signal.aborted) {
+          // A newer call may have started after this one was aborted; only
+          // reset the shared state if it still belongs to this call.
+          if (
+            curAbortController.signal.aborted &&
+            abortController === curAbortController
+          ) {
             promise = undefined;
           }
           throw e;
         } finally {
-          if (promise !== undefined) {
-            completed = true;
-          }
-          curAbortController[Symbol.dispose]();
           if (abortController === curAbortController) {
+            if (promise !== undefined) {
+              completed = true;
+            }
             abortController = undefined;
           }
+          curAbortController[Symbol.dispose]();
         }
       })();
     }
@@ -143,19 +148,24 @@ export function asyncMemoizeWithProgress<T>(
             progressListener: progressListener!,
           });
         } catch (e) {
-          if (curAbortController.signal.aborted) {
+          // A newer call may have started after this one was aborted; only
+          // reset the shared state if it still belongs to this call.
+          if (
+            curAbortController.signal.aborted &&
+            abortController === curAbortController
+          ) {
             promise = undefined;
           }
           throw e;
         } finally {
-          if (promise !== undefined) {
-            completed = true;
-          }
-          progressListener = undefined;
-          curAbortController[Symbol.dispose]();
           if (abortController === curAbortController) {
+            if (promise !== undefined) {
+              completed = true;
+            }
+            progressListener = undefined;
             abortController = undefined;
           }
+          curAbortController[Symbol.dispose]();
         }
       })();
     }

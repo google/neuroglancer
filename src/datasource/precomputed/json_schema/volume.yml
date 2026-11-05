@@ -113,6 +113,9 @@ properties:
             - const: compresso
               title: |
                 :ref:`precomputed-volume-encoding-compresso`
+            - const: crackle
+              title: |
+                :ref:`precomputed-volume-encoding-crackle`
             - const: jxl
               title: |
                 :ref:`precomputed-volume-encoding-jxl`

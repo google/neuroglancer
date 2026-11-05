@@ -15,7 +15,6 @@
 """Module implements function for authentication of layers based on DVID.
 Here tokens are fetched from local locations like env vars etc."""
 
-import logging
 import os
 
 from . import credentials_provider
@@ -25,10 +24,6 @@ from .futures import run_on_new_thread
 class TokenbasedDefaultCredentialsProvider(credentials_provider.CredentialsProvider):
     def __init__(self, parameters):
         super().__init__()
-
-        # Make sure logging is initialized.
-        # Does nothing if logging has already been initialized.
-        logging.basicConfig()
         self.parameters = parameters
         self._credentials = {}
 

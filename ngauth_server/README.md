@@ -77,7 +77,8 @@ following permissions:
    is via the `roles/storage.objectViewer` and `roles/iam.securityReviewer` roles:
 
    ```shell
-   gsutil iam ch serviceAccount:NGAUTH_PROJECT_ID@appspot.gserviceaccount.com:roles/storage.objectViewer,roles/iam.securityReviewer gs://YOUR_BUCKET
+   gcloud storage buckets add-iam-policy-binding gs://YOUR_BUCKET --member=serviceAccount:NGAUTH_PROJECT_ID@appspot.gserviceaccount.com --role=roles/storage.objectViewer
+   gcloud storage buckets add-iam-policy-binding gs://YOUR_BUCKET --member=serviceAccount:NGAUTH_PROJECT_ID@appspot.gserviceaccount.com --role=roles/iam.securityReviewer
    ```
 
    The `roles/storage.objectViewer` role grants read and list access to the bucket and the

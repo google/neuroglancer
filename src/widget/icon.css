@@ -50,7 +50,7 @@
 }
 
 .neuroglancer-icon.neuroglancer-info-icon:hover {
-  background-color: inherit;
+  background-color: transparent;
 }
 
 .neuroglancer-icon-hover:not(:hover) svg:last-child {

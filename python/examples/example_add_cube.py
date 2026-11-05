@@ -27,8 +27,8 @@ if __name__ == "__main__":
             )
 
     viewer.actions.add("add-cube", add_cube)
-    with viewer.config_state.txn() as s:
-        s.input_event_bindings.viewer["keyt"] = "add-cube"
+    with viewer.config_state.txn() as cs:
+        cs.input_event_bindings.viewer["keyt"] = "add-cube"
 
     with viewer.txn() as s:
         s.dimensions = neuroglancer.CoordinateSpace(
