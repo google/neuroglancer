@@ -57,6 +57,7 @@ export interface SpatiallyIndexedSkeletonChunkSpecification
 }
 
 const tempMat3 = mat3.create();
+const tempSourceToClip = mat4.create();
 
 export interface SpatialSkeletonSourceDensityContext<
   Transformed extends TransformedSource<any, SliceViewChunkSource>,
@@ -93,6 +94,51 @@ function getSpatialSkeletonChunkPhysicalVolume(
   );
 }
 
+function getSpatialSkeletonProjectedViewportArea(
+  { width, height, projectionMat, viewMatrix }: ProjectionParameters,
+  {
+    chunkLayout,
+    lowerClipDisplayBound: lower,
+    upperClipDisplayBound: upper,
+  }: TransformedSource,
+) {
+  const fullViewportArea = width * height;
+  for (let i = 0; i < 3; ++i) {
+    if (!Number.isFinite(lower[i]) || !Number.isFinite(upper[i])) {
+      return fullViewportArea;
+    }
+  }
+  const m = tempSourceToClip;
+  mat4.multiply(m, projectionMat, viewMatrix);
+  mat4.multiply(m, m, chunkLayout.transform);
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (let corner = 0; corner < 8; ++corner) {
+    const x = corner & 1 ? upper[0] : lower[0];
+    const y = corner & 2 ? upper[1] : lower[1];
+    const z = corner & 4 ? upper[2] : lower[2];
+    const w = m[3] * x + m[7] * y + m[11] * z + m[15];
+    // Bounds crossing the camera plane cannot be projected from just their
+    // corners. Keep the full budget rather than underestimating their coverage.
+    if (w <= 0) return fullViewportArea;
+    const clipX = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w;
+    const clipY = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w;
+    if (!Number.isFinite(clipX) || !Number.isFinite(clipY)) {
+      return fullViewportArea;
+    }
+    minX = Math.min(minX, clipX);
+    minY = Math.min(minY, clipY);
+    maxX = Math.max(maxX, clipX);
+    maxY = Math.max(maxY, clipY);
+  }
+  const widthFraction = Math.max(0, Math.min(1, maxX) - Math.max(-1, minX)) / 2;
+  const heightFraction =
+    Math.max(0, Math.min(1, maxY) - Math.max(-1, minY)) / 2;
+  return fullViewportArea * widthFraction * heightFraction;
+}
+
 export function getSpatialSkeletonSourceDensityContext<
   Transformed extends TransformedSource<any, SliceViewChunkSource>,
 >(
@@ -102,13 +148,8 @@ export function getSpatialSkeletonSourceDensityContext<
 ): SpatialSkeletonSourceDensityContext<Transformed> | undefined {
   if (transformedSources.length === 0) return undefined;
 
-  const {
-    displayDimensionRenderInfo,
-    viewMatrix,
-    projectionMat,
-    width,
-    height,
-  } = projectionParameters;
+  const { displayDimensionRenderInfo, viewMatrix, projectionMat } =
+    projectionParameters;
   const { voxelPhysicalScales } = displayDimensionRenderInfo;
   const viewDet = Math.abs(
     mat3.determinant(mat3FromMat4(tempMat3, viewMatrix)),
@@ -140,7 +181,12 @@ export function getSpatialSkeletonSourceDensityContext<
   }
 
   const effectiveVolume = Math.min(sourceVolume, viewFrustumVolume);
-  const viewportArea = width * height;
+  // Once the source volume is the limiting volume, empty screen margins must
+  // not keep the node budget fixed as the dataset becomes smaller on screen.
+  const viewportArea = getSpatialSkeletonProjectedViewportArea(
+    projectionParameters,
+    baseSource,
+  );
   const targetNumNodes = viewportArea / spacingTarget ** 2;
   const physicalDensityTarget = targetNumNodes / effectiveVolume;
   return {
