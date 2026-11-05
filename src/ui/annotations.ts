@@ -355,8 +355,6 @@ export class AnnotationLayerView extends AccordionTab {
   private headerRow = document.createElement("div");
   private listHeader = document.createElement("div");
   private listContainer = document.createElement("div");
-  private listOverflowIndicator = document.createElement("div");
-  private listLeftOverflowIndicator = document.createElement("div");
 
   get annotationStates() {
     return this.layer.annotationStates;
@@ -535,10 +533,6 @@ export class AnnotationLayerView extends AccordionTab {
       this.headerRow.scrollWidth,
     )}px`;
     this.headerRow.style.transform = `translateX(${-element.scrollLeft}px)`;
-    this.listContainer.dataset.overflowLeft = String(element.scrollLeft > 1);
-    this.listContainer.dataset.overflowRight = String(
-      element.scrollLeft + element.clientWidth < element.scrollWidth - 1,
-    );
   };
 
   private updateCoordinateSpace() {
@@ -721,7 +715,10 @@ export class AnnotationLayerView extends AccordionTab {
         title: "Select next annotation (click to bind key)",
       }),
     );
-    toolbox.appendChild(navRow);
+    const listToolbar = document.createElement("div");
+    listToolbar.classList.add("neuroglancer-annotation-list-toolbar");
+    listToolbar.append(navRow, this.headerControls);
+    toolbox.appendChild(listToolbar);
     this.appendChild(toolbox, ANNOTATION_SECTION_JSON_KEY);
     {
       const checkbox = this.registerDisposer(
@@ -818,33 +815,36 @@ export class AnnotationLayerView extends AccordionTab {
       "neuroglancer-annotation-column-controls-container",
     );
     this.listHeader.append(this.headerRow);
-    const { listContainer, listOverflowIndicator, listLeftOverflowIndicator } =
-      this;
+    const { listContainer } = this;
     listContainer.classList.add("neuroglancer-annotation-list-container");
-    listOverflowIndicator.classList.add(
-      "neuroglancer-annotation-list-overflow-indicator",
-      "neuroglancer-annotation-list-overflow-indicator-right",
-    );
-    listOverflowIndicator.textContent = "\u203a";
-    listOverflowIndicator.title = "More annotation columns to the right";
-    listLeftOverflowIndicator.classList.add(
-      "neuroglancer-annotation-list-overflow-indicator",
-      "neuroglancer-annotation-list-overflow-indicator-left",
-    );
-    listLeftOverflowIndicator.textContent = "\u2039";
-    listLeftOverflowIndicator.title = "More annotation columns to the left";
-    listContainer.append(
-      this.listHeader,
-      virtualList.element,
-      listLeftOverflowIndicator,
-      listOverflowIndicator,
-      this.headerControls,
-    );
+    listContainer.append(this.listHeader, virtualList.element);
     this.appendChild(listContainer, ANNOTATION_SECTION_JSON_KEY);
     this.registerEventListener(
       virtualList.element,
       "scroll",
       this.updateListOverflow,
+    );
+    this.registerEventListener(
+      this.listHeader,
+      "wheel",
+      (event) => {
+        if (!(event instanceof WheelEvent)) return;
+        const delta = event.deltaX || (event.shiftKey ? event.deltaY : 0);
+        if (delta === 0) return;
+        const scroller = virtualList.element;
+        const multiplier =
+          event.deltaMode === WheelEvent.DOM_DELTA_LINE
+            ? 16
+            : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+              ? scroller.clientWidth
+              : 1;
+        const previousScrollLeft = scroller.scrollLeft;
+        scroller.scrollLeft += delta * multiplier;
+        if (scroller.scrollLeft === previousScrollLeft) return;
+        event.preventDefault();
+        event.stopPropagation();
+      },
+      { passive: false },
     );
     const overflowObserver = new ResizeObserver(this.updateListOverflow);
     overflowObserver.observe(virtualList.element);
