@@ -145,7 +145,6 @@ import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual, type ArraySpliceOp } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import { packColor } from "#src/util/color.js";
-import { DataType } from "#src/util/data_type.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
@@ -1550,6 +1549,7 @@ export class AnnotationLayerView extends AccordionTab {
       {
         showColumnToggle: false,
         showSortControl: false,
+        showPropertyTypes: false,
         expandableProperties: true,
         retainUnavailableProperties: true,
         isPropertyExpanded: (id) => this.propertyDetailsOpen.get(id) ?? false,
@@ -1828,10 +1828,7 @@ export class AnnotationLayerView extends AccordionTab {
         key: prop.identifier,
         label: prop.identifier,
         description: prop.description,
-        typeLabel:
-          prop.dataType === undefined
-            ? `Enum(${new Set(prop.enumValues).size})`
-            : `${DataType[prop.dataType].toLowerCase()} Enum(${new Set(prop.enumValues).size})`,
+        optionCount: new Set(prop.enumValues).size,
         filtered:
           constraint !== undefined &&
           (constraint.include.length !== 0 || constraint.exclude.length !== 0),
@@ -1891,7 +1888,6 @@ export class AnnotationLayerView extends AccordionTab {
         key: fieldId,
         label: fieldId,
         description: prop.description,
-        typeLabel: "Boolean",
         boolean: true,
         filtered: constraint?.value !== undefined,
         hidden: !availablePropertyIds.has(fieldId),

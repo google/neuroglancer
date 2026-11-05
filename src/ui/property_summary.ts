@@ -114,6 +114,7 @@ export interface NumericalPropertiesSummaryOptions {
   propertyLabelPosition?: "inline" | "above";
   showColumnToggle?: boolean;
   showSortControl?: boolean;
+  showPropertyTypes?: boolean;
   expandableProperties?: boolean;
   retainUnavailableProperties?: boolean;
   isPropertyExpanded?: (id: string) => boolean;
@@ -155,6 +156,7 @@ export interface IncludeExcludeChipGroup {
   chips: IncludeExcludeChip[];
   description?: string;
   typeLabel?: string;
+  optionCount?: number;
   boolean?: boolean;
   filtered?: boolean;
   hidden?: boolean;
@@ -167,6 +169,7 @@ function createPropertySummaryHeader(
   description?: string,
   typeLabel?: string,
   expandable = true,
+  optionCount?: number,
 ) {
   const header = document.createElement(expandable ? "summary" : "div");
   header.classList.add("neuroglancer-property-summary-header");
@@ -180,6 +183,12 @@ function createPropertySummaryHeader(
     header.appendChild(type);
   }
   header.appendChild(name);
+  if (optionCount !== undefined) {
+    const count = document.createElement("span");
+    count.classList.add("neuroglancer-property-summary-option-count");
+    count.textContent = `(${optionCount})`;
+    header.appendChild(count);
+  }
   if (description) {
     const descriptionElement = document.createElement("span");
     descriptionElement.classList.add(
@@ -754,7 +763,9 @@ export class NumericalPropertiesSummary extends RefCounted {
         createPropertySummaryHeader(
           property.id,
           property.description,
-          DataType[property.dataType].toLowerCase(),
+          this.options.showPropertyTypes === false
+            ? undefined
+            : DataType[property.dataType].toLowerCase(),
         ),
         plotContainer,
       );
@@ -1138,10 +1149,9 @@ export function renderCategoricalPropertiesSummary(options: {
           group.typeLabel,
           false,
         );
-        header.insertBefore(
-          groupChips,
-          header.querySelector(".neuroglancer-property-summary-name"),
-        );
+        header
+          .querySelector(".neuroglancer-property-summary-name")!
+          .after(groupChips);
         const count = document.createElement("span");
         count.classList.add("neuroglancer-property-summary-boolean-count");
         const chip = group.chips[0];
@@ -1170,6 +1180,8 @@ export function renderCategoricalPropertiesSummary(options: {
           group.label,
           group.description,
           group.typeLabel,
+          true,
+          group.optionCount,
         ),
         groupChips,
       );
