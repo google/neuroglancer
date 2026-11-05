@@ -87,6 +87,7 @@ import { createHomogeneousScaleMatrix } from "#src/util/matrix.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
 import { scaleByExp10, unitFromJson } from "#src/util/si_units.js";
+import { getSourceDataType } from "#src/util/source_data_type.js";
 
 class N5VolumeChunkSource extends WithParameters(
   WithSharedKvStoreContext(VolumeChunkSource),
@@ -184,6 +185,7 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
                   parameters: {
                     url: scale.url,
                     encoding: scale.encoding,
+                    sourceDataType: scale.sourceDataType,
                   },
                 },
               ),
@@ -211,6 +213,7 @@ interface MultiscaleMetadata {
 interface ScaleMetadata {
   url: string;
   dataType: DataType;
+  sourceDataType: string;
   encoding: VolumeChunkEncoding;
   size: Float32Array<ArrayBuffer>;
   chunkSize: Uint32Array<ArrayBuffer>;
@@ -224,9 +227,15 @@ function parseScaleMetadata(
   downsamplingFactors?: Float64Array<ArrayBuffer>,
 ): ScaleMetadata {
   verifyObject(obj);
-  const dataType = verifyObjectProperty(obj, "dataType", (x) =>
-    verifyEnumString(x, DataType),
+  const sourceDataType = verifyObjectProperty(obj, "dataType", (x) =>
+    getSourceDataType(verifyString(x)),
   );
+  if (sourceDataType.numComponents !== 1) {
+    throw new Error(
+      `Unsupported data type: ${JSON.stringify(sourceDataType.name)}`,
+    );
+  }
+  const dataType = sourceDataType.dataType;
   const size = Float32Array.from(
     verifyObjectProperty(obj, "dimensions", (x) =>
       parseArray(x, verifyPositiveInt),
@@ -280,7 +289,15 @@ function parseScaleMetadata(
     }
   }
 
-  return { url, dataType, encoding, size, chunkSize, downsamplingFactors };
+  return {
+    url,
+    dataType,
+    sourceDataType: sourceDataType.name,
+    encoding,
+    size,
+    chunkSize,
+    downsamplingFactors,
+  };
 }
 
 function getAllScales(

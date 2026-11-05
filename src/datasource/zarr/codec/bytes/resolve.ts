@@ -20,9 +20,12 @@ import type {
 } from "#src/datasource/zarr/codec/index.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
 import { registerCodec } from "#src/datasource/zarr/codec/resolve.js";
-import { DATA_TYPE_BYTES } from "#src/util/data_type.js";
 import { ENDIANNESS, Endianness } from "#src/util/endian.js";
 import { verifyObject, verifyObjectProperty } from "#src/util/json.js";
+import {
+  encodedByteLength,
+  getSourceDataType,
+} from "#src/util/source_data_type.js";
 
 export interface Configuration {
   endian: Endianness;
@@ -36,6 +39,7 @@ registerCodec({
     decodedArrayInfo: CodecArrayInfo,
   ): { configuration: Configuration; encodedSize: number } {
     verifyObject(configuration);
+    const sourceDataType = getSourceDataType(decodedArrayInfo.sourceDataType);
     const endian = verifyObjectProperty(configuration, "endian", (value) => {
       switch (value) {
         case "little":
@@ -43,7 +47,7 @@ registerCodec({
         case "big":
           return Endianness.BIG;
         case undefined:
-          if (DATA_TYPE_BYTES[decodedArrayInfo.dataType] === 1) {
+          if (sourceDataType.bitsPerElement <= 8) {
             return ENDIANNESS;
           }
       }
@@ -52,7 +56,7 @@ registerCodec({
     const numElements = decodedArrayInfo.chunkShape.reduce((a, b) => a * b, 1);
     return {
       configuration: { endian },
-      encodedSize: DATA_TYPE_BYTES[decodedArrayInfo.dataType] * numElements,
+      encodedSize: encodedByteLength(sourceDataType, numElements),
     };
   },
   getDecodedArrayLayoutInfo(

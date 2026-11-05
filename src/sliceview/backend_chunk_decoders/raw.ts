@@ -16,9 +16,13 @@
 
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
-import { DATA_TYPE_BYTES, makeDataTypeArrayView } from "#src/util/data_type.js";
 import type { Endianness } from "#src/util/endian.js";
-import { convertEndian, ENDIANNESS } from "#src/util/endian.js";
+import { ENDIANNESS } from "#src/util/endian.js";
+import type { SourceDataType } from "#src/util/source_data_type.js";
+import {
+  encodedByteLength,
+  getNativeSourceDataType,
+} from "#src/util/source_data_type.js";
 import * as vector from "#src/util/vector.js";
 
 export async function decodeRawChunk(
@@ -28,25 +32,24 @@ export async function decodeRawChunk(
   endianness: Endianness = ENDIANNESS,
   byteOffset = 0,
   byteLength: number = response.byteLength,
+  sourceDataType?: SourceDataType,
 ) {
   signal;
   const { spec } = chunk.source!;
-  const { dataType } = spec;
   const numElements = vector.prod(chunk.chunkDataSize!);
-  const bytesPerElement = DATA_TYPE_BYTES[dataType];
-  const expectedBytes = numElements * bytesPerElement;
+  sourceDataType ??= getNativeSourceDataType(spec.dataType);
+  const expectedBytes = encodedByteLength(sourceDataType, numElements);
   if (expectedBytes !== byteLength) {
     throw new Error(
       `Raw-format chunk is ${byteLength} bytes, ` +
-        `but ${numElements} * ${bytesPerElement} = ${expectedBytes} bytes are expected.`,
+        `but ${expectedBytes} bytes are expected for ${numElements} elements ` +
+        `of type ${sourceDataType.name}.`,
     );
   }
-  const data = makeDataTypeArrayView(
-    dataType,
-    response,
-    byteOffset,
-    byteLength,
+  const data = sourceDataType.decode(
+    new Uint8Array(response, byteOffset, byteLength),
+    numElements,
+    endianness,
   );
-  convertEndian(data, endianness, bytesPerElement);
   await postProcessRawData(chunk, signal, data);
 }

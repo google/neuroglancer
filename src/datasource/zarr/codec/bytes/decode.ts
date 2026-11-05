@@ -18,8 +18,10 @@ import type { Configuration } from "#src/datasource/zarr/codec/bytes/resolve.js"
 import { registerCodec } from "#src/datasource/zarr/codec/decode.js";
 import type { CodecArrayInfo } from "#src/datasource/zarr/codec/index.js";
 import { CodecKind } from "#src/datasource/zarr/codec/index.js";
-import { DATA_TYPE_BYTES, makeDataTypeArrayView } from "#src/util/data_type.js";
-import { convertEndian } from "#src/util/endian.js";
+import {
+  encodedByteLength,
+  getSourceDataType,
+} from "#src/util/source_data_type.js";
 
 registerCodec({
   name: "bytes",
@@ -31,23 +33,16 @@ registerCodec({
     signal: AbortSignal,
   ) {
     signal;
-    const { dataType, chunkShape } = decodedArrayInfo;
-    const numElements = chunkShape.reduce((a, b) => a * b, 1);
-    const bytesPerElement = DATA_TYPE_BYTES[dataType];
-    const expectedBytes = numElements * bytesPerElement;
+    const sourceDataType = getSourceDataType(decodedArrayInfo.sourceDataType);
+    const numElements = decodedArrayInfo.chunkShape.reduce((a, b) => a * b, 1);
+    const expectedBytes = encodedByteLength(sourceDataType, numElements);
     if (encoded.byteLength !== expectedBytes) {
       throw new Error(
         `Raw-format chunk is ${encoded.byteLength} bytes, ` +
-          `but ${numElements} * ${bytesPerElement} = ${expectedBytes} bytes are expected.`,
+          `but ${expectedBytes} bytes are expected for ${numElements} elements ` +
+          `of type ${sourceDataType.name}.`,
       );
     }
-    const data = makeDataTypeArrayView(
-      dataType,
-      encoded.buffer,
-      encoded.byteOffset,
-      encoded.byteLength,
-    );
-    convertEndian(data, configuration.endian, bytesPerElement);
-    return data;
+    return sourceDataType.decode(encoded, numElements, configuration.endian);
   },
 });

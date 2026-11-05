@@ -18,58 +18,41 @@
  * @file Support for parsing NumPy dtype strings.
  */
 
-import { DataType } from "#src/util/data_type.js";
 import { Endianness } from "#src/util/endian.js";
+import type { SourceDataType } from "#src/util/source_data_type.js";
+import { getSourceDataType } from "#src/util/source_data_type.js";
 
 export interface NumpyDtype {
-  dataType: DataType;
+  sourceDataType: SourceDataType;
   endianness: Endianness;
 }
 
-const supportedDataTypes = new Map<string, NumpyDtype>();
-supportedDataTypes.set("|u1", {
-  endianness: Endianness.LITTLE,
-  dataType: DataType.UINT8,
-});
-supportedDataTypes.set("|i1", {
-  endianness: Endianness.LITTLE,
-  dataType: DataType.INT8,
-});
+const supportedDataTypes = new Map<
+  string,
+  { name: string; endianness: Endianness }
+>();
+supportedDataTypes.set("|u1", { endianness: Endianness.LITTLE, name: "uint8" });
+supportedDataTypes.set("|i1", { endianness: Endianness.LITTLE, name: "int8" });
 for (const [endiannessChar, endianness] of <[string, Endianness][]>[
   ["<", Endianness.LITTLE],
   [">", Endianness.BIG],
 ]) {
-  // For now, treat both signed and unsigned integer types as unsigned.
-  for (const typeChar of ["u", "i"]) {
-    supportedDataTypes.set(`${endiannessChar}${typeChar}8`, {
+  for (const [typeChar, size, name] of <[string, number, string][]>[
+    ["u", 2, "uint16"],
+    ["i", 2, "int16"],
+    ["u", 4, "uint32"],
+    ["i", 4, "int32"],
+    ["u", 8, "uint64"],
+    ["i", 8, "int64"],
+    ["f", 2, "float16"],
+    ["f", 4, "float32"],
+    ["f", 8, "float64"],
+  ]) {
+    supportedDataTypes.set(`${endiannessChar}${typeChar}${size}`, {
       endianness,
-      dataType: DataType.UINT64,
+      name,
     });
   }
-  supportedDataTypes.set(`${endiannessChar}u2`, {
-    endianness,
-    dataType: DataType.UINT16,
-  });
-
-  supportedDataTypes.set(`${endiannessChar}i2`, {
-    endianness,
-    dataType: DataType.INT16,
-  });
-
-  supportedDataTypes.set(`${endiannessChar}u4`, {
-    endianness,
-    dataType: DataType.UINT32,
-  });
-
-  supportedDataTypes.set(`${endiannessChar}i4`, {
-    endianness,
-    dataType: DataType.INT32,
-  });
-
-  supportedDataTypes.set(`${endiannessChar}f4`, {
-    endianness,
-    dataType: DataType.FLOAT32,
-  });
 }
 
 export function parseNumpyDtype(typestr: unknown): NumpyDtype {
@@ -77,5 +60,8 @@ export function parseNumpyDtype(typestr: unknown): NumpyDtype {
   if (dtype === undefined) {
     throw new Error(`Unsupported numpy data type: ${JSON.stringify(typestr)}`);
   }
-  return dtype;
+  return {
+    sourceDataType: getSourceDataType(dtype.name),
+    endianness: dtype.endianness,
+  };
 }

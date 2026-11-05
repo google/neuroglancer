@@ -81,7 +81,7 @@ registerCodec({
       },
     );
     const encodedArrayInfo = {
-      dataType: decodedArrayInfo.dataType,
+      sourceDataType: decodedArrayInfo.sourceDataType,
       chunkShape: Array.from(order, (i) => decodedArrayInfo.chunkShape[i]),
     };
     return {

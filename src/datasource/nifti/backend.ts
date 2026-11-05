@@ -29,7 +29,6 @@ import type { ReadResponse } from "#src/kvstore/index.js";
 import { decodeRawChunk } from "#src/sliceview/backend_chunk_decoders/raw.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
-import { DataType } from "#src/sliceview/volume/base.js";
 import { Endianness } from "#src/util/endian.js";
 import {
   kOneVec,
@@ -41,6 +40,7 @@ import {
 import { decodeGzip } from "#src/util/gzip.js";
 import * as matrix from "#src/util/matrix.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
+import { getSourceDataType } from "#src/util/source_data_type.js";
 import type { RPCPromise } from "#src/worker_rpc.js";
 import { registerPromiseRPC, registerSharedObject } from "#src/worker_rpc.js";
 
@@ -130,21 +130,29 @@ enum NiftiDataType {
   COMPLEX256 = 2048,
 }
 
-const DATA_TYPE_CONVERSIONS = new Map([
-  [NiftiDataType.INT8, { dataType: DataType.INT8 }],
-  [NiftiDataType.UINT8, { dataType: DataType.UINT8 }],
-  [NiftiDataType.INT16, { dataType: DataType.INT16 }],
-  [NiftiDataType.UINT16, { dataType: DataType.UINT16 }],
-  [NiftiDataType.INT32, { dataType: DataType.INT32 }],
-  [NiftiDataType.UINT32, { dataType: DataType.UINT32 }],
-  [NiftiDataType.INT64, { dataType: DataType.UINT64 }],
-  [NiftiDataType.UINT64, { dataType: DataType.UINT64 }],
-  [NiftiDataType.FLOAT32, { dataType: DataType.FLOAT32 }],
-  // Downcast unsupported float64 to float32 for visualization.
-  [NiftiDataType.FLOAT64, { dataType: DataType.FLOAT32 }],
-  // Some NIFTI variants may encode float16 (not enumerated here); if encountered treat as float32.
-  // (FLOAT16 is not part of this enum; placeholder for future library update.)
+const DATA_TYPE_CONVERSIONS = new Map<NiftiDataType, string>([
+  [NiftiDataType.INT8, "int8"],
+  [NiftiDataType.UINT8, "uint8"],
+  [NiftiDataType.INT16, "int16"],
+  [NiftiDataType.UINT16, "uint16"],
+  [NiftiDataType.INT32, "int32"],
+  [NiftiDataType.UINT32, "uint32"],
+  [NiftiDataType.INT64, "int64"],
+  [NiftiDataType.UINT64, "uint64"],
+  [NiftiDataType.FLOAT32, "float32"],
+  [NiftiDataType.FLOAT64, "float64"],
 ]);
+
+function getNiftiSourceDataType(datatypeCode: NiftiDataType) {
+  const name = DATA_TYPE_CONVERSIONS.get(datatypeCode);
+  if (name === undefined) {
+    throw new Error(
+      "Unsupported data type: " +
+        `${NiftiDataType[datatypeCode] || datatypeCode}.`,
+    );
+  }
+  return getSourceDataType(name);
+}
 
 registerPromiseRPC(
   GET_NIFTI_VOLUME_INFO_RPC_ID,
@@ -157,13 +165,7 @@ registerPromiseRPC(
       x.url,
       progressOptions,
     );
-    const dataTypeInfo = DATA_TYPE_CONVERSIONS.get(header.datatypeCode);
-    if (dataTypeInfo === undefined) {
-      throw new Error(
-        "Unsupported data type: " +
-          `${NiftiDataType[header.datatypeCode] || header.datatypeCode}.`,
-      );
-    }
+    const sourceDataType = getNiftiSourceDataType(header.datatypeCode);
     let spatialInvScale = 1;
     let spatialUnit = "";
     switch (header.xyzt_units & NIFTI1.SPATIAL_UNITS_MASK) {
@@ -280,7 +282,7 @@ registerPromiseRPC(
       viewScales,
       description: header.description,
       transform,
-      dataType: dataTypeInfo.dataType,
+      dataType: sourceDataType.dataType,
       volumeSize: Uint32Array.from(header.dims.slice(1, 1 + rank)),
     };
     return { value: info };
@@ -299,18 +301,15 @@ export class NiftiVolumeChunkSource extends WithParameters(
       this.parameters.url,
       { signal },
     );
-    let imageBuffer = readImage(data.header, data.uncompressedData);
-    // If original header datatype was FLOAT64 (downcast) convert the buffer to Float32.
-    if (data.header.datatypeCode === NiftiDataType.FLOAT64) {
-      const src = new Float64Array(imageBuffer);
-      const dst = Float32Array.from(src);
-      imageBuffer = dst.buffer;
-    }
+    const imageBuffer = readImage(data.header, data.uncompressedData);
     await decodeRawChunk(
       chunk,
       signal,
       imageBuffer,
       data.header.littleEndian ? Endianness.LITTLE : Endianness.BIG,
+      0,
+      imageBuffer.byteLength,
+      getNiftiSourceDataType(data.header.datatypeCode),
     );
   }
 }
