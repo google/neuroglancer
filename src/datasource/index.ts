@@ -132,6 +132,11 @@ export interface DataSubsource {
   singleMesh?: SingleMeshSource;
   segmentPropertyMap?: SegmentPropertyMap;
   segmentationGraph?: SegmentationGraphSource;
+  // Specifies whether the datasource & kvstore implementations support writing.
+  supportsWriting?: boolean;
+  // Reason writing is unsupported for this particular array even though the
+  // kvstore allows it.
+  writingIncompatibility?: string;
 }
 
 export interface CompleteUrlOptionsBase extends Partial<ProgressOptions> {
@@ -216,6 +221,7 @@ export interface DataSourceWithRedirectInfo extends DataSource {
 
 export interface DataSubsourceSpecification {
   enabled?: boolean;
+  writingEnabled?: boolean;
 }
 
 export interface DataSourceSpecification {

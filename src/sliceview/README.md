@@ -2,7 +2,7 @@ This directory contains the code for `SliceView`, which provides the cross-secti
 
 # Architecture
 
-A volume is divided into a regular grid of 3-d chunks. Each chunk has voxel dimensions `chunkDataSize` (a 3-d vector of positive integers). All chunks have the same dimensions, except at the the upper bound of the volume in each dimension, where the chunks are allowed to be truncated to fit within the volume dimensions.
+A volume is divided into a regular grid of 3-d chunks. Each chunk has voxel dimensions `chunkDataSize` (a 3-d vector of positive integers). All chunks have the same dimensions, except at the upper bound of the volume in each dimension, where the chunks are allowed to be truncated to fit within the volume dimensions.
 
 Chunks are the unit at which portions of the volume are queued, retrieved, transcoded (if necessary), copied to the GPU, and rendered:
 

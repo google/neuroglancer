@@ -1,0 +1,926 @@
+/**
+ * @license
+ * Copyright 2025 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { ChunkState } from "#src/chunk_manager/base.js";
+import type { ChunkChannelAccessParameters } from "#src/render_coordinate_transform.js";
+import { SharedWatchableValue } from "#src/shared_watchable_value.js";
+import type {
+  InMemoryVolumeChunkSource,
+  LocalVolumeEdit,
+  MultiscaleVolumeChunkSource,
+  VolumeChunkSource,
+} from "#src/sliceview/volume/frontend.js";
+import { StatusMessage } from "#src/status.js";
+import { WatchableValue } from "#src/trackable_value.js";
+import { DataType } from "#src/util/data_type.js";
+import type { vec3 } from "#src/util/geom.js";
+import type {
+  LodResolution,
+  VoxelOperation,
+  PaintValueGetter,
+} from "#src/voxel_editing/base.js";
+import {
+  BrushShape,
+  EMPTY_VOXEL_VALUE,
+  getDiskStencilKernel,
+  getSphereRowRangesKernel,
+  parseLodChunkKey,
+  SEGMENTATION_ERASE_SENTINEL,
+  VOXEL_EDITING_BACKEND_RPC_ID,
+  VOXEL_EDITING_CASCADE_DONE_RPC_ID,
+  VOXEL_EDITING_FAILURE_RPC_ID,
+  VOXEL_EDITING_HISTORY_UPDATE_RPC_ID,
+  VOXEL_EDITING_OPERATION_RPC_ID,
+  VOXEL_EDITING_REDO_RPC_ID,
+  VOXEL_EDITING_UNDO_RPC_ID,
+  VOXEL_EDITING_CHUNK_RELOAD_RPC_ID,
+  VoxelOperationType,
+} from "#src/voxel_editing/base.js";
+import type { PreviewMultiscaleSource } from "#src/voxel_editing/preview_multiscale_chunk_source.js";
+import type { RPC } from "#src/worker_rpc.js";
+import {
+  registerRPC,
+  registerSharedObjectOwner,
+  SharedObject,
+} from "#src/worker_rpc.js";
+
+export interface VoxelEditingControllerHost {
+  primarySource: MultiscaleVolumeChunkSource;
+  previewSource?: PreviewMultiscaleSource;
+  rpc: RPC;
+}
+
+interface PreviewSwap {
+  source: VolumeChunkSource;
+  chunkKey: string;
+  staleChunk: unknown;
+  coveredSeq: number;
+  arrived: boolean;
+}
+
+interface PendingPreview {
+  previewChunkSource: InMemoryVolumeChunkSource;
+  previewChunkKey: string;
+  // The real chunks written from the origin, by LOD chunk key: its own LOD-0
+  // chunk and, with downsampling, its parents at coarser LODs.
+  swaps: Map<string, PreviewSwap>;
+  awaitsCascade: boolean;
+  // Highest stroke seq covered by a completed downsampling cascade.
+  cascadeCoveredSeq: number;
+}
+
+@registerSharedObjectOwner(VOXEL_EDITING_BACKEND_RPC_ID)
+export class VoxelEditingController extends SharedObject {
+  public undoCount = new WatchableValue<number>(0);
+  public redoCount = new WatchableValue<number>(0);
+  public pendingOpCount: SharedWatchableValue<number>;
+
+  // Monotonic counter identifying each stroke/operation dispatched to the
+  // backend.
+  private dispatchSeq = 0;
+
+  // LOD-0 previews awaiting their replacement by real data, by origin LOD
+  // chunk key. A swap is resolved by observing visibleChunksChanged: the real
+  // chunk's object identity distinguishes the lazily kept stale chunk
+  // (recorded at arming) from the refetched one, since a `new` chunk update
+  // always builds a fresh Chunk object. A newer reload for the same real
+  // chunk overwrites its swap.
+  private pendingPreviews = new Map<string, PendingPreview>();
+
+  private processPendingPreviewSwaps(): void {
+    for (const [originLodChunkKey, pending] of this.pendingPreviews) {
+      const { previewChunkSource, previewChunkKey } = pending;
+      if (!previewChunkSource.chunks.has(previewChunkKey)) {
+        // Cleared by another path (undo, rollback, reconcile).
+        this.pendingPreviews.delete(originLodChunkKey);
+        continue;
+      }
+      for (const swap of pending.swaps.values()) {
+        if (swap.arrived) continue;
+        const chunk = swap.source.chunks.get(swap.chunkKey);
+        // Still the stale chunk (or gone), or not yet displayed.
+        if (
+          chunk === undefined ||
+          chunk === swap.staleChunk ||
+          chunk.state !== ChunkState.GPU_MEMORY
+        ) {
+          continue;
+        }
+        swap.arrived = true;
+      }
+      if (this.isPreviewReplaced(pending)) {
+        this.pendingPreviews.delete(originLodChunkKey);
+        previewChunkSource.invalidateChunks([previewChunkKey]);
+      }
+    }
+  }
+
+  // The preview may go once the real data contains every stroke it shows, at
+  // every resolution the frontend holds: otherwise zooming in or out would
+  // reveal a level that lacks them. The tag is read now: a stroke that touched
+  // the preview since arming raises it, and its own reloads re-arm the swaps.
+  private isPreviewReplaced(pending: PendingPreview): boolean {
+    const tag = pending.previewChunkSource.getPreviewSeq(
+      pending.previewChunkKey,
+    );
+    if (pending.awaitsCascade && pending.cascadeCoveredSeq < tag) return false;
+    let anyReplaced = false;
+    for (const swap of pending.swaps.values()) {
+      if (swap.arrived && swap.coveredSeq >= tag) {
+        anyReplaced = true;
+      } else if (swap.source.chunks.has(swap.chunkKey)) {
+        // Held but stale: still on screen at that resolution.
+        return false;
+      }
+    }
+    return anyReplaced;
+  }
+
+  handleCascadeDone(originLodChunkKey: string, coveredSeq: number): void {
+    const pending = this.pendingPreviews.get(originLodChunkKey);
+    if (pending === undefined) return;
+    pending.cascadeCoveredSeq = Math.max(pending.cascadeCoveredSeq, coveredSeq);
+    this.processPendingPreviewSwaps();
+  }
+
+  // Allocates a stroke's seq before its first preview. Previews tag the
+  // preview chunks they touch with it and the dispatch carries the same
+  // value, so what the preview shows and what the write covers cannot
+  // diverge.
+  beginStroke(): number {
+    return ++this.dispatchSeq;
+  }
+
+  private getPreviewChunkSource(): InMemoryVolumeChunkSource | undefined {
+    return this.host.previewSource?.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    )[0]?.[0]?.chunkSource as InMemoryVolumeChunkSource | undefined;
+  }
+
+  // For a stroke whose edits will never be written: stamina/permission
+  // refusal, empty stroke, dispatch failure.
+  rollbackStroke(seq: number): void {
+    this.reconcileStroke(seq, []);
+  }
+
+  // Drops the preview chunks a stroke tagged that its backend write does not
+  // cover: nothing will be written there, so no reload would ever clear them
+  // and the real data beneath is already correct. Chunks re-tagged by a newer
+  // stroke no longer match `seq` and are left untouched.
+  reconcileStroke(seq: number, coveredLodChunkKeys: string[]): void {
+    const previewChunkSource = this.getPreviewChunkSource();
+    if (previewChunkSource === undefined) return;
+    const tagged = previewChunkSource.keysWithPreviewSeq(seq);
+    if (tagged.length === 0) return;
+    let stale = tagged;
+    if (coveredLodChunkKeys.length > 0) {
+      const covered = new Set<string>();
+      for (const lodChunkKey of coveredLodChunkKeys) {
+        const parsed = parseLodChunkKey(lodChunkKey);
+        if (parsed !== null && parsed.lodIndex === 0) {
+          covered.add(parsed.chunkKey);
+        }
+      }
+      stale = tagged.filter((key) => !covered.has(key));
+    }
+    if (stale.length > 0) previewChunkSource.invalidateChunks(stale);
+  }
+
+  constructor(private host: VoxelEditingControllerHost) {
+    super();
+    const rpc = this.host.rpc;
+    if (!rpc) {
+      throw new Error(
+        "VoxelEditingController: Missing RPC from multiscale chunk manager.",
+      );
+    }
+
+    const sourcesByScale = this.host.primarySource.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    );
+    const sources = sourcesByScale[0];
+    if (!sources) {
+      throw new Error(
+        "VoxelEditingController: Could not retrieve sources from multiscale object.",
+      );
+    }
+
+    const resolutions: LodResolution[] = [];
+
+    for (let i = 0; i < sources.length; ++i) {
+      const source = sources[i]!.chunkSource;
+      const rpcId = source.rpcId;
+      if (rpcId == null) {
+        throw new Error(
+          `VoxelEditingController: Source at LOD index ${i} has null rpcId during initialization.`,
+        );
+      }
+      resolutions.push({
+        lodIndex: i,
+        transform: Array.from(sources[i]!.chunkToMultiscaleTransform),
+        chunkSize: Array.from(source.spec.chunkDataSize),
+        sourceRpc: rpcId,
+      });
+    }
+
+    this.pendingOpCount = this.registerDisposer(
+      SharedWatchableValue.make(this.host.rpc, 0),
+    );
+
+    this.initializeCounterpart(rpc, {
+      resolutions,
+      pendingOpCount: this.pendingOpCount.rpcId,
+    });
+
+    // Pending preview swaps are resolved by observing chunk changes rather
+    // than by hooks inside the chunk manager: the signal fires after every
+    // applied batch of chunk updates, and the check below is a cheap scan of
+    // the (small) pending map.
+    this.registerDisposer(
+      this.host.primarySource.chunkManager.chunkQueueManager.visibleChunksChanged.add(
+        () => this.processPendingPreviewSwaps(),
+      ),
+    );
+  }
+
+  private async dispatchOperation(
+    operation: VoxelOperation,
+  ): Promise<string[]> {
+    if (!this.rpc) throw new Error("RPC unavailable");
+    const coveredLodChunkKeys = await this.rpc.promiseInvoke<string[]>(
+      VOXEL_EDITING_OPERATION_RPC_ID,
+      {
+        rpcId: this.rpcId,
+        operation,
+      },
+    );
+    return Array.isArray(coveredLodChunkKeys) ? coveredLodChunkKeys : [];
+  }
+
+  readonly singleChannelAccess: ChunkChannelAccessParameters = {
+    numChannels: 1,
+    channelSpaceShape: new Uint32Array([]),
+    chunkChannelDimensionIndices: [],
+    chunkChannelCoordinates: new Uint32Array([0]),
+  };
+
+  private getIdentitySliceViewSourceOptions() {
+    const rank = this.host.primarySource.rank as number | undefined;
+    if (!Number.isInteger(rank) || (rank as number) <= 0) {
+      throw new Error("VoxelEditingController: Invalid multiscale rank.");
+    }
+    const r = rank as number;
+    const displayRank = r;
+    const multiscaleToViewTransform = new Float32Array(displayRank * r);
+    for (let chunkDim = 0; chunkDim < r; ++chunkDim) {
+      for (let displayDim = 0; displayDim < displayRank; ++displayDim) {
+        multiscaleToViewTransform[displayRank * chunkDim + displayDim] =
+          chunkDim === displayDim ? 1 : 0;
+      }
+    }
+    return {
+      displayRank,
+      multiscaleToViewTransform,
+      modelChannelDimensionIndices: [],
+    } as const;
+  }
+
+  async applyBrushPreview(
+    points: Float32Array[],
+    radiusCanonical: number,
+    valueGetter: PaintValueGetter,
+    shape: BrushShape,
+    basis: { u: Float32Array; v: Float32Array },
+    seq: number,
+    filterValue?: bigint,
+  ) {
+    if (!this.host.previewSource) return;
+
+    const voxelSize = 1; // Assuming LOD 0
+    let r = Math.round(radiusCanonical / voxelSize);
+    if (r <= 0) {
+      throw new Error("Brush radius must be positive.");
+    }
+    r -= 1;
+
+    const previewSource = this.host.previewSource.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    )[0][0].chunkSource as InMemoryVolumeChunkSource;
+
+    const { chunkDataSize } = previewSource.spec;
+    const sizeX = chunkDataSize[0];
+    const sizeY = chunkDataSize[1];
+    const sizeZ = chunkDataSize[2];
+    const strideY = sizeX;
+    const strideZ = sizeX * sizeY;
+
+    // Deduplicate centers that round to the same voxel position
+    const centers: [number, number, number][] = [];
+    if (points.length <= 1) {
+      const c = points[0]!;
+      centers.push([
+        Math.round((c[0] ?? 0) / voxelSize),
+        Math.round((c[1] ?? 0) / voxelSize),
+        Math.round((c[2] ?? 0) / voxelSize),
+      ]);
+    } else {
+      const seen = new Set<string>();
+      for (const c of points) {
+        const cx = Math.round((c[0] ?? 0) / voxelSize);
+        const cy = Math.round((c[1] ?? 0) / voxelSize);
+        const cz = Math.round((c[2] ?? 0) / voxelSize);
+        const key = `${cx},${cy},${cz}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        centers.push([cx, cy, cz]);
+      }
+    }
+
+    // filterValue setup (slow path only)
+    let baseSource: VolumeChunkSource | undefined;
+    const tempPos = new Float32Array(3);
+    if (filterValue !== undefined) {
+      const sourcesByScale = this.host.primarySource.getSources(
+        this.getIdentitySliceViewSourceOptions(),
+      );
+      baseSource = sourcesByScale[0][0].chunkSource as VolumeChunkSource;
+    }
+
+    const passesFilter = (x: number, y: number, z: number): boolean => {
+      tempPos[0] = x;
+      tempPos[1] = y;
+      tempPos[2] = z;
+      const val = baseSource!.getValueAt(tempPos, this.singleChannelAccess);
+      if (val == null) return true;
+      const bigVal = typeof val === "bigint" ? val : BigInt(val);
+      return bigVal === filterValue;
+    };
+
+    type EditEntry = LocalVolumeEdit & {
+      indices: number[];
+      indexRanges: number[];
+    };
+    const edits = new Map<string, EditEntry>();
+    const previewValue = valueGetter(true);
+
+    const getOrCreateEdit = (
+      chunkX: number,
+      chunkY: number,
+      chunkZ: number,
+    ): EditEntry => {
+      const key = `${chunkX},${chunkY},${chunkZ}`;
+      let entry = edits.get(key);
+      if (entry !== undefined) return entry;
+      entry = {
+        indices: [],
+        indexRanges: [],
+        value: previewValue,
+        chunkGridPosition: Float32Array.of(chunkX, chunkY, chunkZ),
+      };
+      edits.set(key, entry);
+      return entry;
+    };
+
+    // Append a single voxel to the correct chunk edit (used by slow paths)
+    const appendVoxel = (x: number, y: number, z: number) => {
+      const chunkX = Math.floor(x / sizeX);
+      const chunkY = Math.floor(y / sizeY);
+      const chunkZ = Math.floor(z / sizeZ);
+      const lx = x - chunkX * sizeX;
+      const ly = y - chunkY * sizeY;
+      const lz = z - chunkZ * sizeZ;
+      getOrCreateEdit(chunkX, chunkY, chunkZ).indices.push(
+        lz * strideZ + ly * strideY + lx,
+      );
+    };
+
+    // Append a contiguous x-run [xStart, xEndExcl) at (y, z), splitting at chunk boundaries.
+    // Merges adjacent ranges within the same chunk entry.
+    const appendRange = (
+      xStart: number,
+      xEndExcl: number,
+      y: number,
+      z: number,
+    ) => {
+      const chunkY = Math.floor(y / sizeY);
+      const chunkZ = Math.floor(z / sizeZ);
+      const ly = y - chunkY * sizeY;
+      const lz = z - chunkZ * sizeZ;
+      const baseIndex = lz * strideZ + ly * strideY;
+
+      let currentX = xStart;
+      while (currentX < xEndExcl) {
+        const chunkX = Math.floor(currentX / sizeX);
+        const segEnd = Math.min(xEndExcl, (chunkX + 1) * sizeX);
+        const startIndex = baseIndex + (currentX - chunkX * sizeX);
+        const length = segEnd - currentX;
+
+        const entry = getOrCreateEdit(chunkX, chunkY, chunkZ);
+        if (length === 1) {
+          entry.indices.push(startIndex);
+        } else {
+          const ranges = entry.indexRanges;
+          const last = ranges.length - 1;
+          if (last >= 1 && ranges[last - 1]! + ranges[last]! === startIndex) {
+            ranges[last] = ranges[last]! + length;
+          } else {
+            ranges.push(startIndex, length);
+          }
+        }
+        currentX = segEnd;
+      }
+    };
+
+    if (shape === BrushShape.SPHERE) {
+      const kernel = getSphereRowRangesKernel(r);
+      if (filterValue === undefined) {
+        // Fast path: contiguous row ranges → TypedArray.fill()
+        for (const [cx, cy, cz] of centers) {
+          for (let i = 0; i < kernel.length; i += 4) {
+            appendRange(
+              cx + kernel[i + 2]!,
+              cx + kernel[i + 3]!,
+              cy + kernel[i]!,
+              cz + kernel[i + 1]!,
+            );
+          }
+        }
+      } else {
+        // Slow path: per-voxel filter check
+        for (const [cx, cy, cz] of centers) {
+          for (let i = 0; i < kernel.length; i += 4) {
+            const dy = kernel[i]!;
+            const dz = kernel[i + 1]!;
+            const xStart = kernel[i + 2]!;
+            const xEndExcl = kernel[i + 3]!;
+            for (let dx = xStart; dx < xEndExcl; ++dx) {
+              const x = cx + dx;
+              const y = cy + dy;
+              const z = cz + dz;
+              if (passesFilter(x, y, z)) appendVoxel(x, y, z);
+            }
+          }
+        }
+      }
+    } else {
+      // DISK: project stencil through basis vectors, no axis-aligned runs possible
+      const { u: uVec, v: vVec } = basis as { u: vec3; v: vec3 };
+      const ux = uVec[0],
+        uy = uVec[1],
+        uz = uVec[2];
+      const vx = vVec[0],
+        vy = vVec[1],
+        vz = vVec[2];
+      const stencil = getDiskStencilKernel(r);
+
+      for (const [cx, cy, cz] of centers) {
+        for (let i = 0; i < stencil.length; i += 2) {
+          const si = stencil[i]!;
+          const sj = stencil[i + 1]!;
+          const x = Math.round(cx + ux * si + vx * sj);
+          const y = Math.round(cy + uy * si + vy * sj);
+          const z = Math.round(cz + uz * si + vz * sj);
+          if (filterValue !== undefined && !passesFilter(x, y, z)) continue;
+          appendVoxel(x, y, z);
+        }
+      }
+    }
+
+    if (edits.size > 0) {
+      previewSource.applyLocalEdits(edits);
+      for (const key of edits.keys()) previewSource.setPreviewSeq(key, seq);
+    }
+  }
+
+  async dispatchBrushStroke(
+    centers: Float32Array[],
+    radiusCanonical: number,
+    valueGetter: PaintValueGetter,
+    shape: BrushShape,
+    basis: { u: Float32Array; v: Float32Array },
+    seq: number,
+    filterValue?: bigint,
+  ) {
+    if (centers.length === 0) {
+      // Nothing will be written for this stroke; drop whatever its previews
+      // tagged so the preview does not wait for a write that never comes.
+      this.rollbackStroke(seq);
+      return;
+    }
+    const storageValue = valueGetter(false);
+    const coveredLodChunkKeys = await this.dispatchOperation({
+      type: VoxelOperationType.BRUSH,
+      seq,
+      centers,
+      radius: radiusCanonical,
+      value: storageValue,
+      shape,
+      basis,
+      filterValue,
+    });
+    this.reconcileStroke(seq, coveredLodChunkKeys);
+  }
+
+  async floodFillPlane2D(
+    startPositionCanonical: Float32Array,
+    fillValueGetter: PaintValueGetter,
+    maxVoxels: number,
+    basis: { u: Float32Array; v: Float32Array },
+    filterValue?: bigint,
+    morphological = true,
+  ) {
+    const seq = this.beginStroke();
+    const previewValue = fillValueGetter(true);
+    const sourcesByScale = this.host.primarySource.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    );
+    const primaryChunkSource = sourcesByScale[0][0]
+      .chunkSource as VolumeChunkSource;
+
+    const previewMultiscale = this.host.previewSource;
+    if (!previewMultiscale) return;
+    const previewChunkSource = previewMultiscale.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    )[0][0].chunkSource as InMemoryVolumeChunkSource;
+
+    const startX = Math.round(startPositionCanonical[0]);
+    const startY = Math.round(startPositionCanonical[1]);
+    const startZ = Math.round(startPositionCanonical[2]);
+
+    const tempPos = new Float32Array(3);
+    const { dataType } = previewChunkSource.spec;
+    const eraseSentinel =
+      dataType === DataType.UINT64 || dataType === DataType.UINT32
+        ? BigInt.asUintN(
+            dataType === DataType.UINT64 ? 64 : 32,
+            SEGMENTATION_ERASE_SENTINEL,
+          )
+        : undefined;
+
+    const getValue = (x: number, y: number, z: number): bigint | null => {
+      tempPos[0] = x;
+      tempPos[1] = y;
+      tempPos[2] = z;
+
+      const previewVal = previewChunkSource.getValueAt(
+        tempPos,
+        this.singleChannelAccess,
+      );
+      if (previewVal != null) {
+        const value =
+          typeof previewVal === "bigint" ? previewVal : BigInt(previewVal);
+        if (value === eraseSentinel) return EMPTY_VOXEL_VALUE;
+        if (value !== EMPTY_VOXEL_VALUE) return value;
+      }
+
+      const primaryVal = primaryChunkSource.getValueAt(
+        tempPos,
+        this.singleChannelAccess,
+      );
+      if (primaryVal != null) {
+        return typeof primaryVal === "bigint" ? primaryVal : BigInt(primaryVal);
+      }
+      return null;
+    };
+
+    const originalValue = getValue(startX, startY, startZ);
+    if (originalValue === null) {
+      // Chunk not yet loaded on the frontend — skip preview and dispatch directly
+      // to the backend, which will load the chunk itself.
+      await this.dispatchOperation({
+        type: VoxelOperationType.FLOOD_FILL,
+        seq,
+        seed: startPositionCanonical,
+        value: fillValueGetter(false),
+        maxVoxels,
+        basis,
+        filterValue,
+        morphological,
+      });
+      return;
+    }
+    if (filterValue !== undefined && originalValue !== filterValue) return;
+    if (originalValue === previewValue) return;
+
+    const visited = new Set<string>();
+    const queue: [number, number][] = [[0, 0]];
+    visited.add("0,0");
+
+    const edits = new Map<string, { indices: number[]; value: bigint }>();
+    const { chunkDataSize } = previewChunkSource.spec;
+    const sizeX = chunkDataSize[0];
+    const sizeY = chunkDataSize[1];
+    const sizeZ = chunkDataSize[2];
+    const strideY = sizeX;
+    const strideZ = sizeX * sizeY;
+
+    let filledCount = 0;
+    const start = Date.now();
+    const MAX_TIME_MS = 50;
+    const ux = basis.u[0],
+      uy = basis.u[1],
+      uz = basis.u[2];
+    const vx = basis.v[0],
+      vy = basis.v[1],
+      vz = basis.v[2];
+
+    while (queue.length > 0 && filledCount < maxVoxels) {
+      if ((filledCount & 63) === 0 && Date.now() - start > MAX_TIME_MS) break;
+
+      const [u, v] = queue.shift()!;
+      const x = Math.round(startX + ux * u + vx * v);
+      const y = Math.round(startY + uy * u + vy * v);
+      const z = Math.round(startZ + uz * u + vz * v);
+
+      const cx = Math.floor(x / sizeX);
+      const cy = Math.floor(y / sizeY);
+      const cz = Math.floor(z / sizeZ);
+      const lx = x - cx * sizeX;
+      const ly = y - cy * sizeY;
+      const lz = z - cz * sizeZ;
+
+      const key = `${cx},${cy},${cz}`;
+      let entry = edits.get(key);
+      if (!entry) {
+        entry = { indices: [], value: previewValue };
+        edits.set(key, entry);
+      }
+      const index = lz * strideZ + ly * strideY + lx;
+      entry.indices.push(index);
+      filledCount++;
+
+      const neighbors: [number, number][] = [
+        [u + 1, v],
+        [u - 1, v],
+        [u, v + 1],
+        [u, v - 1],
+      ];
+
+      for (const [nu, nv] of neighbors) {
+        const k = `${nu},${nv}`;
+        if (visited.has(k)) continue;
+        visited.add(k);
+
+        const nx = Math.round(startX + ux * nu + vx * nv);
+        const ny = Math.round(startY + uy * nu + vy * nv);
+        const nz = Math.round(startZ + uz * nu + vz * nv);
+
+        const val = getValue(nx, ny, nz);
+        if (val !== null && val === originalValue) {
+          queue.push([nu, nv]);
+        }
+      }
+    }
+
+    if (filledCount > 0) {
+      previewChunkSource.applyLocalEdits(edits);
+      for (const key of edits.keys()) {
+        previewChunkSource.setPreviewSeq(key, seq);
+      }
+    }
+
+    const storageValue = fillValueGetter(false);
+    try {
+      const coveredLodChunkKeys = await this.dispatchOperation({
+        type: VoxelOperationType.FLOOD_FILL,
+        seq,
+        seed: startPositionCanonical,
+        value: storageValue,
+        maxVoxels,
+        basis,
+        filterValue,
+        morphological,
+      });
+      this.reconcileStroke(seq, coveredLodChunkKeys);
+    } catch (e) {
+      this.rollbackStroke(seq);
+      throw e;
+    }
+  }
+
+  callChunkReload(
+    lodChunkKeys: string[],
+    isForPreviewChunks: boolean,
+    previewKeysToClear?: Record<string, string>,
+    coveredSeqs?: Record<string, number>,
+    isRollback = false,
+  ) {
+    if (!Array.isArray(lodChunkKeys) || lodChunkKeys.length === 0) return;
+    const multiscaleSource = isForPreviewChunks
+      ? this.host.previewSource
+      : this.host.primarySource;
+    if (!multiscaleSource) {
+      throw new Error(
+        "VoxelEditingController.callChunkReload: ERROR Missing source",
+      );
+    }
+    const sources = multiscaleSource.getSources(
+      this.getIdentitySliceViewSourceOptions(),
+    )[0];
+    if (!sources) {
+      throw new Error(
+        "VoxelEditingController.callChunkReload: Missing base source",
+      );
+    }
+
+    const chunksToInvalidateBySource = new Map<VolumeChunkSource, string[]>();
+
+    if (!isForPreviewChunks) {
+      // Real chunks: invalidate lazily so the current GPU chunk stays on screen,
+      // and clear the matching preview chunk only once the refetched real data
+      // has actually arrived on the GPU (swap-on-arrival), never on a timer.
+      //
+      // The preview to clear defaults to the same key/LOD (max-res edits). For
+      // downsampled parents the backend passes the originating LOD-0 key, so the
+      // visible (forced LOD-0) preview is cleared as soon as the real chunk of
+      // whatever LOD is on screen arrives. A never-swapped preview simply stays
+      // displayed (correct) at worst leaking a little memory — far better than a
+      // timer that would clear it with nothing to show.
+      const previewSources = this.host.previewSource?.getSources(
+        this.getIdentitySliceViewSourceOptions(),
+      )[0];
+      // Apply the chunk updates already received before recording the stale
+      // chunks: they predate the write being reloaded for, and applied later
+      // they would resolve its swap with pre-write data. The worker
+      // invalidated these chunks before sending this reload, so any update
+      // received from now on comes from a refetch started after the write.
+      this.host.primarySource.chunkManager.chunkQueueManager.flushPendingChunkUpdates();
+      for (const lodChunkKey of lodChunkKeys) {
+        const parsed = parseLodChunkKey(lodChunkKey);
+        if (!parsed) continue;
+        const source = sources[parsed.lodIndex]?.chunkSource as
+          | VolumeChunkSource
+          | undefined;
+        if (!source) continue;
+        const { chunkKey } = parsed;
+
+        const previewLodChunkKey =
+          previewKeysToClear?.[lodChunkKey] ?? lodChunkKey;
+        const previewParsed = parseLodChunkKey(previewLodChunkKey);
+        const previewChunkSource = previewParsed
+          ? (previewSources?.[previewParsed.lodIndex]?.chunkSource as
+              | InMemoryVolumeChunkSource
+              | undefined)
+          : undefined;
+        if (
+          previewChunkSource &&
+          previewChunkSource.chunks.has(previewParsed!.chunkKey)
+        ) {
+          // The backend echoes, per reloaded chunk, the highest stroke seq
+          // its write covers. The preview chunk carries the seq of the last
+          // stroke whose preview touched it (including a stroke still under
+          // the mouse — its seq is allocated before its first preview), read
+          // when the swap resolves. Clearing only when coverage reaches that
+          // tag guarantees the arriving data contains everything the preview
+          // shows. A skipped clear is re-armed by the covering write's own
+          // reload; a stroke that never gets written is rolled back
+          // explicitly (rollbackStroke) instead of waited for.
+          if (isRollback) {
+            // Undo/redo: whatever arrives next is the truth — purge the tag
+            // so the swap clears on first arrival. An in-progress stroke's
+            // chunk would lose its preview until its dispatch rewrites it
+            // (Ctrl+Z mid-drag, accepted).
+            previewChunkSource.clearPreviewSeq(previewParsed!.chunkKey);
+          }
+          let pending = this.pendingPreviews.get(previewLodChunkKey);
+          if (pending === undefined) {
+            pending = {
+              previewChunkSource,
+              previewChunkKey: previewParsed!.chunkKey,
+              swaps: new Map(),
+              awaitsCascade: sources.length > 1,
+              cascadeCoveredSeq: -1,
+            };
+            this.pendingPreviews.set(previewLodChunkKey, pending);
+          }
+          pending.swaps.set(lodChunkKey, {
+            source,
+            chunkKey,
+            staleChunk: source.chunks.get(chunkKey),
+            coveredSeq: coveredSeqs?.[lodChunkKey] ?? 0,
+            arrived: false,
+          });
+        }
+        let arr = chunksToInvalidateBySource.get(source);
+        if (!arr) {
+          arr = [];
+          chunksToInvalidateBySource.set(source, arr);
+        }
+        arr.push(chunkKey);
+      }
+
+      for (const [source, keys] of chunksToInvalidateBySource.entries()) {
+        if (keys.length > 0) {
+          source.invalidateChunks(keys, { lazy: true });
+        }
+      }
+      return;
+    }
+
+    // Preview chunks: clear the preview immediately (write-failure
+    // rollback, and downsampled-preview cleanup).
+    for (const lodChunkKey of lodChunkKeys) {
+      const parsed = parseLodChunkKey(lodChunkKey);
+      if (!parsed) continue;
+      const source = sources[parsed.lodIndex]?.chunkSource as
+        | VolumeChunkSource
+        | undefined;
+      if (source) {
+        let arr = chunksToInvalidateBySource.get(source);
+        if (!arr) {
+          arr = [];
+          chunksToInvalidateBySource.set(source, arr);
+        }
+        arr.push(parsed.chunkKey);
+      }
+    }
+
+    for (const [source, keys] of chunksToInvalidateBySource.entries()) {
+      if (keys.length > 0) {
+        source.invalidateChunks(keys);
+      }
+    }
+  }
+
+  handleCommitFailure(lodChunkKeys: string[], message: string): void {
+    try {
+      this.callChunkReload(lodChunkKeys, true);
+    } finally {
+      StatusMessage.showTemporaryMessage(message);
+    }
+  }
+
+  public async undo() {
+    if (!this.rpc)
+      throw new Error("VoxelEditingController.undo: RPC not initialized.");
+    await this.rpc
+      .promiseInvoke<void>(VOXEL_EDITING_UNDO_RPC_ID, { rpcId: this.rpcId })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        StatusMessage.showTemporaryMessage(`Undo failed: ${message}`, 3000);
+      });
+  }
+
+  public async redo() {
+    if (!this.rpc)
+      throw new Error("VoxelEditingController.redo: RPC not initialized.");
+    await this.rpc
+      .promiseInvoke<void>(VOXEL_EDITING_REDO_RPC_ID, { rpcId: this.rpcId })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        StatusMessage.showTemporaryMessage(`Redo failed: ${message}`, 3000);
+      });
+  }
+}
+
+function asRecordOrUndefined<T>(x: unknown): Record<string, T> | undefined {
+  return x !== null && typeof x === "object"
+    ? (x as Record<string, T>)
+    : undefined;
+}
+
+registerRPC(VOXEL_EDITING_CHUNK_RELOAD_RPC_ID, function (x: any) {
+  const obj = this.get(x.rpcId) as VoxelEditingController;
+  const keys: string[] = Array.isArray(x.lodChunkKeys) ? x.lodChunkKeys : [];
+  obj.callChunkReload(
+    keys,
+    x.isForPreviewChunks,
+    asRecordOrUndefined<string>(x.previewKeysToClear),
+    asRecordOrUndefined<number>(x.coveredSeqs),
+    x.isRollback === true,
+  );
+});
+
+registerRPC(VOXEL_EDITING_CASCADE_DONE_RPC_ID, function (x: any) {
+  const obj = this.get(x.rpcId) as VoxelEditingController;
+  obj.handleCascadeDone(String(x.lodChunkKey), Number(x.coveredSeq));
+});
+
+registerRPC(VOXEL_EDITING_FAILURE_RPC_ID, function (x: any) {
+  const obj = this.get(x.rpcId) as VoxelEditingController;
+  const keys: string[] = Array.isArray(x.lodChunkKeys) ? x.lodChunkKeys : [];
+  const message: string =
+    typeof x.message === "string" ? x.message : "Voxel edit failed.";
+  obj.handleCommitFailure(keys, message);
+});
+
+registerRPC(VOXEL_EDITING_HISTORY_UPDATE_RPC_ID, function (x: any) {
+  const obj = this.get(x.rpcId) as VoxelEditingController;
+  const undoCount = typeof x.undoCount === "number" ? x.undoCount : 0;
+  const redoCount = typeof x.redoCount === "number" ? x.redoCount : 0;
+  obj.undoCount.value = undoCount;
+  obj.redoCount.value = redoCount;
+});

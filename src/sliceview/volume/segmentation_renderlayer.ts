@@ -35,6 +35,7 @@ import type {
   SliceView,
   SliceViewSingleResolutionSource,
 } from "#src/sliceview/frontend.js";
+import type { SliceViewRenderContext } from "#src/sliceview/renderlayer.js";
 import type {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
@@ -43,12 +44,22 @@ import type { RenderLayerBaseOptions } from "#src/sliceview/volume/renderlayer.j
 import { SliceViewVolumeRenderLayer } from "#src/sliceview/volume/renderlayer.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
+  WatchableValue,
   AggregateWatchableValue,
   makeCachedDerivedWatchableValue,
 } from "#src/trackable_value.js";
 import type { Uint64Map } from "#src/uint64_map.js";
 import type { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
+import {
+  EMPTY_VOXEL_VALUE,
+  SEGMENTATION_ERASE_SENTINEL,
+} from "#src/voxel_editing/base.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
+
+function glslUint64Equals(name: string, value: bigint) {
+  const v = BigInt.asUintN(64, value);
+  return `${name}.value[0] == ${v & 0xffffffffn}u && ${name}.value[1] == ${v >> 32n}u`;
+}
 
 export class EquivalencesHashMap {
   generation = Number.NaN;
@@ -85,6 +96,7 @@ interface ShaderParameters {
   hideSegmentZero: boolean;
   hasSegmentDefaultColor: boolean;
   hasHighlightColor: boolean;
+  isVoxelEditingPreview: boolean;
 }
 
 const HAS_SELECTED_SEGMENT_FLAG = 1;
@@ -108,11 +120,14 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   private temporaryEquivalencesHashMap;
   private gpuEquivalencesHashTable;
   private gpuTemporaryEquivalencesHashTable;
+  private voxelEditingPreviewLayer: SegmentationRenderLayer | undefined;
+  public isVoxelEditingPreview: WatchableValue<boolean>;
 
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
     public displayState: SliceViewSegmentationDisplayState,
   ) {
+    const isVoxelEditingPreview = new WatchableValue(false);
     super(multiscaleSource, {
       shaderParameters: new AggregateWatchableValue((refCounted) => ({
         hasEquivalences: refCounted.registerDisposer(
@@ -163,12 +178,14 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
         hideSegmentZero: displayState.hideSegmentZero,
         baseSegmentColoring: displayState.baseSegmentColoring,
         baseSegmentHighlighting: displayState.baseSegmentHighlighting,
+        isVoxelEditingPreview: isVoxelEditingPreview,
       })),
       transform: displayState.transform,
       renderScaleHistogram: displayState.renderScaleHistogram,
       renderScaleTarget: displayState.renderScaleTarget,
       localPosition: displayState.localPosition,
     });
+    this.isVoxelEditingPreview = isVoxelEditingPreview;
     this.segmentationGroupState = displayState.segmentationGroupState.value;
     this.gpuHashTable = this.registerDisposer(
       GPUHashTable.get(
@@ -267,10 +284,20 @@ uint64_t getMappedObjectId(uint64_t value) {
   float alpha = uSelectedAlpha;
   float saturation = uSaturation;
 `;
+    if (parameters.isVoxelEditingPreview)
+      fragmentMain += `
+  if (${glslUint64Equals("baseValue", SEGMENTATION_ERASE_SENTINEL)}) {
+    emit(vec4(0, 0, 0, 0));
+    return;
+  }
+  if (${glslUint64Equals("value", EMPTY_VOXEL_VALUE)}) {
+    discard;
+  }
+      `;
     if (parameters.hideSegmentZero) {
       fragmentMain += `
   if (value.value[0] == 0u && value.value[1] == 0u) {
-    emit(vec4(vec4(0, 0, 0, 0)));
+    emit(vec4(vec4(0, 0, 0, 0))); 
     return;
   }
 `;
@@ -456,5 +483,19 @@ uint64_t getMappedObjectId(uint64_t value) {
       this.segmentStatedColorShaderManager.disable(gl, shader);
     }
     super.endSlice(sliceView, shader, parameters);
+  }
+  setVoxelEditingPreviewLayer(layer: SegmentationRenderLayer | undefined) {
+    this.voxelEditingPreviewLayer = layer;
+    if (layer) layer.isVoxelEditingPreview.value = true;
+  }
+
+  draw(renderContext: SliceViewRenderContext) {
+    // The preview is drawn first, into the same depth buffer: the depth test
+    // then rejects this layer's fragments wherever the preview drew, so the
+    // preview replaces the data instead of blending with it.
+    if (this.voxelEditingPreviewLayer) {
+      this.voxelEditingPreviewLayer.draw(renderContext);
+    }
+    super.draw(renderContext);
   }
 }

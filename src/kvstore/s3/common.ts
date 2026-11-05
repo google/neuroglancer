@@ -35,10 +35,21 @@ import {
 } from "#src/kvstore/s3/list.js";
 import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import type { FetchOk } from "#src/util/http_request.js";
-import { fetchOk } from "#src/util/http_request.js";
+import { HttpError, fetchOk } from "#src/util/http_request.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
+import { getRandomHexString } from "#src/util/random.js";
 
-export class ReadableS3KvStore<
+function validateObjectKey(key: string) {
+  for (const component of key.split("/")) {
+    if (component === "." || component === "..") {
+      throw new Error(
+        `Invalid S3 object key ${JSON.stringify(key)}: "." and ".." path components are not supported`,
+      );
+    }
+  }
+}
+
+export class S3KvStoreBase<
   SharedKvStoreContext extends SharedKvStoreContextBase,
 > implements KvStore
 {
@@ -50,17 +61,28 @@ export class ReadableS3KvStore<
     protected fetchOkImpl: FetchOk = fetchOk,
   ) {}
 
+  private getBaseObjectUrl(key: string): string {
+    validateObjectKey(key);
+    return joinBaseUrlAndPath(this.baseUrl, key);
+  }
+
+  // Random query parameter (ignored by S3) so cached responses are never
+  // used — same rationale as GcsKvStore.getObjectUrl: stale ACAO headers on
+  // 304s (S3's CORS headers also vary with the Origin) and staleness after
+  // this or another session writes to the bucket.
+  private getObjectUrl(key: string): string {
+    return this.getBaseObjectUrl(key) + `?neuroglancer=${getRandomHexString()}`;
+  }
+
   stat(key: string, options: StatOptions): Promise<StatResponse | undefined> {
-    const url = joinBaseUrlAndPath(this.baseUrl, key);
-    return stat(this, key, url, options, this.fetchOkImpl);
+    return stat(this, key, this.getObjectUrl(key), options, this.fetchOkImpl);
   }
 
   read(
     key: string,
     options: DriverReadOptions,
   ): Promise<ReadResponse | undefined> {
-    const url = joinBaseUrlAndPath(this.baseUrl, key);
-    return read(this, key, url, options, this.fetchOkImpl);
+    return read(this, key, this.getObjectUrl(key), options, this.fetchOkImpl);
   }
 
   list(prefix: string, options: DriverListOptions): Promise<ListResponse> {
@@ -88,6 +110,32 @@ export class ReadableS3KvStore<
     );
   }
 
+  async write(key: string, value: ArrayBuffer): Promise<void> {
+    const url = this.getBaseObjectUrl(key);
+    try {
+      await this.fetchOkImpl(url, {
+        method: "PUT",
+        body: value,
+      });
+    } catch (e) {
+      throw new Error(`Failed to write to ${url}.`, { cause: e });
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    const url = this.getBaseObjectUrl(key);
+    try {
+      await this.fetchOkImpl(url, {
+        method: "DELETE",
+      });
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 404) {
+        return;
+      }
+      throw new Error(`Failed to delete ${url}.`, { cause: e });
+    }
+  }
+
   getUrl(path: string) {
     return joinBaseUrlAndPath(this.baseUrlForDisplay, path);
   }
@@ -104,7 +152,7 @@ function amazonS3Provider<
   SharedKvStoreContext extends SharedKvStoreContextBase,
 >(
   sharedKvStoreContext: SharedKvStoreContext,
-  s3KvStoreClass: typeof ReadableS3KvStore<SharedKvStoreContext>,
+  s3KvStoreClass: typeof S3KvStoreBase<SharedKvStoreContext>,
 ): BaseKvStoreProvider {
   return {
     scheme: "s3",
@@ -131,7 +179,7 @@ function amazonS3Provider<
 function s3Provider<SharedKvStoreContext extends SharedKvStoreContextBase>(
   sharedKvStoreContext: SharedKvStoreContext,
   httpScheme: "http" | "https",
-  s3KvStoreClass: typeof ReadableS3KvStore<SharedKvStoreContext>,
+  s3KvStoreClass: typeof S3KvStoreBase<SharedKvStoreContext>,
 ): BaseKvStoreProvider {
   return {
     scheme: `s3+${httpScheme}`,
@@ -161,7 +209,7 @@ export function registerProviders<
   SharedKvStoreContext extends SharedKvStoreContextBase,
 >(
   registry: KvStoreProviderRegistry<SharedKvStoreContext>,
-  s3KvStoreClass: typeof ReadableS3KvStore<SharedKvStoreContext>,
+  s3KvStoreClass: typeof S3KvStoreBase<SharedKvStoreContext>,
 ) {
   registry.registerBaseKvStoreProvider((context) =>
     amazonS3Provider(context, s3KvStoreClass),
