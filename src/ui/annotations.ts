@@ -1737,8 +1737,8 @@ export class AnnotationLayerView extends AccordionTab {
     const items = this.annotationQueryItems;
     const indices = result.indices!;
     const availablePropertyIds = new Set<string>();
-    for (const index of indices) {
-      for (const [id, value] of items[index].values) {
+    for (let resultIndex = 0; resultIndex < indices.length; ++resultIndex) {
+      for (const [id, value] of items[indices[resultIndex]].values) {
         if (typeof value === "boolean" || !Number.isNaN(value)) {
           availablePropertyIds.add(id);
         }
