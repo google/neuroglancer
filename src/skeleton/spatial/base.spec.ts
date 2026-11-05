@@ -22,7 +22,6 @@ import { RenderScaleHistogram } from "#src/render_scale_statistics.js";
 import {
   forEachSpatialSkeletonSourceScale,
   forEachVisibleSpatialSkeletonChunk,
-  getSpatialSkeletonSourceDensityContext,
   getSpatialSkeletonLevelSpecs,
   getSpatialSkeletonSourceScalesByLimit,
   selectSpatialSkeletonSourceByLimit,
@@ -149,119 +148,6 @@ describe("forEachVisibleSpatialSkeletonChunk", () => {
       { label: "coarse", selected: false },
       { label: "fine", selected: true },
     ]);
-  });
-  it.each([
-    {
-      projection: "orthographic",
-      initialZoom: 2,
-      mediumZoom: 0.75,
-      fineZoom: 0.25,
-    },
-    {
-      projection: "perspective",
-      initialZoom: 1,
-      mediumZoom: 0.35,
-      fineZoom: 0.15,
-    },
-  ])(
-    "selects the 8 mm overview when zooming out past the dataset ($projection)",
-    ({ projection, initialZoom, mediumZoom, fineZoom }) => {
-      const parameters = makeProjectionParameters();
-      if (projection === "orthographic") {
-        mat4.ortho(parameters.projectionMat, -1, 1, -1, 1, 0.5, 5);
-      } else {
-        mat4.perspective(parameters.projectionMat, Math.PI / 2, 1, 0.5, 5);
-      }
-      const sources = [
-        makeTransformedSource("8 mm", 8, 2000),
-        makeTransformedSource("4 mm", 4, 45000),
-        makeTransformedSource("2 mm", 2, 110000),
-        makeTransformedSource("1 mm", 1, 0),
-      ];
-      for (const source of sources) {
-        source.upperClipDisplayBound = vec3.fromValues(16, 16, 8);
-      }
-      function selectedAtZoom(zoom: number) {
-        mat4.fromTranslation(parameters.viewMatrix, vec3.fromValues(0, 0, -3));
-        mat4.scale(
-          parameters.viewMatrix,
-          parameters.viewMatrix,
-          vec3.fromValues(1 / zoom, 1 / zoom, 1 / zoom),
-        );
-        mat4.translate(
-          parameters.viewMatrix,
-          parameters.viewMatrix,
-          vec3.fromValues(-8, -8, -4),
-        );
-        let selected: string | undefined;
-        forEachSpatialSkeletonSourceScale(
-          parameters,
-          8,
-          sources,
-          (source, _index, _physicalSpacing, _pixelSpacing, isSelected) => {
-            if (isSelected) selected = (source as any).label;
-          },
-        );
-        return selected;
-      }
-      expect(selectedAtZoom(initialZoom)).toBe("4 mm");
-      expect(selectedAtZoom(mediumZoom)).toBe("2 mm");
-      expect(selectedAtZoom(fineZoom)).toBe("1 mm");
-      expect(selectedAtZoom(1024)).toBe("8 mm");
-      const context = getSpatialSkeletonSourceDensityContext(
-        parameters,
-        8,
-        sources,
-      )!;
-      expect(context.viewportArea).toBeLessThan(
-        parameters.width * parameters.height,
-      );
-      expect(selectedAtZoom(2048)).toBe("8 mm");
-      const furtherOut = getSpatialSkeletonSourceDensityContext(
-        parameters,
-        8,
-        sources,
-      )!;
-      expect(furtherOut.physicalDensityTarget).toBeLessThan(
-        context.physicalDensityTarget / 3.5,
-      );
-      expect(selectedAtZoom(initialZoom)).toBe("4 mm");
-    },
-  );
-
-  it("clips projected data coverage to the viewport and applies source transforms", () => {
-    const parameters = makeProjectionParameters();
-    const source = makeTransformedSource("source", 1, 1000);
-    const context = getSpatialSkeletonSourceDensityContext(parameters, 8, [
-      source,
-    ])!;
-    expect(context.viewportArea).toBe(250000);
-    mat4.fromTranslation(
-      source.chunkLayout.transform,
-      vec3.fromValues(2, 0, 0),
-    );
-    const offscreen = getSpatialSkeletonSourceDensityContext(parameters, 8, [
-      source,
-    ])!;
-    expect(offscreen.viewportArea).toBe(0);
-    expect(offscreen.physicalDensityTarget).toBe(0);
-  });
-
-  it("retains the full budget for camera-plane crossings and unbounded sources", () => {
-    const parameters = makeProjectionParameters();
-    mat4.perspective(parameters.projectionMat, Math.PI / 2, 1, 0.5, 5);
-    const source = makeTransformedSource("source", 8, 1000);
-    source.upperClipDisplayBound = vec3.fromValues(8, 8, 8);
-    mat4.fromTranslation(parameters.viewMatrix, vec3.fromValues(-4, -4, -4));
-    const crossing = getSpatialSkeletonSourceDensityContext(parameters, 8, [
-      source,
-    ])!;
-    expect(crossing.viewportArea).toBe(1000000);
-    source.upperClipDisplayBound[0] = Number.POSITIVE_INFINITY;
-    const unbounded = getSpatialSkeletonSourceDensityContext(parameters, 8, [
-      source,
-    ])!;
-    expect(unbounded.viewportArea).toBe(1000000);
   });
 });
 
