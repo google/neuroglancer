@@ -25,14 +25,20 @@ export async function decodeJxlChunk(
   response: ArrayBuffer,
 ) {
   const chunkDataSize = chunk.chunkDataSize!;
+  const expectedElements =
+    chunkDataSize[0] *
+    chunkDataSize[1] *
+    chunkDataSize[2] *
+    (chunkDataSize[3] || 1);
   const { uint8Array: decoded } = await requestAsyncComputation(
     decodeJxl,
     signal,
     [response],
     new Uint8Array(response),
-    chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2],
-    chunkDataSize[3] || 1,
+    expectedElements,
     1, // bytesPerPixel
+    // Precomputed keeps the legacy behavior of forcing opaque alpha for RGBA.
+    /*preserveAlpha=*/ false,
   );
   await postProcessRawData(chunk, signal, decoded);
 }

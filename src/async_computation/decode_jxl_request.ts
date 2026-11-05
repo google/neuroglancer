@@ -16,12 +16,18 @@
 import type { DecodedImage } from "#src/async_computation/decode_png_request.js";
 import { asyncComputation } from "#src/async_computation/index.js";
 
+// Decodes a JPEG XL codestream.  `expectedElements` is the total number of
+// samples in the decoded chunk (product of the chunk shape); the number of
+// components (channels) is derived from the codestream as
+// `expectedElements / (width * height * frames)`.  `preserveAlpha` returns the
+// true RGBA alpha channel when set; when unset alpha is forced opaque (legacy
+// precomputed behavior).
 export const decodeJxl =
   asyncComputation<
     (
       data: Uint8Array,
-      area: number | undefined,
-      numComponents: number | undefined,
+      expectedElements: number,
       bytesPerPixel: number,
+      preserveAlpha: boolean,
     ) => DecodedImage
   >("decodeJxl");
