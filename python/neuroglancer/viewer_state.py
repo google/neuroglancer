@@ -412,15 +412,15 @@ class RandomizePaintValueTool(LayerTool):
 
 
 @export_tool
-class UndoTool(LayerTool):
+class UndoPaintTool(LayerTool):
     __slots__ = ()
-    TOOL_TYPE = "undo"
+    TOOL_TYPE = "undoPaint"
 
 
 @export_tool
-class RedoTool(LayerTool):
+class RedoPaintTool(LayerTool):
     __slots__ = ()
-    TOOL_TYPE = "redo"
+    TOOL_TYPE = "redoPaint"
 
 
 @export

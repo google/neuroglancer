@@ -117,8 +117,8 @@ def test_tool():
 def test_voxel_editing_tools():
     p = viewer_state.Tool("paintBrush")
     assert isinstance(p, viewer_state.PaintBrushTool)
-    assert viewer_state.UndoTool(layer="seg").to_json() == {
-        "type": "undo",
+    assert viewer_state.UndoPaintTool(layer="seg").to_json() == {
+        "type": "undoPaint",
         "layer": "seg",
     }
 

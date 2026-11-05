@@ -70,8 +70,8 @@ export type VoxelOperation = BrushOperation | FloodFillOperation;
 export const BRUSH_TOOL_ID = "paintBrush";
 export const BRUSH_RADIUS_TOOL_ID = "brushRadius";
 export const FLOODFILL_TOOL_ID = "floodFill";
-export const UNDO_TOOL_ID = "undo";
-export const REDO_TOOL_ID = "redo";
+export const UNDO_TOOL_ID = "undoPaint";
+export const REDO_TOOL_ID = "redoPaint";
 export const VALUE_PICKER_TOOL_ID = "pickPaintValue";
 
 export const EMPTY_VOXEL_VALUE = 0n;
