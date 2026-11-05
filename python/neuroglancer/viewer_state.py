@@ -664,6 +664,7 @@ ShaderControls = typed_map(str, _shader_control_parameters)
 
 class _PaintValue(int):
     supports_validation = True
+    _neuroglancer_annotation = int
 
     # Serialized as a base-10 string, like the frontend, to keep 64-bit precision.
     def to_json(self):
