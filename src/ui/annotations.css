@@ -61,11 +61,28 @@
 }
 
 .neuroglancer-annotation-layer-view
+  > .neuroglancer-accordion-item[data-key="filterExpanded"][data-expanded="true"],
+.neuroglancer-annotation-layer-view
   > .neuroglancer-accordion-item[data-key="annotationsExpanded"][data-expanded="true"] {
   display: flex;
-  flex: 1;
+  flex: 1 1 0;
   flex-direction: column;
   min-height: 0;
+  max-height: max-content;
+}
+
+.neuroglancer-annotation-layer-view .neuroglancer-annotation-list-container,
+.neuroglancer-annotation-layer-view .neuroglancer-annotation-list {
+  height: auto;
+  flex-basis: auto;
+}
+
+.neuroglancer-annotation-layer-view
+  > .neuroglancer-accordion-item[data-key="filterExpanded"]
+  > .neuroglancer-accordion-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .neuroglancer-annotation-layer-view
@@ -79,8 +96,12 @@
 }
 
 .neuroglancer-annotation-filter-results {
-  max-height: min(400px, 50vh);
-  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.neuroglancer-annotation-layer-view .neuroglancer-property-list-statistics {
+  max-height: none;
+  overflow: visible;
 }
 
 .neuroglancer-annotation-filter-results
