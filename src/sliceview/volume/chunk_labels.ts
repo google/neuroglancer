@@ -5,16 +5,6 @@ export function distinctLabels(
   data: ArrayBufferView,
   dataType: DataType,
 ): BigUint64Array {
-  if (data instanceof BigUint64Array) {
-    const seen = new Set<bigint>();
-    let prev = 0n;
-    for (const v of data) {
-      if (v === prev) continue;
-      prev = v;
-      if (v !== 0n) seen.add(v);
-    }
-    return BigUint64Array.from([...seen]);
-  }
   const words = new Uint32Array(
     data.buffer,
     data.byteOffset,

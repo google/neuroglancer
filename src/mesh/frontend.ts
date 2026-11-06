@@ -1101,6 +1101,13 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
 
     let totalManifestChunks = 0;
     let presentManifestChunks = 0;
+    // Per-feature pick IDs only when the shader adds the feature index, and
+    // once per fragment per frame: a fragment can draw as several sub-ranges.
+    const featurePickIDs =
+      renderContext.emitPickID &&
+      displayState.segmentAttributes?.enabled.value === true
+        ? new Map<MultiscaleFragmentChunk, number>()
+        : undefined;
 
     forEachVisibleSegmentToDraw(
       displayState,
@@ -1205,18 +1212,21 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
               // A layer-mesh fragment picks per feature: one pick ID per distinct
               // feature, resolved in `updateMouseState`.
               const { features } = fragmentChunk.meshData;
-              meshShaderManager.setPickID(
-                gl,
-                shader,
-                features === undefined
-                  ? pickIndex!
-                  : renderContext.pickIDs.register(
-                      this,
-                      features.length,
-                      objectId,
-                      fragmentChunk,
-                    ),
-              );
+              let pickID = pickIndex!;
+              if (features !== undefined && featurePickIDs !== undefined) {
+                let base = featurePickIDs.get(fragmentChunk);
+                if (base === undefined) {
+                  base = renderContext.pickIDs.register(
+                    this,
+                    features.length,
+                    objectId,
+                    fragmentChunk,
+                  );
+                  featurePickIDs.set(fragmentChunk, base);
+                }
+                pickID = base;
+              }
+              meshShaderManager.setPickID(gl, shader, pickID);
             }
             meshShaderManager.drawMultiscaleFragment(
               gl,

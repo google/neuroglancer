@@ -384,7 +384,6 @@ export interface MeshSource {
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class MeshSource extends ChunkSource {
-  sourceQueueLevel = 1;
   fragmentSource: FragmentSource;
 
   constructor(rpc: RPC, options: any) {
@@ -430,7 +429,6 @@ export class MeshSource extends ChunkSource {
 
 @registerSharedObject(FRAGMENT_SOURCE_RPC_ID)
 export class FragmentSource extends ChunkSource {
-  sourceQueueLevel = 1;
   meshSource: MeshSource | null = null;
   download(chunk: FragmentChunk, signal: AbortSignal) {
     return this.meshSource!.downloadFragment(chunk, signal);
@@ -584,7 +582,6 @@ export interface MultiscaleMeshSource {
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class MultiscaleMeshSource extends ChunkSource {
-  sourceQueueLevel = 1;
   fragmentSource: MultiscaleFragmentSource;
   format: MultiscaleFragmentFormat;
 
@@ -630,7 +627,6 @@ export class MultiscaleMeshSource extends ChunkSource {
 
 @registerSharedObject(MULTISCALE_FRAGMENT_SOURCE_RPC_ID)
 export class MultiscaleFragmentSource extends ChunkSource {
-  sourceQueueLevel = 1;
   meshSource: MultiscaleMeshSource | null = null;
   download(chunk: MultiscaleFragmentChunk, signal: AbortSignal) {
     return this.meshSource!.downloadFragment(chunk, signal);

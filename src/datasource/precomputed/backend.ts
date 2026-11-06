@@ -455,11 +455,13 @@ async function decodeMultiscaleFragmentChunk(
   const { lod } = chunk;
   const source = chunk.manifestChunk!
     .source! as PrecomputedMultiscaleMeshSource;
+  const { metadata } = source.parameters;
   const rawMesh = await decodeDracoPartitioned(
     new Uint8Array(response),
-    source.parameters.metadata.vertexQuantizationBits,
+    metadata.vertexQuantizationBits,
     lod !== 0,
   );
+  if (!metadata.vertexFeatureIds) rawMesh.featureIds = undefined;
   assignMultiscaleMeshFragmentData(
     chunk,
     rawMesh,

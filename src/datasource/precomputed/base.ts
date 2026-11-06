@@ -72,6 +72,8 @@ export class MultiscaleMeshMetadata {
   // Each fragment is its own file, nodes/<lod>_<x>_<y>_<z>.drc, instead of a
   // byte range of the object's data file.
   nodeFragments: boolean;
+  // Draco generic attribute 0 holds each vertex's uint32 segment id.
+  vertexFeatureIds: boolean;
 }
 
 export class MultiscaleMeshSourceParameters {

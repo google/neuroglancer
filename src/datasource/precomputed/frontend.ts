@@ -509,12 +509,19 @@ function parseMeshMetadata(data: any): ParsedMeshMetadata {
         }
         return true;
       }) ?? false;
+    const vertexFeatureIds =
+      verifyOptionalObjectProperty(
+        data,
+        "vertex_feature_ids",
+        verifyOptionalBoolean,
+      ) ?? false;
     metadata = {
       lodScaleMultiplier,
       transform,
       sharding,
       vertexQuantizationBits,
       nodeFragments,
+      vertexFeatureIds,
     };
   }
   const segmentPropertyMap = verifyObjectProperty(
