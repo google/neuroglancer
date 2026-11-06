@@ -1,0 +1,55 @@
+.neuroglancer-accordion-item {
+  border-bottom: 1px solid #ddd;
+}
+
+.neuroglancer-accordion-item[data-expanded="true"]
+  > .neuroglancer-accordion-body {
+  display: flex;
+}
+
+.neuroglancer-accordion-item[data-expanded="false"]
+  > .neuroglancer-accordion-body {
+  display: none;
+}
+
+.neuroglancer-accordion-item[data-hidden="true"] {
+  display: none;
+}
+
+.neuroglancer-accordion-item[data-expanded="true"]
+  > .neuroglancer-accordion-header
+  .neuroglancer-accordion-chevron
+  svg {
+  transform: rotate(180deg);
+}
+
+.neuroglancer-accordion-header {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 2px;
+  cursor: pointer;
+}
+
+.neuroglancer-accordion-header-text {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.neuroglancer-accordion-chevron {
+  display: inline-flex;
+  align-items: center;
+}
+
+.neuroglancer-accordion-chevron svg {
+  width: 20px;
+  height: 20px;
+  fill: rgba(255, 255, 255, 0.8);
+}
+
+.neuroglancer-accordion-body {
+  flex-direction: column;
+  padding: 0 2px 8px;
+  overflow: visible;
+}

@@ -17,6 +17,11 @@
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import type { IndexedSegmentProperty } from "#src/segmentation_display_state/base.js";
+import type { SerializablePropertyQueryClause } from "#src/ui/property_query.js";
+import {
+  resolvePropertyQuery,
+  serializePropertyQueryClauses,
+} from "#src/ui/property_query.js";
 import type { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import type { Uint64Set } from "#src/uint64_set.js";
 import type {
@@ -32,11 +37,9 @@ import { murmurHash3_x86_32Hash64Bits_Bigint } from "#src/util/hash.js";
 import { parseUint64 } from "#src/util/json.js";
 import type { DataTypeInterval } from "#src/util/lerp.js";
 import {
-  clampToInterval,
   dataTypeCompare,
   dataTypeIntervalEqual,
   dataTypeValueNextAfter,
-  parseDataTypeValue,
 } from "#src/util/lerp.js";
 import { getObjectId } from "#src/util/object_id.js";
 import { defaultStringCompare } from "#src/util/string.js";
@@ -514,262 +517,112 @@ export function parseSegmentQuery(
     const ids = Array.from(idSet).sort(bigintCompare);
     return { ids };
   }
-  const parsed: FilterQuery = {
-    regexp: undefined,
-    prefix: undefined,
-    includeTags: [],
-    excludeTags: [],
-    numericalConstraints: [],
-    sortBy: [],
-    includeColumns: [],
-  };
   const properties = db?.segmentPropertyMap.inlineProperties?.properties;
   const tags = db?.tags;
   const tagNames = tags?.tags || [];
   const lowerCaseTags = tagNames.map((x) => x.toLowerCase());
   const labels = db?.labels;
-  const errors: QueryParseError[] = [];
-  let nextStartIndex: number;
-  for (
-    let startIndex = 0;
-    startIndex < queryString.length;
-    startIndex = nextStartIndex
-  ) {
-    let endIndex = queryString.indexOf(" ", startIndex);
-    if (endIndex === -1) {
-      nextStartIndex = endIndex = queryString.length;
-    } else {
-      nextStartIndex = endIndex + 1;
-    }
-    const word = queryString.substring(startIndex, endIndex);
-    if (word.length === 0) continue;
-    const checkTag = (tag: string, begin: number) => {
-      const lowerCaseTag = tag.toLowerCase();
-      const tagIndex = lowerCaseTags.indexOf(lowerCaseTag);
-      if (tagIndex === -1) {
-        errors.push({ begin, end: endIndex, message: `Invalid tag: ${tag}` });
-        return undefined;
-      }
-      tag = tagNames[tagIndex];
-      if (
-        parsed.includeTags.includes(tag) ||
-        parsed.excludeTags.includes(tag)
-      ) {
-        errors.push({ begin, end: endIndex, message: `Duplicate tag: ${tag}` });
-        return undefined;
-      }
-      return tag;
-    };
-    if (word.startsWith("#")) {
-      const tag = checkTag(word.substring(1), startIndex + 1);
-      if (tag !== undefined) {
-        parsed.includeTags.push(tag);
-      }
-      continue;
-    }
-    if (word.startsWith("-#")) {
-      const tag = checkTag(word.substring(2), startIndex + 2);
-      if (tag !== undefined) {
-        parsed.excludeTags.push(tag);
-      }
-      continue;
-    }
-    if (word.startsWith("<") || word.startsWith(">")) {
-      let fieldId = word.substring(1).toLowerCase();
-      if (fieldId !== "id" && fieldId !== "label") {
-        const property = properties?.find(
-          (p) =>
-            p.id.toLowerCase() === fieldId &&
-            (p.type === "number" || p.type === "label" || p.type === "string"),
-        );
-        if (property === undefined) {
-          errors.push({
-            begin: startIndex + 1,
-            end: endIndex,
-            message: `Invalid field: ${fieldId}`,
-          });
-          continue;
-        }
-        fieldId = property.id;
-      }
-      if (parsed.sortBy.find((x) => x.fieldId === fieldId) !== undefined) {
-        errors.push({
-          begin: startIndex + 1,
-          end: endIndex,
-          message: `Duplicate sort field: ${fieldId}`,
-        });
-        continue;
-      }
-      parsed.sortBy.push({ order: word[0] as "<" | ">", fieldId });
-      continue;
-    }
-    if (word.startsWith("|")) {
-      let fieldId = word.substring(1).toLowerCase();
-      if (fieldId === "id" || fieldId === "label") continue;
+  return resolvePropertyQuery(queryString, {
+    createQuery: (): FilterQuery => ({
+      regexp: undefined,
+      prefix: undefined,
+      includeTags: [],
+      excludeTags: [],
+      numericalConstraints: [],
+      sortBy: [],
+      includeColumns: [],
+    }),
+    resolveSortField: (clause) => {
+      const fieldId = clause.field.toLowerCase();
+      if (fieldId === "id" || fieldId === "label") return { value: fieldId };
       const property = properties?.find(
-        (p) =>
-          p.id.toLowerCase() === fieldId &&
-          (p.type === "number" || p.type === "string"),
+        (candidate) =>
+          candidate.id.toLowerCase() === fieldId &&
+          (candidate.type === "number" ||
+            candidate.type === "label" ||
+            candidate.type === "string"),
       );
-      if (property === undefined) {
-        errors.push({
-          begin: startIndex + 1,
-          end: endIndex,
-          message: `Invalid field: ${fieldId}`,
-        });
-        continue;
-      }
-      fieldId = property.id;
-      if (
-        parsed.sortBy.find((x) => x.fieldId === fieldId) ||
-        parsed.includeColumns.find((x) => x === fieldId)
-      ) {
-        // Ignore duplicate column.
-        continue;
-      }
-      parsed.includeColumns.push(fieldId);
-      continue;
-    }
-    if (word.startsWith("/")) {
-      if (parsed.regexp !== undefined) {
-        errors.push({
-          begin: startIndex,
-          end: endIndex,
-          message: "Only one regular expression allowed",
-        });
-        continue;
-      }
-      if (parsed.prefix !== undefined) {
-        errors.push({
-          begin: startIndex,
-          end: endIndex,
-          message: "Prefix cannot be combined with regular expression",
-        });
-        continue;
-      }
-      if (labels === undefined && tagNames.length == 0) {
-        errors.push({
-          begin: startIndex,
-          end: endIndex,
-          message: "No label property",
-        });
-        continue;
-      }
-      try {
-        parsed.regexp = new RegExp(word.substring(1));
-      } catch {
-        errors.push({
-          begin: startIndex,
-          end: endIndex,
-          message: "Invalid regular expression syntax",
-        });
-      }
-      continue;
-    }
-    const constraintMatch = word.match(
-      /^([a-zA-Z][a-zA-Z0-9_]*)(<|<=|=|>=|>)(-?[0-9.].*)$/,
-    );
-    if (constraintMatch !== null) {
-      let fieldId = constraintMatch[1].toLowerCase();
-      const op = constraintMatch[2];
+      return property === undefined
+        ? {
+            error: {
+              begin: clause.begin + 1,
+              end: clause.end,
+              message: `Invalid field: ${fieldId}`,
+            },
+          }
+        : { value: property.id };
+    },
+    resolveColumnField: (clause) => {
+      const fieldId = clause.field.toLowerCase();
+      if (fieldId === "id" || fieldId === "label") return { ignore: true };
+      const property = properties?.find(
+        (candidate) =>
+          candidate.id.toLowerCase() === fieldId &&
+          (candidate.type === "number" || candidate.type === "string"),
+      );
+      return property === undefined
+        ? {
+            error: {
+              begin: clause.begin + 1,
+              end: clause.end,
+              message: `Invalid field: ${fieldId}`,
+            },
+          }
+        : { value: property.id };
+    },
+    resolveNumericField: (clause) => {
+      const fieldId = clause.field.toLowerCase();
       const property = db?.numericalProperties.find(
-        (p) => p.id.toLowerCase() === fieldId,
+        (candidate) => candidate.id.toLowerCase() === fieldId,
       );
-      if (property === undefined) {
+      return property === undefined
+        ? {
+            error: {
+              begin: clause.begin,
+              end: clause.begin + fieldId.length,
+              message: `Invalid numerical field: ${fieldId}`,
+            },
+          }
+        : {
+            value: {
+              fieldId: property.id,
+              dataType: property.dataType,
+              bounds: property.bounds,
+            },
+          };
+    },
+    applyCategoricalClause: (query, clause, { errors }) => {
+      const tagText =
+        clause.value === undefined
+          ? clause.field
+          : `${clause.field}=${clause.value}`;
+      const tagIndex = lowerCaseTags.indexOf(tagText.toLowerCase());
+      const begin = clause.begin + (clause.exclude ? 2 : 1);
+      if (tagIndex === -1) {
         errors.push({
-          begin: startIndex,
-          end: startIndex + fieldId.length,
-          message: `Invalid numerical field: ${fieldId}`,
+          begin,
+          end: clause.end,
+          message: `Invalid tag: ${tagText}`,
         });
-        continue;
+        return;
       }
-      fieldId = property.id;
-      let value: number;
-      try {
-        value = parseDataTypeValue(
-          property.dataType,
-          constraintMatch[3],
-        ) as number;
-      } catch (e) {
+      const tag = tagNames[tagIndex];
+      if (query.includeTags.includes(tag) || query.excludeTags.includes(tag)) {
         errors.push({
-          begin:
-            startIndex + constraintMatch[1].length + constraintMatch[2].length,
-          end: endIndex,
-          message: e.message,
+          begin,
+          end: clause.end,
+          message: `Duplicate tag: ${tag}`,
         });
-        continue;
+        return;
       }
-      let constraint = parsed.numericalConstraints.find(
-        (c) => c.fieldId === fieldId,
-      );
-      if (constraint === undefined) {
-        constraint = { fieldId, bounds: property.bounds };
-        parsed.numericalConstraints.push(constraint);
-      }
-      const origMin = clampToInterval(property.bounds, constraint.bounds[0]);
-      const origMax = clampToInterval(property.bounds, constraint.bounds[1]);
-      let newMax = origMax;
-      let newMin = origMin;
-      switch (op) {
-        case "<":
-          newMax = dataTypeValueNextAfter(property.dataType, value, -1);
-          break;
-        case "<=":
-          newMax = value;
-          break;
-        case "=":
-          newMax = newMin = value;
-          break;
-        case ">=":
-          newMin = value;
-          break;
-        case ">":
-          newMin = dataTypeValueNextAfter(property.dataType, value, +1);
-          break;
-      }
-      newMin = dataTypeCompare(origMin, newMin) > 0 ? origMin : newMin;
-      newMax = dataTypeCompare(origMax, newMax) < 0 ? origMax : newMax;
-      if (dataTypeCompare(newMin, newMax) > 0) {
-        errors.push({
-          begin: startIndex,
-          end: endIndex,
-          message: "Constraint would not match any values",
-        });
-        continue;
-      }
-      constraint.bounds = [newMin, newMax] as DataTypeInterval;
-      continue;
-    }
-    if (parsed.regexp !== undefined) {
-      errors.push({
-        begin: startIndex,
-        end: endIndex,
-        message: "Prefix cannot be combined with regular expression",
-      });
-      continue;
-    }
-    if (labels === undefined && tagNames.length == 0) {
-      errors.push({
-        begin: startIndex,
-        end: endIndex,
-        message: "No label property",
-      });
-      continue;
-    }
-    if (parsed.prefix !== undefined) {
-      parsed.prefix += ` ${word}`;
-    } else {
-      parsed.prefix = word;
-    }
-  }
-  if (errors.length > 0) {
-    return { errors };
-  }
-  if (parsed.sortBy.length === 0) {
-    // Add default sort order.
-    parsed.sortBy.push({ fieldId: getDefaultSortField(db), order: "<" });
-  }
-  return parsed;
+      (clause.exclude ? query.excludeTags : query.includeTags).push(tag);
+    },
+    defaultSort: { fieldId: getDefaultSortField(db), order: "<" },
+    textUnavailableError:
+      labels === undefined && tagNames.length === 0
+        ? "No label property"
+        : undefined,
+  });
 }
 
 export interface TagCount {
@@ -1169,21 +1022,29 @@ export function unparseSegmentQuery(
   if (ids !== undefined) {
     return ids.map((x) => x.toString()).join(", ");
   }
-  let queryString = "";
+  const clauses: SerializablePropertyQueryClause[] = [];
   query = query as FilterQuery;
   const { prefix, regexp } = query;
   if (prefix !== undefined) {
-    queryString = prefix;
+    clauses.push({ type: "text", value: prefix });
   } else if (regexp !== undefined) {
-    queryString = `/${regexp}`;
+    clauses.push({ type: "regexp", pattern: regexp.source, closed: true });
   }
   for (const tag of query.includeTags) {
-    if (queryString.length > 0) queryString += " ";
-    queryString += `#${tag}`;
+    clauses.push({
+      type: "categorical",
+      exclude: false,
+      field: tag,
+      value: undefined,
+    });
   }
   for (const tag of query.excludeTags) {
-    if (queryString.length > 0) queryString += " ";
-    queryString += `-#${tag}`;
+    clauses.push({
+      type: "categorical",
+      exclude: true,
+      field: tag,
+      value: undefined,
+    });
   }
   for (const constraint of query.numericalConstraints) {
     const { fieldId, bounds } = constraint;
@@ -1193,12 +1054,15 @@ export function unparseSegmentQuery(
       continue;
     }
     if (dataTypeCompare(min, max) === 0) {
-      if (queryString.length > 0) queryString += " ";
-      queryString += `${fieldId}=${min}`;
+      clauses.push({
+        type: "comparison",
+        field: fieldId,
+        operator: "=",
+        value: `${min}`,
+      });
       continue;
     }
     if (dataTypeCompare(min, property.bounds[0]) > 0) {
-      if (queryString.length > 0) queryString += " ";
       const beforeMin = dataTypeValueNextAfter(property.dataType, min, -1);
       const minString = min.toString();
       const beforeMinString = beforeMin.toString();
@@ -1206,13 +1070,22 @@ export function unparseSegmentQuery(
         property.dataType !== DataType.FLOAT32 ||
         minString.length <= beforeMinString.length
       ) {
-        queryString += `${fieldId}>=${minString}`;
+        clauses.push({
+          type: "comparison",
+          field: fieldId,
+          operator: ">=",
+          value: minString,
+        });
       } else {
-        queryString += `${fieldId}>${beforeMinString}`;
+        clauses.push({
+          type: "comparison",
+          field: fieldId,
+          operator: ">",
+          value: beforeMinString,
+        });
       }
     }
     if (dataTypeCompare(max, property.bounds[1]) < 0) {
-      if (queryString.length > 0) queryString += " ";
       const afterMax = dataTypeValueNextAfter(property.dataType, max, +1);
       const maxString = max.toString();
       const afterMaxString = afterMax.toString();
@@ -1220,9 +1093,19 @@ export function unparseSegmentQuery(
         property.dataType !== DataType.FLOAT32 ||
         maxString.length <= afterMaxString.length
       ) {
-        queryString += `${fieldId}<=${maxString}`;
+        clauses.push({
+          type: "comparison",
+          field: fieldId,
+          operator: "<=",
+          value: maxString,
+        });
       } else {
-        queryString += `${fieldId}<${afterMaxString}`;
+        clauses.push({
+          type: "comparison",
+          field: fieldId,
+          operator: "<",
+          value: afterMaxString,
+        });
       }
     }
   }
@@ -1234,14 +1117,12 @@ export function unparseSegmentQuery(
     }
   }
   for (const s of sortBy) {
-    if (queryString.length > 0) queryString += " ";
-    queryString += `${s.order}${s.fieldId}`;
+    clauses.push({ type: "sort", field: s.fieldId, order: s.order });
   }
   for (const fieldId of query.includeColumns) {
-    if (queryString.length > 0) queryString += " ";
-    queryString += `|${fieldId}`;
+    clauses.push({ type: "column", field: fieldId });
   }
-  return queryString;
+  return serializePropertyQueryClauses(clauses);
 }
 
 export function forEachQueryResultSegmentId(

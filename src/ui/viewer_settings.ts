@@ -32,6 +32,7 @@ import type { vec3 } from "#src/util/geom.js";
 import { emptyToUndefined } from "#src/util/json.js";
 import type { Viewer } from "#src/viewer.js";
 import { ColorWidget } from "#src/widget/color.js";
+import { EnumSelectWidget } from "#src/widget/enum_widget.js";
 import { NumberInputWidget } from "#src/widget/number_input_widget.js";
 import { TextInputWidget } from "#src/widget/text_input.js";
 
@@ -133,6 +134,16 @@ export class ViewerSettingsPanel extends SidePanel {
       "Enable adaptive downsampling",
       viewer.enableAdaptiveDownsampling,
     );
+
+    {
+      const labelElement = document.createElement("label");
+      labelElement.textContent = "Transparent mesh rendering";
+      const widget = this.registerDisposer(
+        new EnumSelectWidget(viewer.transparentMeshRenderingMode),
+      );
+      labelElement.appendChild(widget.element);
+      scroll.appendChild(labelElement);
+    }
 
     const addColor = (label: string, value: WatchableValueInterface<vec3>) => {
       const labelElement = document.createElement("label");
