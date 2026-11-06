@@ -328,8 +328,8 @@ const emptyQuery = (): AnnotationFilterQuery => ({
  *   >field          sort by `field` descending  (field = property id, "description", "index")
  *   |field          show `field` as a column
  *   prop<N          numeric constraint (also <=, =, >=, >)
- *   #prop=label     include only enum values matching label (case-insensitive)
- *   -#prop=label    exclude enum values matching label
+ *   prop=#label     include only enum values matching label (case-insensitive)
+ *   -prop=#label    exclude enum values matching label
  *   #prop           require bool property to be true
  *   -#prop          require bool property to be false
  *   /re/            description regexp
@@ -437,11 +437,11 @@ export function parseAnnotationQuery(
         const property = schema.enumProps.find(
           (candidate) => candidate.identifier.toLowerCase() === fieldId,
         )!;
-        if (clause.value === undefined) {
+        if (clause.value === undefined || clause.value === "") {
           errors.push({
             begin: clause.begin,
             end: clause.end,
-            message: `Enum property ${fieldId} requires a value: #${fieldId}=label`,
+            message: `Enum property ${fieldId} requires a value: ${fieldId}=#label`,
           });
           return;
         }

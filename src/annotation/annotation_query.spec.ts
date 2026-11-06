@@ -236,20 +236,31 @@ describe("parseAnnotationQuery", () => {
     expect(q.numericalConstraints[0].bounds[1]).toBeCloseTo(0.9);
   });
 
-  it("parses enum include by label", () => {
-    const q = parseAnnotationQuery(schema, "#status=active") as any;
-    expect(q.enumConstraints[0].fieldId).toBe("status");
-    expect(q.enumConstraints[0].include).toEqual([1]);
-  });
+  it.each(["status=#active", "#status=active"])(
+    "parses enum include %s",
+    (text) => {
+      const q = parseAnnotationQuery(schema, text) as any;
+      expect(q.enumConstraints[0].fieldId).toBe("status");
+      expect(q.enumConstraints[0].include).toEqual([1]);
+    },
+  );
 
-  it("parses enum exclude by label (case-insensitive)", () => {
-    const q = parseAnnotationQuery(schema, "-#status=DONE") as any;
-    expect(q.enumConstraints[0].exclude).toEqual([2]);
-  });
+  it.each(["-status=#DONE", "-#status=DONE"])(
+    "parses enum exclude %s",
+    (text) => {
+      const q = parseAnnotationQuery(schema, text) as any;
+      expect(q.enumConstraints[0].exclude).toEqual([2]);
+    },
+  );
 
   it("parses bool require-true", () => {
     const q = parseAnnotationQuery(schema, "#verified") as any;
     expect(q.boolConstraints[0]).toEqual({ fieldId: "verified", value: true });
+  });
+
+  it("rejects an enum filter with no option", () => {
+    const result = parseAnnotationQuery(schema, "status=#");
+    expect("errors" in result).toBe(true);
   });
 
   it("parses bool require-false", () => {
@@ -460,7 +471,7 @@ describe("unparseAnnotationQuery", () => {
         undefined,
         new Map([["status", new Map<number, string>([[1, "active"]])]]),
       ),
-    ).toBe("#status=active");
+    ).toBe("status=#active");
   });
 
   it("round-trips bool constraint", () => {
@@ -478,7 +489,7 @@ describe("unparseAnnotationQuery", () => {
       "<score |count score>=0.5 #status=active -#verified /foo/",
     ) as any;
     expect(unparseAnnotationQuery(q, new Map([["score", [0, 1]]]))).toBe(
-      "<score |count score>=0.5 #status=1 -#verified /foo/",
+      "<score |count score>=0.5 status=#1 -#verified /foo/",
     );
   });
 

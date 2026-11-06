@@ -114,7 +114,7 @@ describe("serializePropertyQueryClauses", () => {
         { type: "regexp", pattern: "foo.*", closed: true },
         { type: "text", value: "text" },
       ]),
-    ).toBe("<score |length score>=0.5 -#status=done /foo.*/ text");
+    ).toBe("<score |length score>=0.5 -status=#done /foo.*/ text");
   });
 });
 

@@ -735,7 +735,7 @@ export class AnnotationLayerView extends AccordionTab {
     // Query input
     const queryInput = (this.queryInput = createPropertyListQueryInput({
       placeholder:
-        "Filter: text, /regexp/, #bool, #enum=label, prop<N, <sort, |col",
+        "Filter: text, /regexp/, #bool, prop=#option, prop<N, <sort, |col",
     }));
     const queryInputContainer = createPropertyListQueryContainer(queryInput);
     this.appendChild(queryInputContainer, FILTER_SECTION_JSON_KEY);

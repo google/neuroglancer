@@ -171,6 +171,7 @@ export function tokenizePropertyQuery(text: string): PropertyQueryToken[] {
 
 const comparisonPattern = /^([a-zA-Z][a-zA-Z0-9_]*)(<=|>=|<|>|=)(-?[0-9.].*)$/;
 const categoricalPattern = /^(-?)#([a-zA-Z][a-zA-Z0-9_]*)(?:=(.*))?$/;
+const enumPattern = /^(-?)([a-zA-Z][a-zA-Z0-9_]*)=#(.*)$/;
 
 export function parsePropertyQuerySyntax(text: string): ParsedPropertyQuery {
   const clauses: PropertyQueryClause[] = [];
@@ -214,7 +215,8 @@ export function parsePropertyQuerySyntax(text: string): ParsedPropertyQuery {
       });
       continue;
     }
-    const categoricalMatch = text.match(categoricalPattern);
+    const categoricalMatch =
+      text.match(enumPattern) ?? text.match(categoricalPattern);
     if (categoricalMatch !== null) {
       clauses.push({
         type: "categorical",
@@ -431,8 +433,10 @@ export function serializePropertyQueryClause(
     case "comparison":
       return `${clause.field}${clause.operator}${clause.value}`;
     case "categorical":
-      return `${clause.exclude ? "-" : ""}#${clause.field}${
-        clause.value === undefined ? "" : `=${clause.value}`
+      return `${clause.exclude ? "-" : ""}${
+        clause.value === undefined
+          ? `#${clause.field}`
+          : `${clause.field}=#${clause.value}`
       }`;
     case "regexp":
       return `/${clause.pattern}/`;
