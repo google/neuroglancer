@@ -69,6 +69,9 @@ export class MultiscaleMeshMetadata {
   lodScaleMultiplier: number;
   vertexQuantizationBits: number;
   sharding: ShardingParameters | undefined;
+  // Each fragment is its own file, nodes/<lod>_<x>_<y>_<z>.drc, instead of a
+  // byte range of the object's data file.
+  nodeFragments: boolean;
 }
 
 export class MultiscaleMeshSourceParameters {

@@ -48,6 +48,7 @@ import {
   trackableRenderScaleTarget,
 } from "#src/render_scale_statistics.js";
 import { getCssColor, SegmentColorHash } from "#src/segment_color.js";
+import { SegmentAttributeTables } from "#src/segmentation_display_state/attributes.js";
 import type {
   SegmentationColorGroupState,
   SegmentationDisplayState,
@@ -447,6 +448,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     );
 
     this.transparentPickEnabled = layer.pick;
+    this.segmentAttributes = layer.segmentAttributes;
 
     this.useTempSegmentStatedColors2d = layer.registerDisposer(
       SharedWatchableValue.make(layer.manager.rpc, false),
@@ -545,6 +547,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   renderScaleTarget = trackableRenderScaleTarget(1);
   selectSegment: (id: bigint, pin: boolean | "toggle") => void;
   transparentPickEnabled: TrackableBoolean;
+  segmentAttributes: SegmentAttributeTables;
   baseSegmentColoring = new TrackableBoolean(false, false);
   baseSegmentHighlighting = new TrackableBoolean(false, false);
   useTempSegmentStatedColors2d: SharedWatchableValue<boolean>;
@@ -590,6 +593,7 @@ export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   codeVisible = new TrackableBoolean(true);
   brushHashTable = new BrushHashTable();
+  segmentAttributes = new SegmentAttributeTables();
   brushStrokeLayer: BrushStrokeLayer | null = null;
 
   graphConnection = new WatchableValue<

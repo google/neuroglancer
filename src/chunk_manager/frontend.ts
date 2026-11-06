@@ -37,7 +37,7 @@ import type { Borrowed } from "#src/util/disposable.js";
 import { stableStringify } from "#src/util/json.js";
 import { StringMemoize } from "#src/util/memoize.js";
 import { getObjectId } from "#src/util/object_id.js";
-import { NullarySignal } from "#src/util/signal.js";
+import { NullarySignal, Signal } from "#src/util/signal.js";
 import type { GL } from "#src/webgl/context.js";
 import type { RPC, RPCPromise } from "#src/worker_rpc.js";
 import {
@@ -116,6 +116,12 @@ export interface FrameNumberCounter {
 @registerSharedObjectOwner(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObject {
   visibleChunksChanged = new NullarySignal();
+  chunkEvents = {
+    added: new Signal<
+      (source: ChunkSource, key: string, chunk: Chunk) => void
+    >(),
+    removed: new Signal<(source: ChunkSource, key: string) => void>(),
+  };
   pendingChunkUpdates: any = null;
   pendingChunkUpdatesTail: any = null;
 
@@ -520,11 +526,23 @@ export class ChunkSource extends SharedObject {
       chunk.freeGPUMemory(this.gl);
     }
     this.chunks.delete(key);
+    this.chunkManager.chunkQueueManager.chunkEvents.removed.dispatch(this, key);
   }
 
   addChunk(key: string, chunk: Chunk) {
     this.chunks.set(key, chunk);
     this.failedChunks.delete(key);
+    this.chunkManager.chunkQueueManager.chunkEvents.added.dispatch(
+      this,
+      key,
+      chunk,
+    );
+  }
+
+  disposed() {
+    const { removed } = this.chunkManager.chunkQueueManager.chunkEvents;
+    for (const key of this.chunks.keys()) removed.dispatch(this, key);
+    super.disposed();
   }
 
   /**

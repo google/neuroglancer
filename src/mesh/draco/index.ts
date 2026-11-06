@@ -17,6 +17,7 @@
 import type { RawPartitionedMeshData, RawMeshData } from "#src/mesh/backend.js";
 
 let decodeResult: RawPartitionedMeshData | Error | undefined = undefined;
+let featureIds: Uint32Array | undefined = undefined;
 let numPartitions = 0;
 
 let wasmModule: WebAssembly.Instance | undefined;
@@ -54,7 +55,21 @@ const libraryEnv = {
       vertexPositions,
       subChunkOffsets,
     };
+    if (featureIds !== undefined) mesh.featureIds = featureIds;
+    featureIds = undefined;
     decodeResult = mesh;
+  },
+  // Precedes the mesh when it carries a per-vertex feature id.
+  neuroglancer_draco_receive_feature_ids: (
+    numPoints: number,
+    featureIdsPointer: number,
+  ) => {
+    const memory = wasmModule!.exports.memory as WebAssembly.Memory;
+    featureIds = new Uint32Array(
+      memory.buffer,
+      featureIdsPointer,
+      numPoints,
+    ).slice();
   },
   proc_exit: (code: number) => {
     throw `proc exit: ${code}`;

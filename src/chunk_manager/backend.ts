@@ -547,6 +547,10 @@ class ChunkPriorityQueue {
     }
   }
 
+  hasVisible() {
+    return this.heapRoots[ChunkPriorityTier.VISIBLE] !== null;
+  }
+
   *candidates(): Iterator<Chunk> {
     if (this.heapOperations.compare === Chunk.priorityLess) {
       // Start with least-recently used RECENT chunk.
@@ -1127,6 +1131,14 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       sourceQueueLevel < numSourceQueueLevels;
       ++sourceQueueLevel
     ) {
+      // Mesh sources (level 1) wait until visible 2D chunks are loaded.
+      if (
+        sourceQueueLevel === 1 &&
+        (this.queuedDownloadPromotionQueue[0].hasVisible() ||
+          this.downloadEvictionQueue[0].hasVisible())
+      ) {
+        continue;
+      }
       promotionLambda(
         this.queuedDownloadPromotionQueue[sourceQueueLevel].candidates(),
         this.downloadEvictionQueue[sourceQueueLevel].candidates(),

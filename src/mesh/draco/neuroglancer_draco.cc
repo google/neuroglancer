@@ -28,6 +28,8 @@ extern void neuroglancer_draco_receive_decoded_mesh(unsigned int num_indices,
                                                     unsigned int num_positions, const void *indices,
                                                     const void *vertex_positions,
                                                     const void *subchunk_offsets);
+extern void neuroglancer_draco_receive_feature_ids(unsigned int num_points,
+                                                   const void *feature_ids);
 
 int neuroglancer_draco_decode(char *input, unsigned int input_size, bool partition,
                               int vertex_quantization_bits, bool skipDequantization) {
@@ -59,7 +61,15 @@ int neuroglancer_draco_decode(char *input, unsigned int input_size, bool partiti
       draco::MESH_CORNER_ATTRIBUTE) {
     return 11;
   }
-  if (position_att->size() != num_vertices) return 1000 + position_att->size();
+  // A one-component generic attribute is a per-vertex feature id (which
+  // instance of the layer mesh the vertex belongs to).
+  const auto *feature_att = decoded_mesh->GetNamedAttribute(draco::GeometryAttribute::GENERIC);
+  if (feature_att &&
+      (feature_att->num_components() != 1 || (feature_att->data_type() != draco::DT_UINT32 &&
+                                              feature_att->data_type() != draco::DT_INT32))) {
+    feature_att = nullptr;
+  }
+  if (!feature_att && position_att->size() != num_vertices) return 1000 + position_att->size();
 
   std::unique_ptr<std::uint32_t[], FreeDeleter> indices(
       static_cast<std::uint32_t *>(::malloc(sizeof(std::uint32_t) * 3 * num_faces)));
@@ -70,15 +80,31 @@ int neuroglancer_draco_decode(char *input, unsigned int input_size, bool partiti
     }
   }
 
-  if (!position_att->is_mapping_identity()) {
-    // Remap indices
-    for (size_t i = 0; i < num_faces * 3; ++i) {
-      indices[i] = position_att->mapped_index(draco::PointIndex(indices[i])).value();
+  const std::uint32_t *vertex_positions;
+  std::unique_ptr<std::uint32_t[], FreeDeleter> point_positions;
+  if (feature_att) {
+    // Per point rather than per position value: two features may share a
+    // position, so indices stay point indices.
+    std::unique_ptr<std::uint32_t[], FreeDeleter> feature_ids(
+        static_cast<std::uint32_t *>(::malloc(sizeof(std::uint32_t) * num_vertices)));
+    point_positions.reset(
+        static_cast<std::uint32_t *>(::malloc(sizeof(std::uint32_t) * 3 * num_vertices)));
+    for (unsigned int p = 0; p < num_vertices; ++p) {
+      feature_att->GetMappedValue(draco::PointIndex(p), &feature_ids[p]);
+      position_att->GetMappedValue(draco::PointIndex(p), &point_positions[3 * p]);
     }
+    neuroglancer_draco_receive_feature_ids(num_vertices, feature_ids.get());
+    vertex_positions = point_positions.get();
+  } else {
+    if (!position_att->is_mapping_identity()) {
+      // Remap indices
+      for (size_t i = 0; i < num_faces * 3; ++i) {
+        indices[i] = position_att->mapped_index(draco::PointIndex(indices[i])).value();
+      }
+    }
+    vertex_positions = reinterpret_cast<const std::uint32_t *>(
+        position_att->GetAddress(draco::AttributeValueIndex(0)));
   }
-
-  auto *vertex_positions = reinterpret_cast<const std::uint32_t *>(
-      position_att->GetAddress(draco::AttributeValueIndex(0)));
   if (partition) {
     const auto get_vertex_mask = [&](auto *v_pos) {
       const std::uint32_t partition_point =

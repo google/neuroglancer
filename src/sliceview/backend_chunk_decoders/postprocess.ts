@@ -25,6 +25,7 @@ import {
 import { requestAsyncComputation } from "#src/async_computation/request.js";
 import { DataType } from "#src/sliceview/base.js";
 import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import { distinctLabels } from "#src/sliceview/volume/chunk_labels.js";
 
 export async function postProcessRawData(
   chunk: VolumeChunk,
@@ -34,6 +35,8 @@ export async function postProcessRawData(
   const { spec } = chunk.source!;
   if (spec.compressedSegmentationBlockSize !== undefined) {
     const { dataType } = spec;
+    // Before the raw buffer is handed to the encoder.
+    chunk.labels = distinctLabels(data, dataType);
     const chunkDataSize = chunk.chunkDataSize!;
     const shape = [
       chunkDataSize[0],

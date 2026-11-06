@@ -31,7 +31,6 @@ import type {
   VolumeSourceOptions,
   VolumeType,
 } from "#src/sliceview/volume/base.js";
-import type { SliceViewSegmentationDisplayState } from "#src/sliceview/volume/segmentation_renderlayer.js";
 import type { Disposable } from "#src/util/disposable.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
@@ -197,12 +196,6 @@ export class VolumeChunkSource
     this.tempPositionWithinChunk = new Uint32Array(rank);
   }
 
-  groupState?: SliceViewSegmentationDisplayState;
-
-  setDisplayState(state: SliceViewSegmentationDisplayState) {
-    this.groupState = state;
-  }
-
   static encodeSpec(spec: SliceViewChunkSpecification) {
     const s = spec as VolumeChunkSpecification;
     return {
@@ -286,6 +279,8 @@ export class VolumeChunkSource
 export abstract class VolumeChunk extends SliceViewChunk {
   declare source: VolumeChunkSource;
   chunkDataSize: Uint32Array;
+  // A segmentation chunk's distinct non-zero labels, from the chunk worker.
+  labels: BigUint64Array | null;
   declare CHUNK_FORMAT_TYPE: ChunkFormat;
 
   get chunkFormat(): this["CHUNK_FORMAT_TYPE"] {
@@ -295,6 +290,7 @@ export abstract class VolumeChunk extends SliceViewChunk {
   constructor(source: VolumeChunkSource, x: any) {
     super(source, x);
     this.chunkDataSize = x.chunkDataSize || source.spec.chunkDataSize;
+    this.labels = x.labels ?? null;
   }
   abstract getValueAt(dataPosition: Uint32Array): any;
 }

@@ -35,11 +35,14 @@ export class VolumeChunk extends SliceViewChunk {
   source: VolumeChunkSource | null = null;
   data: ArrayBufferView | null;
   chunkDataSize: Uint32Array | null;
+  // A segmentation chunk's distinct non-zero labels, read off the raw data.
+  labels: BigUint64Array | null = null;
 
   initializeVolumeChunk(key: string, chunkGridPosition: vec3) {
     super.initializeVolumeChunk(key, chunkGridPosition);
     this.chunkDataSize = null;
     this.data = null;
+    this.labels = null;
   }
 
   serialize(msg: any, transfers: any[]) {
@@ -53,6 +56,12 @@ export class VolumeChunk extends SliceViewChunk {
       transfers.push(data!.buffer);
     }
     this.data = null;
+    const labels = this.labels;
+    if (labels !== null) {
+      msg.labels = labels;
+      transfers.push(labels.buffer);
+    }
+    this.labels = null;
   }
 
   downloadSucceeded() {
@@ -62,6 +71,7 @@ export class VolumeChunk extends SliceViewChunk {
 
   freeSystemMemory() {
     this.data = null;
+    this.labels = null;
   }
 }
 

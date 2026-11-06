@@ -26,6 +26,7 @@ import {
   SegmentColorShaderManager,
   SegmentStatedColorShaderManager,
 } from "#src/segment_color.js";
+import { AttributeShader } from "#src/segmentation_display_state/attributes_shader.js";
 import { getVisibleSegments } from "#src/segmentation_display_state/base.js";
 import type {
   SegmentationDisplayState,
@@ -48,11 +49,11 @@ import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   AggregateWatchableValue,
   makeCachedDerivedWatchableValue,
+  WatchableValue,
 } from "#src/trackable_value.js";
 import type { Uint64Map } from "#src/uint64_map.js";
 import type { DisjointUint64Sets } from "#src/util/disjoint_sets.js";
 import { kOneVec, vec3 } from "#src/util/geom.js";
-import * as matrix from "#src/util/matrix.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 
 // Scratch for setupSourceUniforms' per-source downsample factor.
@@ -87,6 +88,7 @@ export interface SliceViewSegmentationDisplayState
 }
 
 interface ShaderParameters {
+  hasAttributes: boolean;
   hasEquivalences: boolean;
   baseSegmentColoring: boolean;
   baseSegmentHighlighting: boolean;
@@ -124,6 +126,7 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   // shares the underlying GPU resource across consumers.
   private brushHashTableManager = new HashMapShaderManager("brushStroke");
   private gpuBrushHashTable: GPUHashTable<HashMapUint64> | undefined;
+  private attributeShader: AttributeShader | undefined;
 
   constructor(
     multiscaleSource: MultiscaleVolumeChunkSource,
@@ -131,6 +134,9 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   ) {
     super(multiscaleSource, {
       shaderParameters: new AggregateWatchableValue((refCounted) => ({
+        hasAttributes:
+          displayState.segmentAttributes?.enabled ??
+          new WatchableValue<boolean>(false),
         hasEquivalences: refCounted.registerDisposer(
           makeCachedDerivedWatchableValue(
             (x) => x.size !== 0,
@@ -209,6 +215,16 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
       GPUHashTable.get(this.gl, this.temporaryEquivalencesHashMap.hashMap),
     );
 
+    const { segmentAttributes } = displayState;
+    if (segmentAttributes !== undefined) {
+      this.attributeShader = this.registerDisposer(
+        new AttributeShader(this.gl, segmentAttributes),
+      );
+      this.registerDisposer(
+        segmentAttributes.changed.add(() => this.redrawNeeded.dispatch()),
+      );
+    }
+
     const { brushHashTable } = displayState;
     if (brushHashTable !== undefined) {
       this.gpuBrushHashTable = this.registerDisposer(
@@ -244,19 +260,6 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
         displayState.focusDim.changed.add(this.redrawNeeded.dispatch),
       );
     }
-    const sources = this.multiscaleSource.getSources({
-      multiscaleToViewTransform: matrix.createIdentity(
-        Float32Array,
-        multiscaleSource.rank,
-      ),
-      displayRank: this.multiscaleSource.rank,
-      modelChannelDimensionIndices: [],
-    });
-    for (const resolutionLevel of sources) {
-      for (const source of resolutionLevel) {
-        source.chunkSource.setDisplayState(displayState);
-      }
-    }
   }
 
   disposed() {
@@ -266,16 +269,10 @@ export class SegmentationRenderLayer extends SliceViewVolumeRenderLayer<ShaderPa
   getSources(
     options: SliceViewSourceOptions,
   ): SliceViewSingleResolutionSource<VolumeChunkSource>[][] {
-    const sources = this.multiscaleSource.getSources({
+    return this.multiscaleSource.getSources({
       ...options,
       discreteValues: true,
     });
-    for (const resolutionLevel of sources) {
-      for (const source of resolutionLevel) {
-        source.chunkSource.setDisplayState(this.displayState);
-      }
-    }
-    return sources;
   }
 
   defineShader(builder: ShaderBuilder, parameters: ShaderParameters) {
@@ -360,6 +357,9 @@ uint64_t getMappedObjectId(uint64_t value) {
 }
 `);
     }
+    if (parameters.hasAttributes) {
+      this.attributeShader?.defineShader(builder);
+    }
     builder.addUniform("highp uvec2", "uSelectedSegment");
     builder.addUniform("highp uvec2", "uFocusedSegment");
     builder.addUniform("highp float", "uFocusDim");
@@ -394,8 +394,19 @@ uint64_t getMappedObjectId(uint64_t value) {
 `;
     }
 
+    if (parameters.hasAttributes) {
+      fragmentMain += `
+  vec4 attributeColor;
+  if (!getAttributeColor(baseValue, attributeColor)) {
+    emit(vec4(0.0, 0.0, 0.0, 0.0));
+    return;
+  }
+  bool has = true;`;
+    } else {
+      fragmentMain += `
+  bool has = (uFlags & ${SHOW_ALL_SEGMENTS_FLAG}u) != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);`;
+    }
     fragmentMain += `
-  bool has = (uFlags & ${SHOW_ALL_SEGMENTS_FLAG}u) != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
   if ((uFlags & ${HAS_SELECTED_SEGMENT_FLAG}u) != 0u && uSelectedSegment == valueForHighlight.value) {
     float adjustment = has ? 0.5 : 0.75;
     if (saturation > adjustment) {
@@ -443,7 +454,7 @@ uint64_t getMappedObjectId(uint64_t value) {
     builder.addFragmentCode(getMappedIdColor);
 
     fragmentMain += `
-  vec4 rgba = getMappedIdColor(valueForColor);
+  vec4 rgba = ${parameters.hasAttributes ? "attributeColor" : "getMappedIdColor(valueForColor)"};
   if (rgba.a > 0.0) {
     alpha = rgba.a;
   }
@@ -482,7 +493,10 @@ uint64_t getMappedObjectId(uint64_t value) {
         ? segmentSelectionState.baseSelectedSegment
         : segmentSelectionState.selectedSegment;
 
-      const isVisible = visibleSegments.size === 0 || visibleSegments.has(seg);
+      const isVisible =
+        !!displayState.segmentAttributes?.enabled.value ||
+        visibleSegments.size === 0 ||
+        visibleSegments.has(seg);
 
       if (isVisible) {
         selectedSegmentLow = Number(seg & 0xffffffffn);
@@ -534,6 +548,9 @@ uint64_t getMappedObjectId(uint64_t value) {
     );
     if (this.gpuBrushHashTable !== undefined) {
       this.brushHashTableManager.enable(gl, shader, this.gpuBrushHashTable);
+    }
+    if (parameters.hasAttributes) {
+      this.attributeShader?.enable(gl, shader);
     }
     if (parameters.hasEquivalences) {
       const useTemp =
@@ -597,6 +614,9 @@ uint64_t getMappedObjectId(uint64_t value) {
   ) {
     const { gl } = this;
     this.hashTableManager.disable(gl, shader);
+    if (parameters.hasAttributes) {
+      this.attributeShader?.disable(gl, shader);
+    }
     if (parameters.hasEquivalences) {
       this.equivalencesShaderManager.disable(gl, shader);
     }

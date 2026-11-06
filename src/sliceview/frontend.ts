@@ -50,6 +50,8 @@ import {
   SegmentColorShaderManager,
   SegmentStatedColorShaderManager,
 } from "#src/segment_color.js";
+import type { SegmentAttributeTables } from "#src/segmentation_display_state/attributes.js";
+import { AttributeShader } from "#src/segmentation_display_state/attributes_shader.js";
 import type {
   SliceViewChunkSource as SliceViewChunkSourceInterface,
   SliceViewChunkSpecification,
@@ -649,7 +651,7 @@ export abstract class SliceViewChunkSource<
 
   static encodeOptions(options: SliceViewChunkSourceOptions): any {
     const encoding = ChunkSource.encodeOptions(options);
-    encoding.spec = SliceViewChunkSource.encodeSpec(options.spec);
+    encoding.spec = this.encodeSpec(options.spec);
     return encoding;
   }
 
@@ -743,10 +745,12 @@ export class SliceViewRenderHelper extends RefCounted {
       isProjection: boolean;
       hasBrush: boolean;
       brushOverlayOnly: boolean;
+      attributeShader: AttributeShader | undefined;
     },
     boolean
   >;
   private brushHashTableManager = new HashMapShaderManager("brushStroke");
+  private attributeShaders = new Map<SegmentAttributeTables, AttributeShader>();
   private segmentColorShaderManager = new SegmentColorShaderManager(
     "segmentColorHash",
   );
@@ -761,6 +765,7 @@ export class SliceViewRenderHelper extends RefCounted {
     emitter: ShaderModule,
     hasBrush: boolean,
     brushOverlayOnly: boolean,
+    attributeShader: AttributeShader | undefined,
   ) {
     builder.addVarying("vec2", "vTexCoord");
     builder.addTextureSampler("sampler2D", "uSampler", "uSamplerUnit");
@@ -775,6 +780,7 @@ export class SliceViewRenderHelper extends RefCounted {
         this.segmentColorShaderManager.defineShader(builder);
         this.segmentStatedColorShaderManager.defineShader(builder);
         builder.addUniform("highp float", "uSaturation");
+        attributeShader?.defineShader(builder);
       }
     }
     builder.require(emitter);
@@ -815,6 +821,23 @@ else {
       const missEmit = brushOverlayOnly
         ? "discard;"
         : "emit(sampledColor * uColorFactor, 0u);";
+      // Under attributes the brush takes its class color, and draws nothing
+      // where the attributes say the id doesn't draw, as in 2D.
+      const brushColor = attributeShader
+        ? `
+      vec4 attributeColor;
+      if (!getAttributeColor(brushValue, attributeColor)) {
+        ${missEmit}
+        return;
+      }
+      segmentColor = attributeColor.rgb;`
+        : `
+      vec4 rgba;
+      if (${this.segmentStatedColorShaderManager.getFunctionName}(brushValue, rgba)) {
+        segmentColor = rgba.rgb;
+      } else {
+        segmentColor = segmentColorHash(brushValue);
+      }`;
       glsl_fragmentMainEnd = `
   sampledColor = uBackgroundColor;
 }
@@ -843,13 +866,7 @@ if (voxelPos.x >= 0 && voxelPos.y >= 0 && voxelPos.z >= 0) {
   if (${this.brushHashTableManager.getFunctionName}(brushKey, brushValue)) {
     // value=0 marks "erased"
     if (brushValue.value[0] != 0u || brushValue.value[1] != 0u) {
-      vec4 rgba;
-      vec3 segmentColor;
-      if (${this.segmentStatedColorShaderManager.getFunctionName}(brushValue, rgba)) {
-        segmentColor = rgba.rgb;
-      } else {
-        segmentColor = segmentColorHash(brushValue);
-      }
+      vec3 segmentColor;${brushColor}
       vec3 baseColor = mix(vec3(1.0, 1.0, 1.0), segmentColor, uSaturation);
       emit(vec4(baseColor, 1.0), 0u);
       return;
@@ -893,8 +910,9 @@ gl_Position = uProjectionMatrix * aVertexPosition;
           isProjection,
           hasBrush,
           brushOverlayOnly,
+          attributeShader,
         }) =>
-          `${getObjectId(emitter)}${isProjection}${hasBrush}${brushOverlayOnly}`,
+          `${getObjectId(emitter)}${isProjection}${hasBrush}${brushOverlayOnly}${attributeShader !== undefined}`,
         defineShader: (builder, context, hideTransparent) => {
           this.defineShader(
             builder,
@@ -903,6 +921,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
             context.emitter,
             context.hasBrush,
             context.brushOverlayOnly,
+            context.attributeShader,
           );
         },
       },
@@ -928,11 +947,23 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     textureCoordinateAdjustment[2] = xEnd - xStart;
     textureCoordinateAdjustment[3] = yEnd - yStart;
     const hasBrush = brushStrokeLayer !== undefined;
+    const tables = brushStrokeLayer?.displayState.segmentAttributes;
+    let attributeShader: AttributeShader | undefined;
+    if (this.isProjection && tables?.enabled.value) {
+      attributeShader = this.attributeShaders.get(tables);
+      if (attributeShader === undefined) {
+        attributeShader = this.registerDisposer(
+          new AttributeShader(this.gl, tables),
+        );
+        this.attributeShaders.set(tables, attributeShader);
+      }
+    }
     const shaderResult = this.shaderGetter({
       emitter: this.emitter,
       isProjection: this.isProjection,
       hasBrush,
       brushOverlayOnly: hasBrush && brushOverlayOnly,
+      attributeShader,
     });
     const shader = shaderResult.shader;
     if (shader === null) {
@@ -964,6 +995,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     if (this.isProjection && brushStrokeLayer !== undefined) {
       this.bindBrushResources(gl, shader, brushStrokeLayer);
     }
+    attributeShader?.enable(gl, shader);
 
     const aVertexPosition = shader.attribute("aVertexPosition");
     this.copyVertexPositionsBuffer.bindToVertexAttrib(
@@ -973,6 +1005,7 @@ gl_Position = uProjectionMatrix * aVertexPosition;
 
     gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 
+    attributeShader?.disable(gl, shader);
     gl.disableVertexAttribArray(aVertexPosition);
     gl.bindTexture(gl.TEXTURE_2D, null);
   }

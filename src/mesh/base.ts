@@ -30,6 +30,12 @@ export interface EncodedMeshData {
   vertexNormals: OctahedronVertexNormals;
   indices: MeshVertexIndices;
   strips: boolean;
+  // Per vertex: which feature (instance) of the layer mesh it belongs to.
+  featureIds?: Uint32Array;
+  // The fragment's distinct feature ids, sorted, and each vertex's index into
+  // them, so picking can name a feature from a small pick-ID range.
+  features?: Uint32Array;
+  featureIndices?: Uint32Array;
 }
 
 export interface MultiscaleFragmentFormat {
