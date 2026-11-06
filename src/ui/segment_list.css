@@ -230,6 +230,14 @@
   align-self: center;
 }
 
+.neuroglancer-property-summary-reset {
+  background: transparent;
+  border: 0;
+  color: white;
+  cursor: pointer;
+  padding: 0;
+}
+
 .neuroglancer-segment-query-result-numerical-plot-bound-constraint-spacer {
   flex: 1;
   color: white;

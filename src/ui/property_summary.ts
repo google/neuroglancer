@@ -21,6 +21,7 @@
 
 import "#src/ui/segment_list.css";
 
+import svgUndo from "ikonate/icons/undo.svg?raw";
 import type { DebouncedFunc } from "lodash-es";
 import { debounce, throttle } from "lodash-es";
 import type {
@@ -53,6 +54,7 @@ import {
 } from "#src/util/si_units.js";
 import { neverSignal } from "#src/util/signal.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
+import { makeIcon } from "#src/widget/icon.js";
 import type { RangeAndWindowIntervals } from "#src/widget/invlerp.js";
 import {
   CdfController,
@@ -221,6 +223,7 @@ interface NumericalPropertySummaryWidget {
   bounds: RangeAndWindowIntervals;
   columnCheckbox: HTMLInputElement | undefined;
   sortIcon: HTMLElement;
+  resetButton: HTMLButtonElement;
   displayUnit: DisplayUnit | undefined;
   applicable: boolean;
 }
@@ -614,6 +617,19 @@ export class NumericalPropertiesSummary extends RefCounted {
       });
     }
     if (property.description) propertyLabel.title = property.description;
+    const resetButton = document.createElement("button");
+    resetButton.type = "button";
+    resetButton.classList.add("neuroglancer-property-summary-reset");
+    resetButton.title = `Reset ${property.id} filter range`;
+    resetButton.setAttribute("aria-label", resetButton.title);
+    resetButton.hidden = true;
+    resetButton.appendChild(makeIcon({ svg: svgUndo, clickable: false }));
+    resetButton.addEventListener("click", () => {
+      this.setBounds(propertyIndex, {
+        ...this.getBounds(propertyIndex),
+        range: property.bounds,
+      });
+    });
     let columnCheckbox: HTMLInputElement | undefined;
     if (this.options.showColumnToggle !== false) {
       columnCheckbox = document.createElement("input");
@@ -728,6 +744,7 @@ export class NumericalPropertiesSummary extends RefCounted {
         container.appendChild(lessEqual2);
         container.appendChild(inputs[1]);
         container.appendChild(spacers[2]);
+        spacers[2].appendChild(resetButton);
       } else {
         container.appendChild(inputs[0]);
         container.appendChild(inputs[1]);
@@ -784,6 +801,7 @@ export class NumericalPropertiesSummary extends RefCounted {
       propertyHistogram: undefined,
       columnCheckbox,
       sortIcon,
+      resetButton,
       displayUnit: undefined,
       applicable: true,
     };
@@ -800,6 +818,10 @@ export class NumericalPropertiesSummary extends RefCounted {
     const prevConstraintBounds = summary.bounds.range;
     const constraintBounds = this.bounds.range.value[propertyIndex]!;
     const { property } = summary;
+    summary.resetButton.hidden = dataTypeIntervalEqual(
+      property.bounds,
+      constraintBounds,
+    );
     const nextDisplayUnit =
       property.baseUnit === undefined
         ? undefined
