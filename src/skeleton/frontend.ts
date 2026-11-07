@@ -45,7 +45,7 @@ import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { TrackableValue, WatchableValue } from "#src/trackable_value.js";
 import { DataType } from "#src/util/data_type.js";
 import { RefCounted } from "#src/util/disposable.js";
-import type { vec3 } from "#src/util/geom.js";
+import type { vec4 } from "#src/util/geom.js";
 import { mat4 } from "#src/util/geom.js";
 import { verifyFinitePositiveFloat } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
@@ -127,9 +127,15 @@ class RenderHelper extends RefCounted {
 
   defineCommonShader(builder: ShaderBuilder) {
     defineVertexId(builder);
+    // Skeleton shaders use straight-alpha colors until the final emission.
     builder.addUniform("highp vec4", "uColor");
     builder.addUniform("highp mat4", "uProjection");
     builder.addUniform("highp uint", "uPickID");
+    builder.addFragmentCode(`
+vec4 premultiplyAlpha(vec4 color) {
+  return ${this.targetIsSliceView ? "color" : "vec4(color.rgb * color.a, color.a)"};
+}
+`);
   }
 
   edgeShaderGetter;
@@ -183,15 +189,14 @@ vec4 segmentColor() {
   return uColor;
 }
 void emitRGBA(vec4 color) {
-  color.a *= uColor.a;
-  color.rgb *= ${this.getPremultiplyAlphaFactor()};
-  emit(vec4(color.rgb, color.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
+  color.a *= uColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()};
+  emit(premultiplyAlpha(color), uPickID);
 }
 void emitRGB(vec3 color) {
-  emit(vec4(color * uColor.a, uColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
+  emitRGBA(vec4(color, 1.0));
 }
 void emitDefault() {
-  emit(vec4(uColor.rgb, uColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()}), uPickID);
+  emitRGB(uColor.rgb);
 }
 `);
           builder.addFragmentCode(glsl_COLORMAPS);
@@ -255,17 +260,15 @@ vec4 segmentColor() {
 }
 void emitRGBA(vec4 color) {
   color.a *= uColor.a;
-  color.rgb *= ${this.getPremultiplyAlphaFactor()};
   vec4 borderColor = color;
   vec4 circleColor = getCircleColor(color, borderColor);
-  emit(circleColor, uPickID);
+  emit(premultiplyAlpha(circleColor), uPickID);
 }
 void emitRGB(vec3 color) {
   emitRGBA(vec4(color, 1.0));
 }
 void emitDefault() {
-  vec4 circleColor = getCircleColor(uColor, uColor);
-  emit(circleColor, uPickID);
+  emitRGB(uColor.rgb);
 }
 `);
           builder.addFragmentCode(glsl_COLORMAPS);
@@ -319,10 +322,6 @@ void emitDefault() {
     });
   }
 
-  getPremultiplyAlphaFactor() {
-    return this.targetIsSliceView ? "1.0" : "color.a";
-  }
-
   getCrossSectionFadeFactor() {
     if (this.targetIsSliceView) {
       return "(clamp(1.0 - 2.0 * abs(0.5 - gl_FragCoord.z), 0.0, 1.0))";
@@ -342,8 +341,17 @@ void emitDefault() {
     this.vertexIdHelper.enable();
   }
 
-  setColor(gl: GL, shader: ShaderProgram, color: vec3) {
-    gl.uniform4fv(shader.uniform("uColor"), color);
+  setColor(gl: GL, shader: ShaderProgram, color: vec4) {
+    // The shared segmentation color is already premultiplied by layer alpha.
+    const alpha = color[3];
+    const scale = alpha > 0 ? 1 / alpha : 0;
+    gl.uniform4f(
+      shader.uniform("uColor"),
+      color[0] * scale,
+      color[1] * scale,
+      color[2] * scale,
+      alpha,
+    );
   }
 
   setPickID(gl: GL, shader: ShaderProgram, pickID: number) {
@@ -641,9 +649,9 @@ export class SkeletonLayer extends RefCounted {
         }
         if (color !== undefined) {
           edgeShader.bind();
-          renderHelper.setColor(gl, edgeShader, <vec3>(<Float32Array>color));
+          renderHelper.setColor(gl, edgeShader, color);
           nodeShader.bind();
-          renderHelper.setColor(gl, nodeShader, <vec3>(<Float32Array>color));
+          renderHelper.setColor(gl, nodeShader, color);
         }
         if (pickIndex !== undefined) {
           edgeShader.bind();
