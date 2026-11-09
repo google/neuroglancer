@@ -1,4 +1,4 @@
-"""Writes `regular_bounded_0.5`: the `simple_0.5` image grown in front by 3 rows and 2 columns.
+"""Writes `bounds_0.5`: the `simple_0.5` image grown in front by 3 rows and 2 columns.
 
 Requires a zarr-python with `Array.prepend` (zarr-developers/zarr-python#4516). Both levels are
 grown with `prepend`, and each level's `translation` moves to its new first element, as OME-NGFF
@@ -12,7 +12,7 @@ import shutil
 import numpy as np
 import zarr
 
-root = pathlib.Path(__file__).parent / "regular_bounded_0.5"
+root = pathlib.Path(__file__).parent / "bounds_0.5"
 shutil.rmtree(root, ignore_errors=True)
 root.mkdir()
 

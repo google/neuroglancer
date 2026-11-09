@@ -64,7 +64,7 @@ export function parseChunkShape(obj: unknown, rank: number): number[] {
 
 enum ChunkGrid {
   REGULAR = 0,
-  REGULAR_BOUNDED = 1,
+  OFFSET = 1,
 }
 
 function verifyInteger(value: unknown): number {
@@ -74,6 +74,59 @@ function verifyInteger(value: unknown): number {
     );
   }
   return value as number;
+}
+
+function parseBounds(obj: unknown): { shape: number[]; lowerBound: number[] } {
+  verifyObject(obj);
+  const lowerBound = verifyObjectProperty(obj, "inclusive_min", (x) =>
+    parseArray(x, verifyInteger),
+  );
+  const upperBound = verifyObjectProperty(obj, "exclusive_max", (x) =>
+    parseFixedLengthArray(
+      new Array<number>(lowerBound.length),
+      x,
+      verifyInteger,
+    ),
+  );
+  const shape = upperBound.map((upper, i) => {
+    const lower = lowerBound[i];
+    if (lower > upper) {
+      throw new Error(
+        `Expected inclusive_min <= exclusive_max, but received: ${lower} > ${upper}.`,
+      );
+    }
+    return upper - lower;
+  });
+  return { shape, lowerBound };
+}
+
+function parseShapeOrBounds(obj: any): {
+  shape: number[];
+  lowerBound: number[];
+} {
+  const hasShape = Object.hasOwn(obj, "shape");
+  const hasBounds = Object.hasOwn(obj, "bounds");
+  if (hasShape === hasBounds) {
+    throw new Error(
+      `Expected exactly one of "shape" and "bounds", but received ${
+        hasShape ? "both" : "neither"
+      }.`,
+    );
+  }
+  if (hasBounds) {
+    return verifyObjectProperty(obj, "bounds", parseBounds);
+  }
+  const shape = verifyObjectProperty(obj, "shape", parseShape);
+  return { shape, lowerBound: new Array<number>(shape.length).fill(0) };
+}
+
+function parseRegularChunkGridConfiguration(
+  configuration: unknown,
+  rank: number,
+): number[] {
+  return verifyObjectProperty(configuration, "chunk_shape", (chunks) =>
+    parseChunkShape(chunks, rank),
+  );
 }
 
 export function parseDimensionSeparator(value: unknown): "/" | "." {
@@ -225,7 +278,7 @@ export function parseV3Metadata(
       };
     }
 
-    const shape = verifyObjectProperty(obj, "shape", parseShape);
+    const { shape, lowerBound } = parseShapeOrBounds(obj);
     const rank = shape.length;
 
     const dimensionNames = verifyObjectProperty(
@@ -240,35 +293,42 @@ export function parseV3Metadata(
     );
 
     const {
-      configuration: { chunkShape, chunkGridOrigin, lowerBound },
+      configuration: { chunkShape, chunkGridOrigin },
     } = verifyObjectProperty(obj, "chunk_grid", (chunkGrid) =>
       parseNameAndConfiguration(
         chunkGrid,
-        (name) =>
-          verifyEnumString(name, ChunkGrid, /^(regular|regular_bounded)$/),
+        (name) => verifyEnumString(name, ChunkGrid, /^(regular|offset)$/),
         (configuration, name) => {
-          const chunkShape = verifyObjectProperty(
-            configuration,
-            "chunk_shape",
-            (chunks) => parseChunkShape(chunks, rank),
-          );
           if (name === ChunkGrid.REGULAR) {
-            const zeros = new Array<number>(rank).fill(0);
-            return { chunkShape, chunkGridOrigin: zeros, lowerBound: zeros };
+            return {
+              chunkShape: parseRegularChunkGridConfiguration(
+                configuration,
+                rank,
+              ),
+              chunkGridOrigin: new Array<number>(rank).fill(0),
+            };
           }
-          const parseCoordinates = (x: unknown) =>
-            parseFixedLengthArray(new Array<number>(rank), x, verifyInteger);
           return {
-            chunkShape,
+            chunkShape: verifyObjectProperty(
+              configuration,
+              "base_chunk_grid",
+              (base) =>
+                parseNameAndConfiguration(
+                  base,
+                  (baseName) => verifyConstant(baseName, "regular"),
+                  (baseConfiguration) =>
+                    parseRegularChunkGridConfiguration(baseConfiguration, rank),
+                ).configuration,
+            ),
             chunkGridOrigin: verifyObjectProperty(
               configuration,
-              "origin",
-              parseCoordinates,
-            ),
-            lowerBound: verifyObjectProperty(
-              configuration,
-              "lower_bound",
-              parseCoordinates,
+              "offset",
+              (x) =>
+                parseFixedLengthArray(
+                  new Array<number>(rank),
+                  x,
+                  verifyInteger,
+                ),
             ),
           };
         },

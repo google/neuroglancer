@@ -1,5 +1,5 @@
 {
-  "canonicalUrl": "http://localhost:*/datasource/zarr/zarr_v3/examples/regular_bounded/|zarr3:",
+  "canonicalUrl": "http://localhost:*/datasource/zarr/zarr_v3/examples/bounds/|zarr3:",
   "modelTransform": {
     "inputSpace": {
       "bounds": {
@@ -48,7 +48,7 @@
               {
                 "chunkSource": {
                   "parameters": {
-                    "url": "http://localhost:*/datasource/zarr/zarr_v3/examples/regular_bounded/",
+                    "url": "http://localhost:*/datasource/zarr/zarr_v3/examples/bounds/",
                   },
                   "spec": {
                     "baseVoxelOffset": [

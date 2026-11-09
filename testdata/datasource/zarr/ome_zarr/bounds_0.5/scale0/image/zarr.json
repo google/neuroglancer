@@ -1,23 +1,11 @@
 {
-  "shape": [
-    9,
-    9
-  ],
   "data_type": "uint16",
   "chunk_grid": {
-    "name": "regular_bounded",
+    "name": "regular",
     "configuration": {
       "chunk_shape": [
-        4,
+        5,
         5
-      ],
-      "origin": [
-        0,
-        0
-      ],
-      "lower_bound": [
-        -3,
-        -2
       ]
     }
   },
@@ -37,7 +25,21 @@
     }
   ],
   "attributes": {},
+  "dimension_names": [
+    "y",
+    "x"
+  ],
   "zarr_format": 3,
   "node_type": "array",
-  "storage_transformers": []
+  "storage_transformers": [],
+  "bounds": {
+    "inclusive_min": [
+      -3,
+      -2
+    ],
+    "exclusive_max": [
+      10,
+      10
+    ]
+  }
 }

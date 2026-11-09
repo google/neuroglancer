@@ -1,5 +1,5 @@
 {
-  "canonicalUrl": "http://localhost:*/datasource/zarr/zarr_v3/examples/regular_bounded_origin/|zarr3:",
+  "canonicalUrl": "http://localhost:*/datasource/zarr/zarr_v3/examples/offset_grid_transpose/|zarr3:",
   "modelTransform": {
     "inputSpace": {
       "bounds": {
@@ -48,7 +48,7 @@
               {
                 "chunkSource": {
                   "parameters": {
-                    "url": "http://localhost:*/datasource/zarr/zarr_v3/examples/regular_bounded_origin/",
+                    "url": "http://localhost:*/datasource/zarr/zarr_v3/examples/offset_grid_transpose/",
                   },
                   "spec": {
                     "baseVoxelOffset": [
@@ -56,30 +56,30 @@
                       0,
                     ],
                     "chunkDataSize": [
-                      3,
                       2,
+                      3,
                     ],
                     "compressedSegmentationBlockSize": undefined,
                     "dataType": "UINT16",
                     "lowerVoxelBound": [
-                      1,
                       -2,
+                      1,
                     ],
                     "upperVoxelBound": [
-                      5,
                       1,
+                      5,
                     ],
                   },
                 },
                 "chunkToMultiscaleTransform": [
                   [
-                    0,
                     1,
+                    0,
                     1,
                   ],
                   [
-                    1,
                     0,
+                    1,
                     -1,
                   ],
                   [

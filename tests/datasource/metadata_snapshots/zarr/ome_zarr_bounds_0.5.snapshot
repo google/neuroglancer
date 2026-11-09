@@ -1,5 +1,5 @@
 {
-  "canonicalUrl": "http://localhost:*/datasource/zarr/ome_zarr/regular_bounded_0.5/|zarr3:",
+  "canonicalUrl": "http://localhost:*/datasource/zarr/ome_zarr/bounds_0.5/|zarr3:",
   "modelTransform": {
     "inputSpace": {
       "bounds": {
@@ -48,7 +48,7 @@
               {
                 "chunkSource": {
                   "parameters": {
-                    "url": "http://localhost:*/datasource/zarr/ome_zarr/regular_bounded_0.5/scale0/image/",
+                    "url": "http://localhost:*/datasource/zarr/ome_zarr/bounds_0.5/scale0/image/",
                   },
                   "spec": {
                     "baseVoxelOffset": [
@@ -92,7 +92,7 @@
               {
                 "chunkSource": {
                   "parameters": {
-                    "url": "http://localhost:*/datasource/zarr/ome_zarr/regular_bounded_0.5/scale1/image/",
+                    "url": "http://localhost:*/datasource/zarr/ome_zarr/bounds_0.5/scale1/image/",
                   },
                   "spec": {
                     "baseVoxelOffset": [
