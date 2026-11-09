@@ -132,6 +132,10 @@ class RenderHelper extends RefCounted {
     builder.addUniform("highp mat4", "uProjection");
     builder.addUniform("highp uint", "uPickID");
     builder.addFragmentCode(`
+// Layer opacity is applied by emitRGBA.
+vec4 segmentColor() {
+  return vec4(uColor.rgb, 1.0);
+}
 vec4 premultiplyAlpha(vec4 color) {
   return ${this.targetIsSliceView ? "color" : "vec4(color.rgb * color.a, color.a)"};
 }
@@ -185,9 +189,6 @@ highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexInde
 `;
 
           builder.addFragmentCode(`
-vec4 segmentColor() {
-  return uColor;
-}
 void emitRGBA(vec4 color) {
   color.a *= uColor.a * getLineAlpha() * ${this.getCrossSectionFadeFactor()};
   emit(premultiplyAlpha(color), uPickID);
@@ -255,9 +256,6 @@ emitCircle(uProjection * vec4(vertexPosition, 1.0), uNodeDiameter, 0.0);
 `;
 
           builder.addFragmentCode(`
-vec4 segmentColor() {
-  return uColor;
-}
 void emitRGBA(vec4 color) {
   color.a *= uColor.a;
   vec4 borderColor = color;

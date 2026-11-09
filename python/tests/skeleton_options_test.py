@@ -90,7 +90,14 @@ void main () {
 @pytest.mark.parametrize("primitive", ["edge", "node"])
 @pytest.mark.parametrize(
     "shader_output,shader_alpha",
-    [("rgba", 1), ("rgba", 0.5), ("rgb", 1), ("default", 1), ("segment-rgb", 1)],
+    [
+        ("rgba", 1),
+        ("rgba", 0.5),
+        ("rgb", 1),
+        ("default", 1),
+        ("segment-rgb", 1),
+        ("segment-rgba", 1),
+    ],
 )
 @pytest.mark.parametrize("layer_alpha", [1, 0.5])
 def test_skeleton_opacity(
@@ -139,13 +146,15 @@ void main() {{
             rendering.shader = "void main() { emitRGB(vec3(1.0, 0.5, 0.25)); }"
         elif shader_output == "default":
             rendering.shader = "void main() { emitDefault(); }"
-        else:
+        elif shader_output == "segment-rgb":
             rendering.shader = "void main() { emitRGB(segmentColor().rgb); }"
+        else:
+            rendering.shader = "void main() { emitRGBA(segmentColor()); }"
 
     pixels = webdriver.viewer.screenshot(size=[32, 32]).screenshot.image_pixels
     color = (
         np.array([255, 128, 64])
-        if shader_output in ("default", "segment-rgb")
+        if shader_output in ("default", "segment-rgb", "segment-rgba")
         else np.array([255, 127.5, 63.75])
     )
     expected_rgb = color * shader_alpha * layer_alpha
