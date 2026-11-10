@@ -83,7 +83,11 @@ const spec = {
   fillValue: EMPTY_VOXEL_VALUE,
 };
 
-const mockChunkQueueManager = { sources: new Set() };
+const mockChunkQueueManager = {
+  sources: new Set(),
+  invalidateCachedChunks: () => {},
+  scheduleUpdate: () => {},
+};
 const mockChunkManager = {
   queueManager: mockChunkQueueManager,
   memoize: { get: (_k: string, f: Function) => f() },
