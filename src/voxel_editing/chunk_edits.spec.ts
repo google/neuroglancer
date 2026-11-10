@@ -1,0 +1,427 @@
+/**
+ * @license
+ * Copyright 2025 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import type { Mock } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  ChunkDownloadStatistics,
+  ChunkState,
+  getChunkDownloadStatisticIndex,
+} from "#src/chunk_manager/base.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
+import { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
+import { DataType } from "#src/util/data_type.js";
+import { HttpError } from "#src/util/http_request.js";
+import { applyChunkEdits } from "#src/voxel_editing/chunk_edits.js";
+import type { RPC } from "#src/worker_rpc.js";
+
+vi.mock("#src/sliceview/compressed_segmentation/decode_uint64.js", () => ({
+  decodeChannel: vi.fn((out) => out.fill(5n)),
+}));
+vi.mock("#src/sliceview/compressed_segmentation/decode_uint32.js", () => ({
+  decodeChannel: vi.fn((out) => out.fill(5)),
+}));
+
+vi.mock("#src/sliceview/volume/registry.js", () => ({
+  getChunkFormatHandler: vi.fn().mockReturnValue({
+    chunkFormat: { dataType: 0 },
+    dispose: vi.fn(),
+    getChunk: (source: any, x: any) => new source.chunkConstructor(source, x),
+  }),
+}));
+
+class MockBackendSource extends VolumeChunkSource {
+  public serverStorage = new Map<string, ArrayBuffer>();
+
+  async download(chunk: VolumeChunk) {
+    const key = chunk.chunkGridPosition.join(",");
+    if (this.serverStorage.has(key)) {
+      chunk.data = new Uint8Array(this.serverStorage.get(key)!.slice(0));
+    }
+  }
+
+  async writeChunk(
+    chunkGridPosition: Float32Array,
+    _chunkDataSize: Uint32Array,
+    data: ArrayBufferView,
+  ) {
+    const key = chunkGridPosition.join(",");
+    this.serverStorage.set(
+      key,
+      data.buffer.slice(
+        data.byteOffset,
+        data.byteOffset + data.byteLength,
+      ) as ArrayBuffer,
+    );
+  }
+}
+
+describe("applyChunkEdits", () => {
+  let mockRpc: RPC;
+  let mockQueueManager: {
+    invalidateCachedChunks: Mock;
+    [key: string]: unknown;
+  };
+  let source: MockBackendSource;
+
+  const BASE_SPEC = {
+    rank: 3,
+    dataType: DataType.UINT64,
+    chunkDataSize: Uint32Array.from([2, 2, 2]),
+    upperVoxelBound: Float32Array.from([10, 10, 10]),
+    baseVoxelOffset: Float32Array.from([0, 0, 0]),
+    compressedSegmentationBlockSize: undefined,
+  };
+
+  beforeEach(() => {
+    mockQueueManager = {
+      sources: new Set(),
+      adjustCapacitiesForChunk: vi.fn(),
+      updateChunkState: vi.fn(),
+      scheduleUpdate: vi.fn(),
+      invalidateCachedChunks: vi.fn(),
+      moveChunkToFrontend: vi.fn(),
+      markRecentlyUsed: vi.fn(),
+      gl: {},
+    };
+
+    const mockChunkManager = {
+      queueManager: mockQueueManager,
+      chunkQueueManager: mockQueueManager,
+      rpc: null,
+      memoize: { get: (_k: string, fn: Function) => fn() },
+    };
+
+    mockRpc = {
+      newId: () => 0,
+      set: vi.fn(),
+      get: vi.fn().mockReturnValue(mockChunkManager),
+      invoke: vi.fn(),
+      promiseInvoke: vi.fn(),
+    } as unknown as RPC;
+
+    source = new MockBackendSource(mockRpc, {
+      spec: { ...BASE_SPEC },
+      chunkManager: 0,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe("Input Validation", () => {
+    it("should throw if the source cannot write", async () => {
+      class ReadOnlySource extends VolumeChunkSource {
+        async download() {}
+      }
+      const readOnly = new ReadOnlySource(mockRpc, {
+        spec: { ...BASE_SPEC },
+        chunkManager: 0,
+      });
+      await expect(
+        applyChunkEdits(readOnly, "0,0,0", [0], [1n]),
+      ).rejects.toThrow(/does not support writing/);
+    });
+
+    it("should throw if indices and values lengths mismatch", async () => {
+      await expect(
+        applyChunkEdits(source, "0,0,0", [1], [1n, 2n]),
+      ).rejects.toThrow(/length mismatch/);
+    });
+
+    it("should throw for invalid chunk keys (wrong rank)", async () => {
+      await expect(applyChunkEdits(source, "0,0", [0], [1n])).rejects.toThrow(
+        /invalid chunk key/,
+      );
+    });
+
+    it("should throw for invalid chunk keys (NaN)", async () => {
+      await expect(
+        applyChunkEdits(source, "0,NaN,0", [0], [1n]),
+      ).rejects.toThrow(/invalid chunk key/);
+    });
+  });
+
+  describe("Uncompressed Data (UINT64)", () => {
+    it("should initialize data if missing", async () => {
+      const writeSpy = vi.spyOn(source, "writeChunk");
+      const result = await applyChunkEdits(source, "0,0,0", [0], [100n]);
+
+      expect(writeSpy).toHaveBeenCalled();
+      const written = writeSpy.mock.calls[0][2] as BigUint64Array;
+      expect(written).toBeInstanceOf(BigUint64Array);
+      expect(written[0]).toBe(100n);
+      expect(result.newValues[0]).toBe(100n);
+    });
+
+    it("should update existing data", async () => {
+      const chunk = source.getChunk(new Float32Array([0, 0, 0])) as VolumeChunk;
+      chunk.data = new BigUint64Array(8);
+      chunk.state = ChunkState.SYSTEM_MEMORY;
+      (chunk.data as BigUint64Array)[0] = 50n;
+
+      const result = await applyChunkEdits(source, "0,0,0", [0], [100n]);
+
+      expect(result.oldValues[0]).toBe(50n);
+      expect(result.newValues[0]).toBe(100n);
+    });
+
+    it("should throw on out-of-bounds index", async () => {
+      await expect(applyChunkEdits(source, "0,0,0", [9], [1n])).rejects.toThrow(
+        /index 9 out of bounds/,
+      );
+    });
+  });
+
+  describe("Uncompressed Data (UINT32)", () => {
+    it("should handle edits correctly", async () => {
+      const uint32Spec = { ...BASE_SPEC, dataType: DataType.UINT32 };
+      const uint32Source = new MockBackendSource(mockRpc, {
+        spec: uint32Spec,
+        chunkManager: 0,
+      });
+
+      const writeSpy = vi.spyOn(uint32Source, "writeChunk");
+      const result = await applyChunkEdits(uint32Source, "0,0,0", [0], [123]);
+
+      const written = writeSpy.mock.calls[0][2] as Uint32Array;
+      expect(written).toBeInstanceOf(Uint32Array);
+      expect(written[0]).toBe(123);
+      expect(result.newValues[0]).toBe(123);
+    });
+  });
+
+  describe("Compressed Segmentation", () => {
+    it("should handle UINT64 compressed segmentation", async () => {
+      const compressedSpec = {
+        ...BASE_SPEC,
+        compressedSegmentationBlockSize: Uint32Array.from([2, 2, 1]),
+      };
+      const compressedSource = new MockBackendSource(mockRpc, {
+        spec: compressedSpec,
+        chunkManager: 0,
+      });
+
+      const chunk = compressedSource.getChunk(
+        new Float32Array([0, 0, 0]),
+      ) as VolumeChunk;
+      chunk.data = new Uint32Array([123]);
+      chunk.state = ChunkState.SYSTEM_MEMORY_WORKER;
+
+      const writeSpy = vi.spyOn(compressedSource, "writeChunk");
+      const result = await applyChunkEdits(
+        compressedSource,
+        "0,0,0",
+        [0],
+        [99n],
+      );
+
+      expect(result.oldValues[0]).toBe(5n);
+      // Written as raw values: the decoded voxels with the edit applied.
+      const written = writeSpy.mock.calls[0][2] as BigUint64Array;
+      expect(written).toBeInstanceOf(BigUint64Array);
+      expect(written[0]).toBe(99n);
+      expect(written[1]).toBe(5n);
+      // The shared cache entry is invalidated, never mutated in place.
+      expect((chunk.data as Uint32Array)[0]).toBe(123);
+    });
+
+    it("should handle UINT32 compressed segmentation", async () => {
+      const compressedSpec = {
+        ...BASE_SPEC,
+        dataType: DataType.UINT32,
+        compressedSegmentationBlockSize: Uint32Array.from([2, 2, 1]),
+      };
+      const compressedSource = new MockBackendSource(mockRpc, {
+        spec: compressedSpec,
+        chunkManager: 0,
+      });
+
+      const chunk = compressedSource.getChunk(
+        new Float32Array([0, 0, 0]),
+      ) as VolumeChunk;
+      chunk.data = new Uint32Array([123]);
+      chunk.state = ChunkState.SYSTEM_MEMORY_WORKER;
+
+      const writeSpy = vi.spyOn(compressedSource, "writeChunk");
+      const result = await applyChunkEdits(
+        compressedSource,
+        "0,0,0",
+        [0],
+        [77],
+      );
+
+      expect(result.oldValues[0]).toBe(5);
+      expect(result.newValues[0]).toBe(77);
+      const written = writeSpy.mock.calls[0][2] as Uint32Array;
+      expect(written).toBeInstanceOf(Uint32Array);
+      expect(written[0]).toBe(77);
+      expect(written[1]).toBe(5);
+    });
+
+    it("should handle zero-offset compressed data (empty/new)", async () => {
+      const compressedSpec = {
+        ...BASE_SPEC,
+        compressedSegmentationBlockSize: Uint32Array.from([2, 2, 1]),
+      };
+      const compressedSource = new MockBackendSource(mockRpc, {
+        spec: compressedSpec,
+        chunkManager: 0,
+      });
+
+      const chunk = compressedSource.getChunk(
+        new Float32Array([0, 0, 0]),
+      ) as VolumeChunk;
+      chunk.data = new Uint32Array([]);
+      chunk.state = ChunkState.SYSTEM_MEMORY_WORKER;
+
+      const writeSpy = vi.spyOn(compressedSource, "writeChunk");
+      await applyChunkEdits(compressedSource, "0,0,0", [0], [50n]);
+      const written = writeSpy.mock.calls[0][2] as BigUint64Array;
+      expect(Array.from(written)).toEqual([50n, 0n, 0n, 0n, 0n, 0n, 0n, 0n]);
+    });
+
+    it("should handle zero-offset compressed data for UINT32", async () => {
+      const compressedSpec = {
+        ...BASE_SPEC,
+        dataType: DataType.UINT32,
+        compressedSegmentationBlockSize: Uint32Array.from([2, 2, 1]),
+      };
+      const compressedSource = new MockBackendSource(mockRpc, {
+        spec: compressedSpec,
+        chunkManager: 0,
+      });
+
+      const chunk = compressedSource.getChunk(
+        new Float32Array([0, 0, 0]),
+      ) as VolumeChunk;
+      chunk.data = new Uint32Array([]);
+      chunk.state = ChunkState.SYSTEM_MEMORY_WORKER;
+
+      const writeSpy = vi.spyOn(compressedSource, "writeChunk");
+      await applyChunkEdits(compressedSource, "0,0,0", [0], [50]);
+      const written = writeSpy.mock.calls[0][2] as Uint32Array;
+      expect(Array.from(written)).toEqual([50, 0, 0, 0, 0, 0, 0, 0]);
+    });
+  });
+
+  describe("Error Handling & Bounds", () => {
+    it("should throw if chunk size cannot be determined", async () => {
+      const computeSpy = vi
+        .spyOn(source, "computeChunkBounds")
+        .mockImplementation(() => new Float32Array());
+
+      const chunk = source.getChunk(new Float32Array([0, 0, 0])) as VolumeChunk;
+      chunk.chunkDataSize = null;
+
+      await expect(applyChunkEdits(source, "0,0,0", [0], [1n])).rejects.toThrow(
+        /size is unknown/,
+      );
+
+      computeSpy.mockRestore();
+    });
+
+    it("should write once and surface the failure", async () => {
+      const failure = new HttpError("", 503, "");
+      const writeSpy = vi
+        .spyOn(source, "writeChunk")
+        .mockRejectedValue(failure);
+
+      await expect(applyChunkEdits(source, "0,0,0", [0], [1n])).rejects.toBe(
+        failure,
+      );
+
+      expect(writeSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("Unreadable stored chunk", () => {
+    let uint8Source: MockBackendSource;
+
+    beforeEach(() => {
+      uint8Source = new MockBackendSource(mockRpc, {
+        spec: { ...BASE_SPEC, dataType: DataType.UINT8 },
+        chunkManager: 0,
+      });
+    });
+
+    it("treats a corrupt (undecodable) chunk as empty and repairs it on write", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      vi.spyOn(uint8Source, "download").mockRejectedValue(
+        new Error("Raw-format chunk is 0 bytes, but 8 * 1 = 8 bytes expected."),
+      );
+      const writeSpy = vi.spyOn(uint8Source, "writeChunk");
+
+      const change = await applyChunkEdits(uint8Source, "0,0,0", [3], [7n]);
+
+      expect(writeSpy).toHaveBeenCalled();
+      const written = new Uint8Array(uint8Source.serverStorage.get("0,0,0")!);
+      expect(Array.from(written)).toEqual([0, 0, 0, 7, 0, 0, 0, 0]);
+      expect(Number((change.oldValues as any)[0])).toBe(0);
+      expect(warnSpy).toHaveBeenCalled();
+    });
+
+    it("propagates transient (network) failures without writing", async () => {
+      vi.spyOn(uint8Source, "download").mockRejectedValue(
+        new HttpError("http://store/chunk", 503, "Service Unavailable"),
+      );
+      const writeSpy = vi.spyOn(uint8Source, "writeChunk");
+
+      await expect(
+        applyChunkEdits(uint8Source, "0,0,0", [3], [7n]),
+      ).rejects.toThrow("HTTP error 503");
+      expect(writeSpy).not.toHaveBeenCalled();
+    });
+
+    it("fails closed on unrecognized read errors instead of repairing", async () => {
+      vi.spyOn(uint8Source, "download").mockRejectedValue(
+        new Error("some wrapped kvstore failure"),
+      );
+      const writeSpy = vi.spyOn(uint8Source, "writeChunk");
+
+      await expect(
+        applyChunkEdits(uint8Source, "0,0,0", [3], [7n]),
+      ).rejects.toThrow("some wrapped kvstore failure");
+      expect(writeSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  it("records download statistics for chunks it downloads", async () => {
+    const totalChunks = getChunkDownloadStatisticIndex(
+      ChunkDownloadStatistics.totalChunks,
+    );
+
+    await applyChunkEdits(source, "0,0,0", [0], [1n]);
+    expect(source.statistics[totalChunks]).toBe(1);
+
+    // Resident data is copied, not downloaded.
+    const chunk = source.getChunk(new Float32Array([1, 0, 0])) as VolumeChunk;
+    chunk.data = new BigUint64Array(8);
+    chunk.state = ChunkState.SYSTEM_MEMORY_WORKER;
+    await applyChunkEdits(source, "1,0,0", [0], [1n]);
+    expect(source.statistics[totalChunks]).toBe(1);
+  });
+
+  it("invalidates the shared backend cache entry after a successful write", async () => {
+    await applyChunkEdits(source, "0,0,0", [3], [7n]);
+
+    expect(mockQueueManager.invalidateCachedChunks).toHaveBeenCalledWith(
+      source,
+      ["0,0,0"],
+    );
+  });
+});

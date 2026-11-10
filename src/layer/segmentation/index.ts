@@ -35,12 +35,15 @@ import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { layerDataSourceSpecificationFromJson } from "#src/layer/layer_data_source.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
 import { registerLayerControls } from "#src/layer/segmentation/layer_controls.js";
+import { registerVoxelEditingLayerControls } from "#src/layer/voxel_editing/controls.js";
+import { UserLayerWithVoxelEditingMixin } from "#src/layer/voxel_editing/index.js";
 import {
   MeshLayer,
   MeshSource,
   MultiscaleMeshLayer,
   MultiscaleMeshSource,
 } from "#src/mesh/frontend.js";
+import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import {
   RenderScaleHistogram,
   trackableRenderScaleTarget,
@@ -92,6 +95,7 @@ import type {
   WatchableValueInterface,
 } from "#src/trackable_value.js";
 import {
+  registerNested,
   IndirectTrackableValue,
   IndirectWatchableValue,
   makeCachedDerivedWatchableValue,
@@ -106,6 +110,7 @@ import { SegmentDisplayTab } from "#src/ui/segment_list.js";
 import { registerSegmentSelectTools } from "#src/ui/segment_select_tools.js";
 import { registerSegmentSplitMergeTools } from "#src/ui/segment_split_merge_tools.js";
 import { DisplayOptionsTab } from "#src/ui/segmentation_display_options_tab.js";
+import { registerVoxelEditingTools } from "#src/ui/voxel_editing.js";
 import { Uint64Map } from "#src/uint64_map.js";
 import { Uint64OrderedSet } from "#src/uint64_ordered_set.js";
 import { Uint64Set } from "#src/uint64_set.js";
@@ -129,6 +134,12 @@ import {
   verifyString,
 } from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
+import {
+  SEGMENTATION_ERASE_SENTINEL,
+  EMPTY_VOXEL_VALUE,
+  type PaintValueGetter,
+} from "#src/voxel_editing/base.js";
+import { VoxelEditingPreviewRenderLayerMixin } from "#src/voxel_editing/preview_render_layer.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
@@ -579,9 +590,17 @@ interface SegmentationActionContext extends LayerActionContext {
   segmentationToggleSegmentState?: boolean | undefined;
 }
 
-const Base = UserLayerWithAnnotationsMixin(UserLayer);
+class SegmentationPreviewRenderLayer extends VoxelEditingPreviewRenderLayerMixin(
+  SegmentationRenderLayer,
+) {
+  drawnByHostLayer = true;
+}
+const Base = UserLayerWithVoxelEditingMixin(
+  UserLayerWithAnnotationsMixin(UserLayer),
+);
 export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
+  voxelEditingPreviewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   codeVisible = new TrackableBoolean(true);
 
@@ -605,6 +624,27 @@ export class SegmentationUserLayer extends Base {
       pin,
     );
   };
+
+  createVoxelEditingPreviewRenderLayer(
+    source: MultiscaleVolumeChunkSource,
+    transform: WatchableValueInterface<RenderLayerTransformOrError>,
+  ): SegmentationRenderLayer {
+    return new SegmentationPreviewRenderLayer(source, {
+      ...this.displayState,
+      transform: transform,
+      renderScaleTarget: this.sliceViewRenderScaleTarget,
+      renderScaleHistogram: this.voxelEditingPreviewRenderScaleHistogram,
+      localPosition: this.localPosition,
+    });
+  }
+
+  getPaintValue(erase: boolean): PaintValueGetter {
+    return (isPreview) => {
+      if (erase)
+        return isPreview ? SEGMENTATION_ERASE_SENTINEL : EMPTY_VOXEL_VALUE;
+      return this.paintValue.value;
+    };
+  }
 
   filterBySegmentLabel = (id: bigint) => {
     const augmented = augmentSegmentId(this.displayState, id);
@@ -774,19 +814,28 @@ export class SegmentationUserLayer extends Base {
             continue;
         }
         hasVolume = true;
-        loadedSubsource.activate(
-          () =>
-            loadedSubsource.addRenderLayer(
-              new SegmentationRenderLayer(volume, {
-                ...this.displayState,
-                transform: loadedSubsource.getRenderLayerTransform(),
-                renderScaleTarget: this.sliceViewRenderScaleTarget,
-                renderScaleHistogram: this.sliceViewRenderScaleHistogram,
-                localPosition: this.localPosition,
-              }),
-            ),
-          this.displayState.segmentationGroupState.value,
-        );
+        loadedSubsource.activate((context) => {
+          const segmentationRenderLayer = new SegmentationRenderLayer(volume, {
+            ...this.displayState,
+            transform: loadedSubsource.getRenderLayerTransform(),
+            renderScaleTarget: this.sliceViewRenderScaleTarget,
+            renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+            localPosition: this.localPosition,
+          });
+          loadedSubsource.addRenderLayer(segmentationRenderLayer);
+          context.registerDisposer(
+            registerNested((context, writingEnabled) => {
+              this.initializeVoxelEditingForSubsource(
+                loadedSubsource,
+                segmentationRenderLayer,
+                writingEnabled,
+              );
+              context.registerDisposer(() => {
+                this.deinitializeVoxelEditingForSubsource(loadedSubsource);
+              });
+            }, loadedSubsource.writingEnabled),
+          );
+        }, this.displayState.segmentationGroupState.value);
       } else if (mesh !== undefined) {
         loadedSubsource.activate(() => {
           const displayState = {
@@ -1393,7 +1442,8 @@ export class SegmentationUserLayer extends Base {
 }
 
 registerLayerControls(SegmentationUserLayer);
-
+registerVoxelEditingTools(SegmentationUserLayer);
+registerVoxelEditingLayerControls(SegmentationUserLayer);
 registerLayerType(SegmentationUserLayer);
 registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);
 registerLayerTypeDetector((subsource) => {

@@ -72,3 +72,36 @@ such as the following:
            "MaxAgeSeconds": 3000
        }
    ]
+
+.. warning::
+   Write operations (e.g. for :ref:`voxel-annotation`) are sent as
+   *unauthenticated* requests: there is no access control yet. Only allow
+   anonymous writes on a bucket whose contents you are willing to have publicly
+   modified, such as a scratch bucket.
+
+If you accept these limitations and risks, add ``PUT`` to ``AllowedMethods``. When allowing writes, do not use a wildcard ``AllowedOrigins``; explicitly list the origins that should be permitted to write:
+
+.. code-block:: json
+
+   [
+       {
+           "AllowedHeaders": [
+               "*"
+           ],
+           "AllowedMethods": [
+               "GET",
+               "HEAD",
+               "PUT"
+           ],
+           "AllowedOrigins": [
+               "https://example.com"
+           ],
+           "ExposeHeaders": [
+               "ETag",
+               "Content-Range",
+               "Content-Encoding",
+               "Content-Length"
+           ],
+           "MaxAgeSeconds": 3000
+       }
+   ]
