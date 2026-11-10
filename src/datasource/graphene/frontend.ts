@@ -2380,7 +2380,7 @@ class MulticutAnnotationLayerView extends AnnotationLayerView {
     public layer: SegmentationUserLayer,
     public displayState: AnnotationDisplayState,
   ) {
-    super(layer, displayState);
+    super(layer, displayState, layer.annotationAccordionState);
     const {
       graphConnection: { value: graphConnection },
     } = layer;

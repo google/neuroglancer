@@ -22,7 +22,11 @@ import type {
 } from "#src/renderlayer.js";
 import { VisibilityTrackedRenderLayer } from "#src/renderlayer.js";
 import type { vec3 } from "#src/util/geom.js";
-import type { ShaderBuilder, ShaderModule } from "#src/webgl/shader.js";
+import type {
+  ShaderBuilder,
+  ShaderModule,
+  ShaderProgram,
+} from "#src/webgl/shader.js";
 import type { SharedObject } from "#src/worker_rpc.js";
 
 export type PerspectiveViewReadyRenderContext =
@@ -35,6 +39,7 @@ export interface PerspectiveViewRenderContext
   ambientLighting: number;
   directionalLighting: number;
   emitter: ShaderModule;
+  bindEmitter?: (shader: ShaderProgram) => void;
 
   /**
    * Specifies whether the emitted color value will be used.
@@ -118,6 +123,7 @@ export class PerspectiveViewRenderLayer<
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export interface PerspectiveViewRenderLayer<AttachmentState = unknown> {
   isTransparent: boolean | undefined;
+  isMesh: boolean | undefined;
   isAnnotation: boolean | undefined;
   backend: SharedObject | undefined;
   isVolumeRendering: boolean | undefined;
