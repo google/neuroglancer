@@ -85,6 +85,7 @@ import { LayerToolBinder, SelectedLegacyTool } from "#src/ui/tool.js";
 import { gatherUpdate } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
+import { formatErrorMessage } from "#src/util/error.js";
 import {
   emptyToUndefined,
   parseArray,
@@ -2216,10 +2217,9 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
         managedLayer.dispose();
         const msg = new StatusMessage();
         msg.setErrorMessage(
-          `Error creating layer ${JSON.stringify(name)}: ` +
-            (e instanceof Error)
-            ? e.message
-            : "" + e,
+          `Error creating layer ${JSON.stringify(name)}: ${formatErrorMessage(
+            e,
+          )}`,
         );
       }
     }
@@ -2228,11 +2228,11 @@ export class TopLevelLayerListSpecification extends LayerListSpecification {
         completeUserLayerInitialization(managedLayer, spec);
       } catch (e) {
         const msg = new StatusMessage();
+        const { name } = managedLayer;
         msg.setErrorMessage(
-          `Error creating layer ${JSON.stringify(name)}: ` +
-            (e instanceof Error)
-            ? e.message
-            : "" + e,
+          `Error creating layer ${JSON.stringify(name)}: ${formatErrorMessage(
+            e,
+          )}`,
         );
       }
     }
