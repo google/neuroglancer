@@ -39,6 +39,11 @@ export interface ArrayMetadata {
   userAttributes: Record<string, unknown>;
   dimensionSeparator: DimensionSeparator;
   chunkKeyEncoding: ChunkKeyEncoding;
+  // Array coordinate where chunk 0 starts (the `offset` chunk grid's
+  // offset), and coordinate of the first element (`bounds.inclusive_min`);
+  // both zero otherwise.
+  chunkGridOrigin: number[];
+  lowerBound: number[];
   codecs: CodecChainSpec;
 }
 
