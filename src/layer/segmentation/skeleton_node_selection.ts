@@ -93,10 +93,9 @@ export function getSegmentIdFromLayerSelectionValue(
   state: { nodeId?: unknown; value?: unknown } | undefined,
 ) {
   const value = state?.value;
+  // A merged segment's members keep their own skeletons, so the picked id is the lookup key.
   const segmentId =
-    value instanceof Uint64MapEntry
-      ? value.value || value.key
-      : parseSelectionStateId(value);
+    value instanceof Uint64MapEntry ? value.key : parseSelectionStateId(value);
   return segmentId === 0n ? undefined : segmentId;
 }
 

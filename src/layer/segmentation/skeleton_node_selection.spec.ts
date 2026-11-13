@@ -52,12 +52,12 @@ describe("segment selection", () => {
     ).toBe(7n);
   });
 
-  it("reads the merged segment of a clicked segment that has an equivalence", () => {
+  it("looks up the skeleton of the clicked segment, not its merged representative", () => {
     expect(
       getSegmentIdFromLayerSelectionValue({
         value: new Uint64MapEntry(7n, 3n),
       }),
-    ).toBe(3n);
+    ).toBe(7n);
   });
 
   it("extracts the hovered node id only for matching render layers", () => {
