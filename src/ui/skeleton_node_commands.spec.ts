@@ -125,6 +125,7 @@ function makeViewer(
   const managedLayers = layers.map((layer) => ({ layer, visible: true }));
   const viewer = {
     commandRegistry: new CommandRegistry(),
+    element: new EventTarget(),
     layerManager: {
       managedLayers,
       layersChanged,
@@ -158,10 +159,24 @@ describe("skeleton node commands", () => {
 
     viewer.commandRegistry
       .get("skeleton-go-parent")!
-      .invoke({ dispatchTarget: new EventTarget() });
+      .invoke({ dispatchTarget: viewer.element });
 
     expect(skeletonNodeSelection.navigate).toHaveBeenCalledWith(
       SkeletonNavigation.PARENT,
+    );
+  });
+
+  it("moves to the root when a key bound to skeleton-go-root is pressed", () => {
+    const { layer, skeletonNodeSelection } = makeSkeletonLayer(3n);
+    const { viewer } = makeViewer([layer]);
+    bindSkeletonNodeCommands(viewer as any);
+
+    viewer.element.dispatchEvent(
+      new CustomEvent("action:skeleton-go-root", { detail: {} }),
+    );
+
+    expect(skeletonNodeSelection.navigate).toHaveBeenCalledWith(
+      SkeletonNavigation.ROOT,
     );
   });
 
@@ -173,7 +188,7 @@ describe("skeleton node commands", () => {
 
     viewer.commandRegistry
       .get("skeleton-go-root")!
-      .invoke({ dispatchTarget: new EventTarget() });
+      .invoke({ dispatchTarget: viewer.element });
 
     expect(first.skeletonNodeSelection.navigate).not.toHaveBeenCalled();
     expect(second.skeletonNodeSelection.navigate).toHaveBeenCalledWith(
@@ -188,7 +203,7 @@ describe("skeleton node commands", () => {
 
     viewer.commandRegistry
       .get("skeleton-reroot")!
-      .invoke({ dispatchTarget: new EventTarget() });
+      .invoke({ dispatchTarget: viewer.element });
 
     expect(executeSpatialSkeletonReroot).toHaveBeenCalledWith(
       skeletonSourceConnection,
@@ -207,7 +222,7 @@ describe("skeleton node commands", () => {
 
     viewer.commandRegistry
       .get("skeleton-reroot")!
-      .invoke({ dispatchTarget: new EventTarget() });
+      .invoke({ dispatchTarget: viewer.element });
 
     expect(executeSpatialSkeletonReroot).not.toHaveBeenCalled();
     expect(showMessage).toHaveBeenCalledWith(
@@ -235,7 +250,7 @@ describe("skeleton node commands", () => {
 
     viewer.commandRegistry
       .get("skeleton-toggle-true-end")!
-      .invoke({ dispatchTarget: new EventTarget() });
+      .invoke({ dispatchTarget: viewer.element });
 
     expect(executeSpatialSkeletonNodeTrueEndUpdate).toHaveBeenCalledWith(
       skeletonSourceConnection,
@@ -256,7 +271,7 @@ describe("skeleton node commands", () => {
 
     viewer.commandRegistry
       .get("skeleton-undo")!
-      .invoke({ dispatchTarget: new EventTarget() });
+      .invoke({ dispatchTarget: viewer.element });
 
     await vi.waitFor(() =>
       expect(showMessage).toHaveBeenCalledWith(
@@ -296,7 +311,7 @@ describe("skeleton node commands", () => {
 
     viewer.commandRegistry
       .get("skeleton-undo")!
-      .invoke({ dispatchTarget: new EventTarget() });
+      .invoke({ dispatchTarget: viewer.element });
 
     for (const { layer } of [first, second, hidden]) {
       expect(
@@ -319,7 +334,7 @@ describe("skeleton node commands", () => {
 
     viewer.commandRegistry
       .get("skeleton-undo")!
-      .invoke({ dispatchTarget: new EventTarget() });
+      .invoke({ dispatchTarget: viewer.element });
 
     expect(
       layer.spatialSkeletonEditSession.undoLatestEdit,
@@ -341,7 +356,7 @@ describe("skeleton node commands", () => {
 
     viewer.commandRegistry
       .get("skeleton-undo")!
-      .invoke({ dispatchTarget: new EventTarget() });
+      .invoke({ dispatchTarget: viewer.element });
 
     await vi.waitFor(() =>
       expect(showMessage).toHaveBeenCalledWith(

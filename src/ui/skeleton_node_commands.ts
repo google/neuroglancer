@@ -39,13 +39,15 @@ import { SPATIAL_SKELETON_RELOAD_REQUIRED_EDIT_REASON } from "#src/skeleton/edit
 import { SkeletonNavigation } from "#src/skeleton/navigation.js";
 import { isSkeletonNodeTrueEnd } from "#src/skeleton/node_attributes.js";
 import { StatusMessage } from "#src/status.js";
-import { CallbackCommand } from "#src/ui/command.js";
+import { ActionCommand } from "#src/ui/command.js";
 import { RefCounted } from "#src/util/disposable.js";
+import { registerActionListener } from "#src/util/event_action_map.js";
 import type { Viewer } from "#src/viewer.js";
 
 type SkeletonNodeViewer = Pick<
   Viewer,
   | "commandRegistry"
+  | "element"
   | "layerManager"
   | "selectedLayer"
   | "selectionDetailsState"
@@ -267,12 +269,15 @@ class SkeletonNodeCommands extends RefCounted {
   constructor(private readonly viewer: SkeletonNodeViewer) {
     super();
     for (const definition of COMMAND_DEFINITIONS) {
-      const command = new CallbackCommand(
-        definition.id,
-        definition.label,
-        () => void this.run(definition),
-      );
+      const command = new ActionCommand(definition.id, definition.label);
       this.registerDisposer(viewer.commandRegistry.register(command));
+      this.registerDisposer(
+        registerActionListener(
+          viewer.element,
+          definition.id,
+          () => void this.run(definition),
+        ),
+      );
       this.enabledUpdaters.push(() => {
         command.enabled =
           this.layersSupporting(definition.requiredActions).length > 0;
