@@ -59,7 +59,10 @@ function makeNodeAccess(nodes: readonly SkeletonNode[]) {
   });
 }
 
-function makeSkeletonLayer(selectedNodeId: bigint, { inspected = true } = {}) {
+function makeSkeletonLayer(
+  selectedNodeId: bigint,
+  { inspected = true, hasHistory = true } = {},
+) {
   const nodes = [makeNode(1n, undefined), makeNode(2n, 1n), makeNode(3n, 2n)];
   const skeletonNodeSelection = {
     selected: { value: { nodeId: selectedNodeId, segmentId: 42n } },
@@ -68,6 +71,9 @@ function makeSkeletonLayer(selectedNodeId: bigint, { inspected = true } = {}) {
   const spatialSkeletonEditSession = {
     getReloadRequired: () => undefined,
     assertEditingAllowed: () => {},
+    canUndoEdit: () => hasHistory,
+    canRedoEdit: () => hasHistory,
+    undoLatestEdit: vi.fn(async () => true),
     getCachedNode: (nodeId: bigint) =>
       nodes.find((node) => node.nodeId === nodeId),
     getCachedSegmentNodes: () => nodes,
@@ -271,6 +277,54 @@ describe("skeleton node commands", () => {
       viewer.commandRegistry.get("skeleton-toggle-true-end")!.enabled,
     ).toBe(false);
     expect(viewer.commandRegistry.get("skeleton-undo")!.enabled).toBe(false);
+  });
+
+  it("does not undo on a hidden selected layer while several editable layers are visible", () => {
+    const showMessage = vi
+      .spyOn(StatusMessage, "showTemporaryMessage")
+      .mockImplementation(() => ({ dispose() {} }) as any);
+    showMessage.mockClear();
+    const first = makeSkeletonLayer(3n);
+    const second = makeSkeletonLayer(3n);
+    const hidden = makeSkeletonLayer(3n);
+    const { viewer, managedLayers } = makeViewer(
+      [first.layer, second.layer, hidden.layer],
+      hidden.layer,
+    );
+    managedLayers[2].visible = false;
+    bindSkeletonNodeCommands(viewer as any);
+
+    viewer.commandRegistry
+      .get("skeleton-undo")!
+      .invoke({ dispatchTarget: new EventTarget() });
+
+    for (const { layer } of [first, second, hidden]) {
+      expect(
+        layer.spatialSkeletonEditSession.undoLatestEdit,
+      ).not.toHaveBeenCalled();
+    }
+    expect(showMessage).toHaveBeenCalledWith(
+      "Select a visible skeleton layer that supports this command.",
+    );
+  });
+
+  it("reports that there is nothing to undo on a layer without history", () => {
+    const showMessage = vi
+      .spyOn(StatusMessage, "showTemporaryMessage")
+      .mockImplementation(() => ({ dispose() {} }) as any);
+    showMessage.mockClear();
+    const { layer } = makeSkeletonLayer(3n, { hasHistory: false });
+    const { viewer } = makeViewer([layer]);
+    bindSkeletonNodeCommands(viewer as any);
+
+    viewer.commandRegistry
+      .get("skeleton-undo")!
+      .invoke({ dispatchTarget: new EventTarget() });
+
+    expect(
+      layer.spatialSkeletonEditSession.undoLatestEdit,
+    ).not.toHaveBeenCalled();
+    expect(showMessage).toHaveBeenCalledWith("Nothing to undo.");
   });
 
   it("undoes on the editable layer while a read-only skeleton layer is also visible", async () => {

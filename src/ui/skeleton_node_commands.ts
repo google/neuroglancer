@@ -89,16 +89,23 @@ async function runHistoryCommand(
     );
     return;
   }
-  const { action, execute } =
+  const { spatialSkeletonEditSession } = layer;
+  const { action, execute, available } =
     history === "undo"
       ? {
           action: SpatialSkeletonHistoryActions.undo,
           execute: undoSpatialSkeletonCommand,
+          available: spatialSkeletonEditSession.canUndoEdit(),
         }
       : {
           action: SpatialSkeletonHistoryActions.redo,
           execute: redoSpatialSkeletonCommand,
+          available: spatialSkeletonEditSession.canRedoEdit(),
         };
+  if (!available) {
+    StatusMessage.showTemporaryMessage(`Nothing to ${history}.`);
+    return;
+  }
   try {
     await execute(layer.skeletonSourceConnection);
   } catch (error) {
@@ -247,8 +254,8 @@ const COMMAND_DEFINITIONS: readonly SkeletonNodeCommandDefinition[] = [
 
 /**
  * Registers the commands that act on the selected skeleton node. Each command
- * acts on the one visible skeleton layer that supports it, or on the selected
- * layer when there are several.
+ * acts on the one visible skeleton layer that supports it. When several do, it
+ * acts on the selected layer only if that layer is one of them.
  */
 export function bindSkeletonNodeCommands(viewer: SkeletonNodeViewer): void {
   viewer.registerDisposer(new SkeletonNodeCommands(viewer));
@@ -283,8 +290,8 @@ class SkeletonNodeCommands extends RefCounted {
 
   private layersSupporting(
     requiredActions: readonly SpatialSkeletonAction[],
-  ): SkeletonNodeCommandLayer[] {
-    const layers: SkeletonNodeCommandLayer[] = [];
+  ): (UserLayer & SkeletonNodeCommandLayer)[] {
+    const layers: (UserLayer & SkeletonNodeCommandLayer)[] = [];
     for (const managedLayer of this.viewer.layerManager.managedLayers) {
       const { layer } = managedLayer;
       if (
@@ -306,23 +313,15 @@ class SkeletonNodeCommands extends RefCounted {
     const supportingLayers = this.layersSupporting(requiredActions);
     if (supportingLayers.length === 1) return supportingLayers[0];
     const selected = this.viewer.selectedLayer.layer?.layer;
-    return isSkeletonNodeCommandLayer(selected) ? selected : undefined;
+    return supportingLayers.find((layer) => layer === selected);
   }
 
   private async run(definition: SkeletonNodeCommandDefinition): Promise<void> {
     const layer = this.targetLayer(definition.requiredActions);
     if (layer === undefined) {
       StatusMessage.showTemporaryMessage(
-        "Select a skeleton layer to use skeleton commands.",
+        "Select a visible skeleton layer that supports this command.",
       );
-      return;
-    }
-    const disabledReason =
-      layer.skeletonSourceConnection.getActionsDisabledReason(
-        definition.requiredActions,
-      );
-    if (disabledReason !== undefined) {
-      StatusMessage.showTemporaryMessage(disabledReason);
       return;
     }
     await definition.run(layer, this.viewer);
