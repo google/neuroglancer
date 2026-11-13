@@ -28,19 +28,31 @@ import type {
 
 export type SpatialSkeletonPreviewSelectionPin = "preserve" | "pin" | "unpin";
 
+/** Normal visibility, temporary visibility, and Seg star state for one segment. */
+export interface SegmentVisibilityState {
+  readonly visible: boolean;
+  readonly temporaryVisible: boolean;
+  readonly starred: boolean;
+}
+
 /**
  * Datasource-neutral, non-authoritative presentation wishes attached to one
  * exact intent. Logical handles deliberately keep provisional and remapped
  * authority out of datasource UI code.
  */
 export interface SpatialSkeletonPreviewUiHints {
-  readonly segmentMembershipRemaps?: readonly {
+  readonly segmentVisibilityStateRemaps?: readonly {
     readonly from: SpatialSkeletonStableSegmentHandle;
     readonly to: SpatialSkeletonStableSegmentHandle;
   }[];
   readonly segmentVisibility?: readonly {
-    readonly segment: SpatialSkeletonStableSegmentHandle;
+    /** A bigint targets the exact provisional ID being removed on rollback. */
+    readonly segment: SpatialSkeletonStableSegmentHandle | bigint;
     readonly visible: boolean;
+    /** Restore this segment's visibility and star state from before the preview. */
+    readonly restoreVisibilityState?: true;
+    readonly temporaryVisible?: boolean;
+    readonly starred?: boolean;
     readonly deselect?: boolean;
     readonly select?: SpatialSkeletonPreviewSelectionPin;
   }[];
@@ -72,6 +84,8 @@ export interface SpatialSkeletonResolvedPreviewUiHints {
   readonly segmentVisibility: readonly {
     readonly segmentId: bigint;
     readonly visible: boolean;
+    readonly temporaryVisible?: boolean;
+    readonly starred?: boolean;
     readonly deselect: boolean;
     readonly select?: SpatialSkeletonPreviewSelectionPin;
   }[];
@@ -91,13 +105,14 @@ export interface SpatialSkeletonResolvedPreviewUiHints {
 /** Layer-owned adapter for best-effort selection and visibility effects. */
 export interface SpatialSkeletonPreviewUiHintPort {
   apply(hints: SpatialSkeletonResolvedPreviewUiHints): void;
+  readSegmentVisibilityState?(segmentId: bigint): SegmentVisibilityState;
 }
 
 export function cloneSpatialSkeletonPreviewUiHints(
   hints: SpatialSkeletonPreviewUiHints | undefined,
 ): SpatialSkeletonPreviewUiHints | undefined {
   if (hints === undefined) return undefined;
-  const segmentMembershipRemaps = hints.segmentMembershipRemaps?.map(
+  const segmentVisibilityStateRemaps = hints.segmentVisibilityStateRemaps?.map(
     ({ from, to }) =>
       Object.freeze({
         from: Object.freeze({ ...from }),
@@ -107,7 +122,10 @@ export function cloneSpatialSkeletonPreviewUiHints(
   const segmentVisibility = hints.segmentVisibility?.map((hint) =>
     Object.freeze({
       ...hint,
-      segment: Object.freeze({ ...hint.segment }),
+      segment:
+        typeof hint.segment === "bigint"
+          ? hint.segment
+          : Object.freeze({ ...hint.segment }),
     }),
   );
   const selectedNode =
@@ -137,10 +155,12 @@ export function cloneSpatialSkeletonPreviewUiHints(
     Object.freeze({ ...segment }),
   );
   return Object.freeze({
-    ...(segmentMembershipRemaps === undefined
+    ...(segmentVisibilityStateRemaps === undefined
       ? {}
       : {
-          segmentMembershipRemaps: Object.freeze(segmentMembershipRemaps),
+          segmentVisibilityStateRemaps: Object.freeze(
+            segmentVisibilityStateRemaps,
+          ),
         }),
     ...(segmentVisibility === undefined
       ? {}
@@ -160,8 +180,8 @@ export function mergeSpatialSkeletonPreviewUiHints(
   );
   if (present.length === 0) return undefined;
   return cloneSpatialSkeletonPreviewUiHints({
-    segmentMembershipRemaps: present.flatMap(
-      (value) => value.segmentMembershipRemaps ?? [],
+    segmentVisibilityStateRemaps: present.flatMap(
+      (value) => value.segmentVisibilityStateRemaps ?? [],
     ),
     segmentVisibility: present.flatMap(
       (value) => value.segmentVisibility ?? [],
@@ -210,20 +230,41 @@ function resolveSpatialSkeletonPreviewUiHints(
   };
 
   const resolvedSegmentRemappings = new Map(options.segmentIdRemappings ?? []);
-  for (const { from, to } of hints?.segmentMembershipRemaps ?? []) {
+  for (const { from, to } of hints?.segmentVisibilityStateRemaps ?? []) {
     const fromId = resolveSegment(from);
     const toId = resolveSegment(to);
     if (fromId !== toId) resolvedSegmentRemappings.set(fromId, toId);
   }
 
-  const segmentVisibility = (hints?.segmentVisibility ?? []).map((hint) =>
-    Object.freeze({
-      segmentId: resolveSegment(hint.segment),
-      visible: hint.visible,
-      deselect: hint.deselect ?? !hint.visible,
-      ...(hint.select === undefined ? {} : { select: hint.select }),
-    }),
+  const visibilityHints = hints?.segmentVisibility ?? [];
+  const discardedProvisionalIds = new Set(
+    visibilityHints.flatMap(({ segment, visible }) =>
+      typeof segment === "bigint" && !visible ? [segment] : [],
+    ),
   );
+  const segmentVisibility = visibilityHints.flatMap((hint) => {
+    const { segment, visible } = hint;
+    const segmentId =
+      typeof segment === "bigint" ? segment : resolveSegment(segment);
+    const removesProvisional = typeof segment === "bigint" && !visible;
+    // An older rollback hint can resolve to a discarded preview through the
+    // fallback mappings. The exact removal takes precedence over that hint.
+    if (discardedProvisionalIds.has(segmentId) && !removesProvisional) {
+      return [];
+    }
+    return [
+      Object.freeze({
+        segmentId,
+        visible,
+        ...(hint.temporaryVisible === undefined
+          ? {}
+          : { temporaryVisible: hint.temporaryVisible }),
+        ...(hint.starred === undefined ? {} : { starred: hint.starred }),
+        deselect: hint.deselect ?? !visible,
+        ...(hint.select === undefined ? {} : { select: hint.select }),
+      }),
+    ];
+  });
   const selectedNode =
     hints?.selectedNode === undefined
       ? undefined
@@ -254,7 +295,11 @@ function resolveSpatialSkeletonPreviewUiHints(
                 : false,
           });
   const retainSegmentIds = Object.freeze([
-    ...new Set((hints?.retainSegments ?? []).map(resolveSegment)),
+    ...new Set(
+      (hints?.retainSegments ?? [])
+        .map(resolveSegment)
+        .filter((segmentId) => !discardedProvisionalIds.has(segmentId)),
+    ),
   ]);
   return Object.freeze({
     nodeIdRemappings: new Map(options.nodeIdRemappings ?? []),

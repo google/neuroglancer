@@ -168,6 +168,15 @@ export class SkeletonSourceConnection
     return this.findPathContext;
   }
 
+  readSpatialSkeletonSegmentVisibilityState(segmentId: bigint) {
+    const group = this.options.segmentationGroupState.value;
+    return {
+      visible: group.visibleSegments.has(segmentId),
+      temporaryVisible: group.temporaryVisibleSegments.has(segmentId),
+      starred: group.selectedSegments.has(segmentId),
+    };
+  }
+
   applySpatialSkeletonPreviewUiHints(
     hints: SpatialSkeletonResolvedPreviewUiHints,
   ): void {
@@ -184,15 +193,15 @@ export class SkeletonSourceConnection
     }
     for (const visibility of hints.segmentVisibility) {
       const { segmentId } = visibility;
-      if (visibility.visible) {
-        group.visibleSegments.add(segmentId);
-        group.temporaryVisibleSegments.add(segmentId);
-      } else {
-        group.visibleSegments.delete(segmentId);
-        group.temporaryVisibleSegments.delete(segmentId);
-        if (visibility.deselect) {
-          group.selectedSegments.delete(segmentId);
-        }
+      group.visibleSegments.set(segmentId, visibility.visible);
+      group.temporaryVisibleSegments.set(
+        segmentId,
+        visibility.temporaryVisible ?? visibility.visible,
+      );
+      if (visibility.starred !== undefined) {
+        group.selectedSegments.set(segmentId, visibility.starred);
+      } else if (!visibility.visible && visibility.deselect) {
+        group.selectedSegments.delete(segmentId);
       }
     }
     this.options.selection.applyPreviewUiHints(hints);

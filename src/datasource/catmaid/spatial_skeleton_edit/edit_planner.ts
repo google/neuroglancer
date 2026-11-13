@@ -1860,14 +1860,14 @@ export class CatmaidEditPlanner
     semantic: CatmaidCapturedEdit,
     direction: "forward" | "inverse",
     intent: "execute" | "undo" | "redo",
-    allowNavigation = true,
+    rollback?: { readonly provisionalSegmentId?: bigint },
   ): SpatialSkeletonPreviewUiHints {
     const segmentVisibility: Array<
       NonNullable<SpatialSkeletonPreviewUiHints["segmentVisibility"]>[number]
     > = [];
-    const segmentMembershipRemaps: Array<
+    const segmentVisibilityStateRemaps: Array<
       NonNullable<
-        SpatialSkeletonPreviewUiHints["segmentMembershipRemaps"]
+        SpatialSkeletonPreviewUiHints["segmentVisibilityStateRemaps"]
       >[number]
     > = [];
     const retainSegments: SpatialSkeletonStableSegmentHandle[] = [];
@@ -1886,26 +1886,34 @@ export class CatmaidEditPlanner
           ? {}
           : { position: Object.freeze(Array.from(position, Number)) }),
         pin: "preserve" as const,
-        moveView: allowNavigation && moveView,
+        moveView: moveView && rollback === undefined,
       });
     };
     const show = (
       segment: SpatialSkeletonStableSegmentHandle,
       selection?: "preserve" | "pin" | "unpin",
+      restoreVisibilityState = false,
     ) => {
       segmentVisibility.push(
         Object.freeze({
           segment,
           visible: true,
           ...(selection === undefined ? {} : { select: selection }),
+          ...(restoreVisibilityState
+            ? { restoreVisibilityState: true as const }
+            : {}),
         }),
       );
     };
-    const hide = (segment: SpatialSkeletonStableSegmentHandle) => {
+    const hide = (segment: SpatialSkeletonStableSegmentHandle | bigint) => {
       segmentVisibility.push(
         Object.freeze({ segment, visible: false, deselect: true }),
       );
     };
+
+    if (rollback?.provisionalSegmentId !== undefined) {
+      hide(rollback.provisionalSegmentId);
+    }
 
     switch (semantic.kind) {
       case "add-node":
@@ -1994,7 +2002,7 @@ export class CatmaidEditPlanner
             semantic.downstreamSegment,
           );
         } else {
-          segmentMembershipRemaps.push(
+          segmentVisibilityStateRemaps.push(
             Object.freeze({
               from: semantic.downstreamSegment,
               to: semantic.sourceSegment,
@@ -2019,24 +2027,27 @@ export class CatmaidEditPlanner
           semantic.inverseOrientation === "second-from-first"
             ? semantic.secondNode
             : semantic.firstNode;
+        const restoreVisibilityState = rollback !== undefined;
         if (direction === "forward") {
-          segmentMembershipRemaps.push(
-            Object.freeze({
-              from: semantic.firstSegment,
-              to: semantic.mergedSegment,
-            }),
-            Object.freeze({
-              from: semantic.secondSegment,
-              to: semantic.mergedSegment,
-            }),
-          );
-          show(semantic.mergedSegment, "preserve");
-          hide(forwardSecondSegment);
+          show(semantic.mergedSegment, "preserve", restoreVisibilityState);
+          if (rollback === undefined) {
+            segmentVisibilityStateRemaps.push(
+              Object.freeze({
+                from: semantic.firstSegment,
+                to: semantic.mergedSegment,
+              }),
+              Object.freeze({
+                from: semantic.secondSegment,
+                to: semantic.mergedSegment,
+              }),
+            );
+            hide(forwardSecondSegment);
+          }
           select(forwardSecondNode, semantic.mergedSegment);
           retainSegments.push(semantic.mergedSegment);
         } else {
-          show(forwardFirstSegment);
-          show(forwardSecondSegment);
+          show(forwardFirstSegment, undefined, restoreVisibilityState);
+          show(forwardSecondSegment, undefined, restoreVisibilityState);
           select(forwardSecondNode, forwardSecondSegment);
           retainSegments.push(forwardFirstSegment, forwardSecondSegment);
         }
@@ -2045,7 +2056,7 @@ export class CatmaidEditPlanner
     }
 
     return Object.freeze({
-      segmentMembershipRemaps: Object.freeze(segmentMembershipRemaps),
+      segmentVisibilityStateRemaps: Object.freeze(segmentVisibilityStateRemaps),
       segmentVisibility: Object.freeze(segmentVisibility),
       ...(selectedNode === undefined ? {} : { selectedNode }),
       retainSegments: Object.freeze(retainSegments),
@@ -2069,6 +2080,7 @@ export class CatmaidEditPlanner
     const segmentBindings: Array<
       readonly [SpatialSkeletonStableSegmentHandle, bigint]
     > = [];
+    let provisionalMergeSegmentId: bigint | undefined;
     if (semantic.kind === "add-node" && direction === "forward") {
       nodeBindings.push([
         semantic.node,
@@ -2096,20 +2108,13 @@ export class CatmaidEditPlanner
         semantic.downstreamSegment,
         this.provisionalIds.allocateSegmentId(intentId),
       ]);
-    } else if (semantic.kind === "merge" && direction === "forward") {
-      // The result has its own logical identity. Borrowing an input's current
-      // ID would leave it stale if that input saves under a different ID.
-      segmentBindings.push([
-        semantic.mergedSegment,
-        this.provisionalIds.allocateSegmentId(intentId),
-      ]);
-    } else if (semantic.kind === "merge" && direction === "inverse") {
-      const restoredSegment =
-        delta.kind === "unmerge" ? delta.secondSegment : semantic.secondSegment;
-      segmentBindings.push([
-        restoredSegment,
-        this.provisionalIds.allocateSegmentId(intentId),
-      ]);
+    } else if (semantic.kind === "merge") {
+      const previewSegment =
+        delta.kind === "unmerge" ? delta.secondSegment : semantic.mergedSegment;
+      // The handle may resolve to a saved skeleton once this attempt rolls back.
+      provisionalMergeSegmentId =
+        this.provisionalIds.allocateSegmentId(intentId);
+      segmentBindings.push([previewSegment, provisionalMergeSegmentId]);
     }
     return Object.freeze({
       delta,
@@ -2127,7 +2132,7 @@ export class CatmaidEditPlanner
         semantic,
         direction === "forward" ? "inverse" : "forward",
         intent,
-        false,
+        { provisionalSegmentId: provisionalMergeSegmentId },
       ),
       pendingEditIntentId: intentId,
     });

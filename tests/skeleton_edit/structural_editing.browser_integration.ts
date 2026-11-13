@@ -180,6 +180,26 @@ test("split previews the complete branch, then Undo and Redo restore topology", 
   ]);
 });
 
+async function mergeIntoBrowseTarget(ui: SkeletonEditPage) {
+  const { page } = ui;
+  await ui.selectNode(103n);
+  const center = await ui.panelCenter();
+  const scale = await page.evaluate(
+    () =>
+      (window as unknown as { viewer: Viewer }).viewer.crossSectionScale.value,
+  );
+  await page.mouse.move(center.x, center.y);
+  await ui.runEdit(async () => {
+    await page.keyboard.down("m");
+    try {
+      await page.mouse.click(center.x, center.y);
+      await page.mouse.click(center.x, center.y + 2000 / scale);
+    } finally {
+      await page.keyboard.up("m");
+    }
+  });
+}
+
 test("a cold merge appears in Queue immediately and can be undone before its target loads", async ({
   page,
   server,
@@ -202,23 +222,7 @@ test("a cold merge appears in Queue immediately and can be undone before its tar
       [2000, 2000, 1000],
       [10n],
     );
-    await ui.selectNode(103n);
-    const center = await ui.panelCenter();
-    const scale = await page.evaluate(
-      () =>
-        (window as unknown as { viewer: Viewer }).viewer.crossSectionScale
-          .value,
-    );
-    await page.mouse.move(center.x, center.y);
-    await ui.runEdit(async () => {
-      await page.keyboard.down("m");
-      try {
-        await page.mouse.click(center.x, center.y);
-        await page.mouse.click(center.x, center.y + 2000 / scale);
-      } finally {
-        await page.keyboard.up("m");
-      }
-    });
+    await mergeIntoBrowseTarget(ui);
     const pending = await readQueue(page);
     expect(pending.entries).toMatchObject([
       {
@@ -256,6 +260,300 @@ test("a cold merge appears in Queue immediately and can be undone before its tar
     releaseReads();
   }
 });
+
+async function readSegVisibilityState(page: Page) {
+  return page.evaluate(() => {
+    const viewer = (window as unknown as { viewer: Viewer }).viewer;
+    const layer = viewer.layerManager.getLayerByName("Skeletons")!
+      .layer as SegmentationUserLayer;
+    const group = layer.displayState.segmentationGroupState.value;
+    return {
+      visible: [...group.visibleSegments].map(String).sort(),
+      selected: [...group.selectedSegments].map(String).sort(),
+    };
+  });
+}
+
+async function toggleSegVisibility(ui: SkeletonEditPage, segmentId: string) {
+  const { page } = ui;
+  await page.getByText("Seg.", { exact: true }).click();
+  await page
+    .locator(`.neuroglancer-segment-list-entry[data-id="${segmentId}"]`)
+    .getByTitle("Toggle segment visibility", { exact: true })
+    .filter({ visible: true })
+    .first()
+    .click();
+  await ui.showSkeleton();
+}
+
+async function holdRejectedMutation(
+  page: Page,
+  path: string,
+  response: { error: string; meta?: { code: string } },
+) {
+  const { promise: received, resolve: markReceived } =
+    Promise.withResolvers<void>();
+  const { promise: released, resolve: release } = Promise.withResolvers<void>();
+  await page.route(
+    `**/${path}`,
+    async (route) => {
+      markReceived();
+      await released;
+      await route.fulfill({ status: 409, json: response });
+    },
+    { times: 1 },
+  );
+  return { received, release };
+}
+
+test("a rejected merge removes its preview from the Seg list", async ({
+  page,
+  server,
+}) => {
+  const ui = new SkeletonEditPage(page);
+  await ui.open(server.sourceUrl);
+  const initialSegments = await readSegVisibilityState(page);
+  const initialGraph = topology(await readGraph(page, IDS, "Skeletons", true));
+
+  const { received, release } = await holdRejectedMutation(
+    page,
+    "skeleton/join",
+    {
+      error: "This merge would remove a skeleton linked to a task.",
+      meta: { code: "task_skeleton_merge_blocked" },
+    },
+  );
+
+  try {
+    await ui.merge(103n, 203n);
+    await received;
+    const [target] = await readGraph(page, [203n]);
+    expect(initialSegments.visible).not.toContain(String(target.skeletonId));
+    expect((await readSegVisibilityState(page)).visible).toContain(
+      String(target.skeletonId),
+    );
+  } finally {
+    release();
+  }
+
+  await expect.poll(async () => (await readQueue(page)).pending).toBe(false);
+  expect(topology(await readGraph(page, IDS, "Skeletons", true))).toEqual(
+    initialGraph,
+  );
+  const queue = await readQueue(page);
+  expect(queue).toMatchObject({ canUndo: false, canRedo: false });
+  expect(queue.recent[0]).toMatchObject({
+    intent: "execute",
+    status: "not-saved",
+    authorityReason: "rejected",
+  });
+  expect(await readSegVisibilityState(page)).toEqual(initialSegments);
+
+  await ui.merge(203n, 103n);
+  await ui.waitSaved();
+  expect(await readSegVisibilityState(page)).toEqual({
+    visible: ["20"],
+    selected: ["20"],
+  });
+});
+
+test("a rejected Merge keeps a hidden browse target hidden", async ({
+  page,
+  server,
+}) => {
+  const ui = new SkeletonEditPage(page);
+  await ui.open(server.sourceUrl, [10n, 20n], false, [2000, 2000, 1000], [10n]);
+  await toggleSegVisibility(ui, "20");
+  const before = await readSegVisibilityState(page);
+  expect(before).toEqual({ visible: ["10"], selected: ["10", "20"] });
+  const saved = savedTopology(server);
+  const { received, release } = await holdRejectedMutation(
+    page,
+    "skeleton/join",
+    { error: "CATMAID rejected the merge with a hidden target" },
+  );
+
+  try {
+    await mergeIntoBrowseTarget(ui);
+    await received;
+    const [target] = await readGraph(page, [203n]);
+    const previewId = String(target.skeletonId);
+    expect(before.selected).not.toContain(previewId);
+    expect((await readSegVisibilityState(page)).visible).toContain(previewId);
+  } finally {
+    release();
+  }
+
+  await expect.poll(async () => (await readQueue(page)).pending).toBe(false);
+  const queue = await readQueue(page);
+  expect(queue).toMatchObject({ canUndo: false, canRedo: false });
+  expect(queue.recent[0]).toMatchObject({
+    intent: "execute",
+    status: "not-saved",
+    authorityReason: "rejected",
+  });
+  expect(topology(await readGraph(page, IDS, "Skeletons", true))).toEqual(
+    saved,
+  );
+  expect(await readSegVisibilityState(page)).toEqual(before);
+
+  await toggleSegVisibility(ui, "20");
+  await ui.inspect(20n);
+  await ui.merge(103n, 203n);
+  await ui.waitSaved();
+});
+
+test("a rejected Merge clears its previews after queued Undo and Redo", async ({
+  page,
+  server,
+}) => {
+  const ui = new SkeletonEditPage(page);
+  await ui.open(server.sourceUrl);
+  const before = await readSegVisibilityState(page);
+  const beforeGraph = topology(await readGraph(page, IDS, "Skeletons", true));
+  const { received, release } = await holdRejectedMutation(
+    page,
+    "skeleton/join",
+    { error: "CATMAID rejected the original merge" },
+  );
+  const waitForPreview = (intent: "undo" | "redo") =>
+    expect
+      .poll(
+        async () =>
+          (await readQueue(page)).entries.find(
+            (entry) => entry.intent === intent,
+          )?.lifecycle.preview,
+      )
+      .toBe("exact");
+
+  try {
+    await ui.merge(103n, 203n);
+    await received;
+    await ui.undo();
+    await waitForPreview("undo");
+    await ui.redo();
+    await waitForPreview("redo");
+    const [target] = await readGraph(page, [203n]);
+    const redoPreviewId = String(target.skeletonId);
+    expect(before.visible).not.toContain(redoPreviewId);
+    expect((await readSegVisibilityState(page)).visible).toContain(
+      redoPreviewId,
+    );
+  } finally {
+    release();
+  }
+
+  await expect.poll(async () => (await readQueue(page)).pending).toBe(false);
+  const after = await readSegVisibilityState(page);
+  const queue = await readQueue(page);
+  expect(queue).toMatchObject({ canUndo: false, canRedo: false });
+  expect(queue.recent).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        intent: "execute",
+        status: "not-saved",
+        authorityReason: "rejected",
+      }),
+      expect.objectContaining({ intent: "undo", status: "not-saved" }),
+      expect.objectContaining({ intent: "redo", status: "not-saved" }),
+    ]),
+  );
+  expect(topology(await readGraph(page, IDS, "Skeletons", true))).toEqual(
+    beforeGraph,
+  );
+
+  await ui.merge(203n, 103n);
+  await ui.waitSaved();
+  expect(after).toEqual(before);
+});
+
+for (const [action, hiddenEntry] of [
+  ["Undo", undefined],
+  ["Undo", "merged survivor"],
+  ["Redo", undefined],
+  ["Redo", "restored Seg entry"],
+] as const) {
+  const name =
+    hiddenEntry === undefined
+      ? `a rejected Merge ${action} restores the saved Seg entries`
+      : `a rejected Merge ${action} keeps a ${hiddenEntry} hidden`;
+  test(name, async ({ page, server }) => {
+    const ui = new SkeletonEditPage(page);
+    await ui.open(server.sourceUrl);
+    await ui.merge(103n, 203n);
+    await ui.waitSaved();
+    const merged = savedTopology(server);
+
+    if (action === "Redo") {
+      await ui.undo();
+      await ui.waitSaved();
+    }
+    const hiddenId =
+      hiddenEntry === undefined
+        ? undefined
+        : String((await readGraph(page, [203n]))[0].skeletonId);
+    if (hiddenId !== undefined) {
+      await toggleSegVisibility(ui, hiddenId);
+    }
+    const before = await readSegVisibilityState(page);
+    if (hiddenId !== undefined) {
+      expect(before.visible).not.toContain(hiddenId);
+      expect(before.selected).toContain(hiddenId);
+    }
+    const saved = savedTopology(server);
+    const savedSegmentIds = new Set(
+      saved.map(({ skeletonId }) => String(skeletonId)),
+    );
+    const { canUndo, canRedo } = await readQueue(page);
+    const path = action === "Undo" ? "skeleton/split" : "skeleton/join";
+    const attempt = () => (action === "Undo" ? ui.undo() : ui.redo());
+
+    const { received, release } = await holdRejectedMutation(page, path, {
+      error: `CATMAID rejected Merge ${action}`,
+    });
+    try {
+      await attempt();
+      await received;
+      const preview = await readSegVisibilityState(page);
+      const provisional = preview.visible.filter(
+        (id) => !savedSegmentIds.has(id),
+      );
+      expect(provisional).toHaveLength(1);
+      expect(preview.selected).toContain(provisional[0]);
+    } finally {
+      release();
+    }
+
+    await expect.poll(async () => (await readQueue(page)).pending).toBe(false);
+    expect(await readSegVisibilityState(page)).toEqual(before);
+    expect(topology(await readGraph(page, IDS, "Skeletons", true))).toEqual(
+      saved,
+    );
+    expect(savedTopology(server)).toEqual(saved);
+    const queue = await readQueue(page);
+    expect(queue).toMatchObject({ canUndo, canRedo });
+    expect(queue.recent[0]).toMatchObject({
+      intent: action === "Undo" ? "undo" : "redo",
+      status: "not-saved",
+      authorityReason: "rejected",
+    });
+
+    await attempt();
+    await ui.waitSaved();
+    expect(savedParents(server)).toEqual(
+      action === "Undo"
+        ? INITIAL_PARENTS
+        : merged.map(({ id, parentId }) => [id, parentId]),
+    );
+    const savedIds = [
+      ...new Set(server.snapshot().map(({ skeletonId }) => String(skeletonId))),
+    ].sort();
+    expect(await readSegVisibilityState(page)).toEqual({
+      visible: savedIds,
+      selected: savedIds,
+    });
+  });
+}
 
 test("merge through a non-root node restores the original root after repeated Undo and reload", async ({
   page,

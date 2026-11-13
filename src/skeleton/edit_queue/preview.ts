@@ -43,6 +43,7 @@ import {
   CompleteSkeletonSet,
 } from "#src/skeleton/edit_queue/complete_skeleton_edits.js";
 import type {
+  SegmentVisibilityState,
   SpatialSkeletonPreviewUiHintPort,
   SpatialSkeletonPreviewUiHints,
 } from "#src/skeleton/edit_queue/preview_ui_hints.js";
@@ -242,6 +243,10 @@ interface IntentPreview {
   readonly preview: SpatialSkeletonPreviewIntentDelta;
   readonly mappingToken?: SpatialSkeletonStableIdMappingToken;
   readonly inverseDelta: SpatialSkeletonEditInverseDelta;
+  readonly rollbackSegmentVisibilityState?: ReadonlyMap<
+    string,
+    SegmentVisibilityState
+  >;
 }
 
 interface PreparedRuntimePublication {
@@ -254,6 +259,34 @@ interface PreparedRuntimePublication {
   readonly previewedWorkspace: CompleteSkeletonSet;
   readonly statePublication: SpatialSkeletonPreparedPreviewCachePublication;
   readonly publishedCacheRevisions: Map<bigint, number>;
+}
+
+function getRollbackUiHints({
+  preview,
+  rollbackSegmentVisibilityState,
+}: IntentPreview): SpatialSkeletonPreviewUiHints | undefined {
+  const hints = preview.rollbackUiHints;
+  if (
+    rollbackSegmentVisibilityState === undefined ||
+    hints?.segmentVisibility === undefined
+  ) {
+    return hints;
+  }
+  // Use the current hints, which may have changed during a rebase.
+  return {
+    ...hints,
+    segmentVisibility: hints.segmentVisibility.map((hint) => {
+      if (!hint.restoreVisibilityState || typeof hint.segment === "bigint") {
+        return hint;
+      }
+      const visibilityState = rollbackSegmentVisibilityState.get(
+        hint.segment.stableId,
+      );
+      return visibilityState === undefined
+        ? hint
+        : { ...hint, ...visibilityState };
+    }),
+  };
 }
 
 function cloneBindings(
@@ -762,10 +795,53 @@ export class SpatialSkeletonEditPreview
         pendingEditIntentIdsToRemove: [preview.pendingEditIntentId ?? intentId],
       });
     }
+    const rollbackSegmentVisibilityState =
+      this.captureRollbackSegmentVisibilityState(
+        preview.rollbackUiHints,
+        publication.mappings,
+      );
+    if (rollbackSegmentVisibilityState !== undefined) {
+      publication.activeIntents.set(intentId, {
+        ...publication.activeIntents.get(intentId)!,
+        rollbackSegmentVisibilityState,
+      });
+    }
     this.adoptPublication(publication, {
       uiHints: preview.uiHints,
     });
     this.preparedExact.delete(intentId);
+  }
+
+  private captureRollbackSegmentVisibilityState(
+    hints: SpatialSkeletonPreviewUiHints | undefined,
+    mappings: SpatialSkeletonStableIdHandles<bigint, bigint>,
+  ): IntentPreview["rollbackSegmentVisibilityState"] {
+    const port = this.options.uiHints;
+    if (port?.readSegmentVisibilityState === undefined) return undefined;
+    try {
+      let visibilityStateByHandle:
+        | Map<string, SegmentVisibilityState>
+        | undefined;
+      for (const {
+        segment,
+        restoreVisibilityState,
+      } of hints?.segmentVisibility ?? []) {
+        if (!restoreVisibilityState || typeof segment === "bigint") continue;
+        const segmentId = mappings.resolveSegment(segment);
+        if (segmentId === undefined) continue;
+        const { visible, temporaryVisible, starred } =
+          port.readSegmentVisibilityState(segmentId);
+        (visibilityStateByHandle ??= new Map()).set(segment.stableId, {
+          visible,
+          temporaryVisible,
+          starred,
+        });
+      }
+      return visibilityStateByHandle;
+    } catch (error) {
+      this.reportAuxiliaryError(error);
+      return undefined;
+    }
   }
 
   rollbackAndReplay(
@@ -795,6 +871,8 @@ export class SpatialSkeletonEditPreview
         intentId,
         preview: normalizePreview(artifact.preview),
         inverseDelta: artifact.inversePreview,
+        rollbackSegmentVisibilityState:
+          existing?.rollbackSegmentVisibilityState,
       });
     }
     if (removedIntents.length === 0 && !replayChanged) return;
@@ -815,7 +893,7 @@ export class SpatialSkeletonEditPreview
     const rollbackUiHints = mergeSpatialSkeletonPreviewUiHints(
       removedIntents
         .sort((a, b) => b.intentId - a.intentId)
-        .map(({ preview }) => preview.rollbackUiHints),
+        .map(getRollbackUiHints),
     );
     this.adoptPublication(publication, {
       uiHints: rollbackUiHints,
@@ -913,6 +991,9 @@ export class SpatialSkeletonEditPreview
         intentId: artifact.intentId,
         preview: normalizePreview(artifact.preview),
         inverseDelta: artifact.inversePreview,
+        rollbackSegmentVisibilityState: this.activeIntents.get(
+          artifact.intentId,
+        )?.rollbackSegmentVisibilityState,
       });
     }
     this.reconcileMappingOverlays(mappings, active);

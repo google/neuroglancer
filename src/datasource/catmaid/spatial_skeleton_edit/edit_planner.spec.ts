@@ -1153,7 +1153,7 @@ describe("CatmaidEditPlanner", () => {
         secondNode: merge.firstNode,
       });
       expect(logical.preview.uiHints).toMatchObject({
-        segmentMembershipRemaps: [
+        segmentVisibilityStateRemaps: [
           {
             from: { stableId: "authority:11" },
             to: { stableId: "intent:1:merge-output" },
