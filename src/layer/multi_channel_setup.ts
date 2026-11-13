@@ -200,10 +200,17 @@ function setupLayerPostCreation(
   totalLocalChannels: number,
   channel?: SingleChannelMetadata,
   ignoreInputMetadata = false,
+  layerSpecification: any = {},
 ) {
   if (!addedLayer.layer) return;
   const userImageLayer = addedLayer.layer as ImageUserLayer;
-  userImageLayer.fragmentMain.value = MULTICHANNEL_FRAGMENT_MAIN;
+  // A shader given in the layer specification is kept, along with its
+  // controls, since it may not have the color and contrast controls of the
+  // multi-channel shader.
+  const keepShader = layerSpecification.shader !== undefined;
+  if (!keepShader) {
+    userImageLayer.fragmentMain.value = MULTICHANNEL_FRAGMENT_MAIN;
+  }
 
   const active = channel?.active ?? channelIndex <= 3;
   addedLayer.setArchived(!active);
@@ -315,25 +322,40 @@ function setupLayerPostCreation(
     );
   };
 
+  // Settings given in the layer specification take precedence over the
+  // defaults below.
   const setVolumeRenderingSamples = () => {
+    if (layerSpecification.volumeRenderingDepthSamples !== undefined) return;
     userImageLayer.volumeRenderingDepthSamplesTarget.value =
       DEFAULT_VOLUME_RENDERING_SAMPLES;
   };
 
   const set2DBlending = () => {
-    userImageLayer.blendMode.value = BLEND_MODES.ADDITIVE;
-    userImageLayer.opacity.value = 1.0;
+    if (layerSpecification.blend === undefined) {
+      userImageLayer.blendMode.value = BLEND_MODES.ADDITIVE;
+    }
+    if (layerSpecification.opacity === undefined) {
+      userImageLayer.opacity.value = 1.0;
+    }
   };
 
   postCreationSetupFunctions.push(setVolumeRenderingSamples);
   postCreationSetupFunctions.push(set2DBlending);
-  postCreationSetupFunctions.push(setShaderDefaultsWhenReady);
+  if (!keepShader) {
+    postCreationSetupFunctions.push(setShaderDefaultsWhenReady);
+  }
 }
 
+/**
+ * @param layerSpecification Optional layer specification from which the layer was created.
+ *     Settings that it specifies, such as "opacity", are not replaced by the multi-channel
+ *     defaults.
+ */
 export function createImageLayerAsMultiChannel(
   managedLayer: Borrowed<ManagedUserLayer>,
   makeLayer: MakeLayerFn,
   checkForMultipleChannels: boolean = false,
+  layerSpecification: any = {},
 ) {
   if (managedLayer.layer?.type !== "image") return;
 
@@ -403,6 +425,7 @@ export function createImageLayerAsMultiChannel(
       totalLocalChannels,
       channelMetadata,
       ignoreInputMetadata,
+      layerSpecification,
     );
   }
   // Propagate new channel layers to all layer group subsets that contain the original managed layer

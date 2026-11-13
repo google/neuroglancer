@@ -2394,15 +2394,34 @@ export function registerVolumeLayerType(
   volumeLayerTypes.set(volumeType, layerConstructor);
 }
 
+/**
+ * Replaces the user layer of `managedLayer` with a new layer of type `layerConstructor` that is
+ * restored from the state of the existing layer.
+ *
+ * @param baseSpecification Optional layer specification that supplies the properties that are
+ *     not set by the state of the existing layer, such as properties that only apply to the new
+ *     layer type.
+ */
 export function changeLayerType(
   managedLayer: Borrowed<ManagedUserLayer>,
   layerConstructor: typeof UserLayer,
+  baseSpecification?: any,
 ) {
   const userLayer = managedLayer.layer;
   if (userLayer === null) return;
   const spec = userLayer.toJSON();
+  if (baseSpecification !== undefined) {
+    for (const [key, value] of Object.entries(baseSpecification)) {
+      if (spec[key] === undefined) spec[key] = value;
+    }
+  }
   const newUserLayer = new layerConstructor(managedLayer);
-  newUserLayer.restoreState(spec);
+  try {
+    newUserLayer.restoreState(spec);
+  } catch (e) {
+    newUserLayer.dispose();
+    throw e;
+  }
   newUserLayer.initializationDone();
   managedLayer.layer = newUserLayer;
 }
@@ -2513,17 +2532,32 @@ export class AutoUserLayer extends UserLayer {
   static type = "auto";
   static typeAbbreviation = "auto";
 
+  // Specification from which this layer was restored.  Properties that only apply to the
+  // detected layer type, such as "opacity" for an image layer, are not part of the state of this
+  // layer, and are instead passed on when this layer is replaced by the detected layer type.
+  private specification: any = {};
+
+  restoreState(specification: any) {
+    this.specification = specification;
+    super.restoreState(specification);
+  }
+
   activateDataSubsources(subsources: Iterable<LoadedDataSubsource>) {
     const layerConstructor =
       detectLayerTypeFromSubsources(subsources)?.layerConstructor;
     if (layerConstructor !== undefined) {
-      changeLayerType(this.managedLayer, layerConstructor);
+      changeLayerType(this.managedLayer, layerConstructor, this.specification);
       this.registerDisposer(
         this.managedLayer.readyStateChanged.add(() => {
           if (this.managedLayer.isReady()) {
             // If you want to restore the old auto image setup, pass true here
             // This will then make the previous image layer setup
-            createImageLayerAsMultiChannel(this.managedLayer, makeLayer);
+            createImageLayerAsMultiChannel(
+              this.managedLayer,
+              makeLayer,
+              false,
+              this.specification,
+            );
           }
         }),
       );
