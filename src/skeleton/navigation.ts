@@ -793,11 +793,7 @@ const TARGET_FINDERS: Record<
     getBranchEnd(graph, nodeId),
   [SkeletonNavigation.NEXT_LEVEL_NODE]: getNextCollapsedLevelNode,
   [SkeletonNavigation.NEAREST_OPEN_LEAF]: (graph, nodeId) =>
-    getOpenLeaves(graph, nodeId).sort((leftLeaf, rightLeaf) =>
-      leftLeaf.distance === rightLeaf.distance
-        ? bigintCompare(leftLeaf.nodeId, rightLeaf.nodeId)
-        : leftLeaf.distance - rightLeaf.distance,
-    )[0],
+    getOpenLeaves(graph, nodeId)[0],
 };
 
 export class SkeletonNavigator {
