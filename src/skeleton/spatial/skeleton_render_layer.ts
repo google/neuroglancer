@@ -69,6 +69,7 @@ import {
   type SkeletonShaderContext,
   type SkeletonShaderParameters,
   type VertexAttributeRenderInfo,
+  skeletonShaderEmitsAlpha,
   type ViewSpecificSkeletonRenderingOptions,
 } from "#src/skeleton/frontend.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/navigation.js";
@@ -1038,7 +1039,11 @@ gl_Position = uChunkToClip * vec4(uTranslation + boxVertex * uChunkDataSize, 1.0
   }
 
   get isTransparent() {
-    const { objectAlpha, hiddenObjectAlpha } = this.base.displayState;
+    const { objectAlpha, hiddenObjectAlpha, skeletonRenderingOptions } =
+      this.base.displayState;
+    if (skeletonShaderEmitsAlpha(skeletonRenderingOptions.shader.value)) {
+      return true;
+    }
     const opaque =
       (objectAlpha.value == 1.0 &&
         (hiddenObjectAlpha.value == 1.0 || hiddenObjectAlpha.value == 0.0)) ||

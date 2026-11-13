@@ -1235,6 +1235,10 @@ export class SkeletonLayer
   }
 }
 
+export function skeletonShaderEmitsAlpha(shader: string) {
+  return stripComments(shader).includes("emitRGBA");
+}
+
 export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   private renderHelper: RenderHelper;
   private renderOptions: ViewSpecificSkeletonRenderingOptions;
@@ -1263,9 +1267,9 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
     const { displayState } = this.base;
     return (
       displayState.objectAlpha.value < 1.0 ||
-      stripComments(
+      skeletonShaderEmitsAlpha(
         displayState.skeletonRenderingOptions.shader.value,
-      ).includes("emitRGBA")
+      )
     );
   }
 
