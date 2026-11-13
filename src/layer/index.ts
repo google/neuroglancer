@@ -481,6 +481,8 @@ export class UserLayer extends RefCounted {
     const selectionState = (this.selectionState = {} as any);
     this.initializeSelectionState(selectionState);
     this.decrementLoadingCounter();
+    // Layers can be published before initialization, including while sources load.
+    this.layersChanged.dispatch();
   }
 
   getLegacyDataSourceSpecifications(
@@ -1250,6 +1252,7 @@ export class LayerSelectedValues extends RefCounted {
         const userLayer = layer.layer;
         if (layer.visible && userLayer !== null) {
           const { selectionState } = userLayer;
+          if (selectionState === undefined) continue;
           userLayer.resetSelectionState(selectionState);
           selectionState.generation = generation;
           userLayer.captureSelectionState(selectionState, mouseState);
@@ -1261,7 +1264,7 @@ export class LayerSelectedValues extends RefCounted {
   get<T extends UserLayer>(userLayer: T): T["selectionState"] | undefined {
     this.update();
     const { selectionState } = userLayer;
-    if (selectionState.generation !== this.changed.count) return undefined;
+    if (selectionState?.generation !== this.changed.count) return undefined;
     return selectionState;
   }
 
