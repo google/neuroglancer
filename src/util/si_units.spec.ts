@@ -16,10 +16,55 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  formatValueWithUnit,
+  parseValueWithUnit,
+  pickDisplayUnit,
+  roundValueToDisplayUnit,
   parseScale,
   scaleByExp10,
   formatScaleWithUnit,
 } from "#src/util/si_units.js";
+
+describe("property value units", () => {
+  it("selects and converts a linear SI display unit", () => {
+    const unit = pickDisplayUnit([5e-9, 30e-9], "m");
+    expect(unit).toEqual({ scale: 1e-9, suffix: "nm" });
+    expect(formatValueWithUnit(5e-9, unit)).toBe("5.00nm");
+    expect(parseValueWithUnit("5nm", "m")).toBe(5e-9);
+    expect(parseValueWithUnit("5", "m", unit)).toBe(5e-9);
+  });
+
+  it("applies SI prefixes to powered units", () => {
+    const unit = pickDisplayUnit([1e-12, 25e-12], "m^2");
+    expect(unit).toEqual({ scale: 1e-12, suffix: "µm^2" });
+    expect(formatValueWithUnit(25e-12, unit)).toBe("25.00µm^2");
+    expect(parseValueWithUnit("25um^2", "m^2")).toBe(25e-12);
+  });
+
+  it("rejects units that do not match the property", () => {
+    expect(parseValueWithUnit("5ns", "m")).toBeUndefined();
+  });
+
+  it("defaults widget interactions to two decimals", () => {
+    const unit = { scale: 1e-9, suffix: "nm" };
+    const rounded = roundValueToDisplayUnit(26.049236e-9, unit);
+    expect(formatValueWithUnit(rounded, unit)).toBe("26.05nm");
+  });
+
+  it("rounds initial unlimited bounds outward", () => {
+    const unit = { scale: 1e-9, suffix: "nm" };
+    expect(formatValueWithUnit(25.001e-9, unit, "down")).toBe("25.00nm");
+    expect(formatValueWithUnit(29.999e-9, unit, "up")).toBe("30.00nm");
+    expect(formatValueWithUnit(25e-9, unit, "down")).toBe("25.00nm");
+    expect(formatValueWithUnit(30e-9, unit, "up")).toBe("30.00nm");
+  });
+
+  it("preserves manually entered additional decimal places", () => {
+    const unit = { scale: 1e-9, suffix: "nm" };
+    const value = parseValueWithUnit("26.1234nm", "m", unit)!;
+    expect(formatValueWithUnit(value, unit)).toBe("26.1234nm");
+  });
+});
 
 describe("parseScale", () => {
   const patterns: [string, { scale: number; unit: string } | undefined][] = [

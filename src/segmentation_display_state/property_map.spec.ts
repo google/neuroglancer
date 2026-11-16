@@ -21,6 +21,7 @@ import {
   parseSegmentQuery,
   PreprocessedSegmentPropertyMap,
   SegmentPropertyMap,
+  unparseSegmentQuery,
 } from "#src/segmentation_display_state/property_map.js";
 import { DataType } from "#src/util/data_type.js";
 
@@ -645,5 +646,11 @@ describe("parseSegmentQuery", () => {
         ],
       }
     `);
+  });
+
+  test("serializes regular expressions with canonical delimiters", () => {
+    const query = parseSegmentQuery(map, "/foo/");
+    if ("errors" in query) throw new Error("Expected a valid query");
+    expect(unparseSegmentQuery(map, query)).toBe("/foo/");
   });
 });
