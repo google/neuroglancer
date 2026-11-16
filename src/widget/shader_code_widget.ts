@@ -77,18 +77,15 @@ export class ShaderCodeWidget extends RefCounted {
     }
   }, SHADER_UPDATE_DELAY);
 
-  constructor(
-    public state: ShaderCodeState,
-    theme: "light" | "dark" = "dark",
-  ) {
+  constructor(public state: ShaderCodeState) {
     super();
     this.textEditor = CodeMirror((_element) => {}, {
       value: this.state.fragment.value,
       mode: "glsl",
-      theme: theme === "dark" ? "material-darker" : "default",
+      theme: "material-darker",
       gutters: ["CodeMirror-lint-markers"],
     });
-    this.element.style.colorScheme = theme;
+    this.element.style.colorScheme = "dark";
     this.textEditor.on("change", () => {
       this.setValidState(undefined);
       this.debouncedValueUpdater();

@@ -19,6 +19,7 @@
  */
 
 import "codemirror/lib/codemirror.css";
+import "codemirror/theme/material-darker.css";
 import "codemirror/mode/javascript/javascript.js";
 import "codemirror/addon/fold/foldcode.js";
 import "codemirror/addon/fold/foldgutter.js";
@@ -69,6 +70,7 @@ export class StateEditorDialog extends Overlay {
     this.textEditor = CodeMirror((_element) => {}, <any>{
       value: "",
       mode: { name: "javascript", json: true },
+      theme: "material-darker",
       foldGutter: true,
       gutters: ["CodeMirror-lint-markers", "CodeMirror-foldgutter"],
     });

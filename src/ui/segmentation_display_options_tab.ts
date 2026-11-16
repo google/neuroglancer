@@ -29,33 +29,21 @@ import {
 import { ShaderControls } from "#src/widget/shader_controls.js";
 import { Tab } from "#src/widget/tab_view.js";
 
-function makeSegmentColorShaderCodeWidget(
-  layer: SegmentationUserLayer,
-  theme?: "light" | "dark",
-) {
-  return new ShaderCodeWidget(
-    {
-      fragment: layer.displayState.fragmentSegmentColor,
-      shaderError: layer.displayState.shaderError,
-      shaderControlState: layer.displayState.segmentColorShaderControlState,
-    },
-    theme,
-  );
+function makeSegmentColorShaderCodeWidget(layer: SegmentationUserLayer) {
+  return new ShaderCodeWidget({
+    fragment: layer.displayState.fragmentSegmentColor,
+    shaderError: layer.displayState.shaderError,
+    shaderControlState: layer.displayState.segmentColorShaderControlState,
+  });
 }
 
-function makeSkeletonShaderCodeWidget(
-  layer: SegmentationUserLayer,
-  theme?: "light" | "dark",
-) {
-  return new ShaderCodeWidget(
-    {
-      fragment: layer.displayState.skeletonRenderingOptions.shader,
-      shaderError: layer.displayState.skeletonRenderingOptions.shaderError,
-      shaderControlState:
-        layer.displayState.skeletonRenderingOptions.shaderControlState,
-    },
-    theme,
-  );
+function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
+  return new ShaderCodeWidget({
+    fragment: layer.displayState.skeletonRenderingOptions.shader,
+    shaderError: layer.displayState.skeletonRenderingOptions.shaderError,
+    shaderControlState:
+      layer.displayState.skeletonRenderingOptions.shaderControlState,
+  });
 }
 
 export class DisplayOptionsTab extends Tab {
@@ -91,7 +79,7 @@ export class DisplayOptionsTab extends Tab {
     }
 
     const segmentColorCodeWidget = this.registerDisposer(
-      makeSegmentColorShaderCodeWidget(layer, "light"),
+      makeSegmentColorShaderCodeWidget(layer),
     );
     element.appendChild(
       makeShaderCodeWidgetTopRow(
@@ -183,7 +171,7 @@ class SegmentColorShaderCodeOverlay extends Overlay {
   constructor(public layer: SegmentationUserLayer) {
     super();
     this.codeWidget = this.registerDisposer(
-      makeSegmentColorShaderCodeWidget(layer, "light"),
+      makeSegmentColorShaderCodeWidget(layer),
     );
     this.content.classList.add(
       "neuroglancer-segmentation-layer-segment-color-shader-overlay",
@@ -198,7 +186,7 @@ class SkeletonShaderCodeOverlay extends Overlay {
   constructor(public layer: SegmentationUserLayer) {
     super();
     this.codeWidget = this.registerDisposer(
-      makeSkeletonShaderCodeWidget(layer, "light"),
+      makeSkeletonShaderCodeWidget(layer),
     );
     this.content.classList.add(
       "neuroglancer-segmentation-layer-skeleton-shader-overlay",
