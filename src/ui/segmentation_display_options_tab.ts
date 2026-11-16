@@ -29,21 +29,33 @@ import {
 import { ShaderControls } from "#src/widget/shader_controls.js";
 import { Tab } from "#src/widget/tab_view.js";
 
-function makeSegmentColorShaderCodeWidget(layer: SegmentationUserLayer) {
-  return new ShaderCodeWidget({
-    fragment: layer.displayState.fragmentSegmentColor,
-    shaderError: layer.displayState.shaderError,
-    shaderControlState: layer.displayState.segmentColorShaderControlState,
-  });
+function makeSegmentColorShaderCodeWidget(
+  layer: SegmentationUserLayer,
+  theme?: "light" | "dark",
+) {
+  return new ShaderCodeWidget(
+    {
+      fragment: layer.displayState.fragmentSegmentColor,
+      shaderError: layer.displayState.shaderError,
+      shaderControlState: layer.displayState.segmentColorShaderControlState,
+    },
+    theme,
+  );
 }
 
-function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
-  return new ShaderCodeWidget({
-    fragment: layer.displayState.skeletonRenderingOptions.shader,
-    shaderError: layer.displayState.skeletonRenderingOptions.shaderError,
-    shaderControlState:
-      layer.displayState.skeletonRenderingOptions.shaderControlState,
-  });
+function makeSkeletonShaderCodeWidget(
+  layer: SegmentationUserLayer,
+  theme?: "light" | "dark",
+) {
+  return new ShaderCodeWidget(
+    {
+      fragment: layer.displayState.skeletonRenderingOptions.shader,
+      shaderError: layer.displayState.skeletonRenderingOptions.shaderError,
+      shaderControlState:
+        layer.displayState.skeletonRenderingOptions.shaderControlState,
+    },
+    theme,
+  );
 }
 
 export class DisplayOptionsTab extends Tab {
@@ -171,7 +183,7 @@ class SegmentColorShaderCodeOverlay extends Overlay {
   constructor(public layer: SegmentationUserLayer) {
     super();
     this.codeWidget = this.registerDisposer(
-      makeSegmentColorShaderCodeWidget(layer),
+      makeSegmentColorShaderCodeWidget(layer, "light"),
     );
     this.content.classList.add(
       "neuroglancer-segmentation-layer-segment-color-shader-overlay",
@@ -186,7 +198,7 @@ class SkeletonShaderCodeOverlay extends Overlay {
   constructor(public layer: SegmentationUserLayer) {
     super();
     this.codeWidget = this.registerDisposer(
-      makeSkeletonShaderCodeWidget(layer),
+      makeSkeletonShaderCodeWidget(layer, "light"),
     );
     this.content.classList.add(
       "neuroglancer-segmentation-layer-skeleton-shader-overlay",

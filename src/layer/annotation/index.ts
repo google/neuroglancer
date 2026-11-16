@@ -846,19 +846,27 @@ export class AnnotationUserLayer extends Base {
   static supportsLayerBarColorSyncOption = true;
 }
 
-function makeShaderCodeWidget(layer: AnnotationUserLayer) {
-  return new ShaderCodeWidget({
-    shaderError: layer.annotationDisplayState.shaderError,
-    fragment: layer.annotationDisplayState.shader,
-    shaderControlState: layer.annotationDisplayState.shaderControls,
-  });
+function makeShaderCodeWidget(
+  layer: AnnotationUserLayer,
+  theme?: "light" | "dark",
+) {
+  return new ShaderCodeWidget(
+    {
+      shaderError: layer.annotationDisplayState.shaderError,
+      fragment: layer.annotationDisplayState.shader,
+      shaderControlState: layer.annotationDisplayState.shaderControls,
+    },
+    theme,
+  );
 }
 
 class ShaderCodeOverlay extends Overlay {
   codeWidget: ShaderCodeWidget;
   constructor(public layer: AnnotationUserLayer) {
     super();
-    this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
+    this.codeWidget = this.registerDisposer(
+      makeShaderCodeWidget(this.layer, "light"),
+    );
     this.content.appendChild(this.codeWidget.element);
     this.codeWidget.textEditor.refresh();
   }

@@ -141,12 +141,18 @@ export class SingleMeshUserLayer extends UserLayer {
   static typeAbbreviation = "msh";
 }
 
-function makeShaderCodeWidget(layer: SingleMeshUserLayer) {
-  return new ShaderCodeWidget({
-    fragment: layer.displayState.fragmentMain,
-    shaderError: layer.displayState.shaderError,
-    shaderControlState: layer.displayState.shaderControlState,
-  });
+function makeShaderCodeWidget(
+  layer: SingleMeshUserLayer,
+  theme?: "light" | "dark",
+) {
+  return new ShaderCodeWidget(
+    {
+      fragment: layer.displayState.fragmentMain,
+      shaderError: layer.displayState.shaderError,
+      shaderControlState: layer.displayState.shaderControlState,
+    },
+    theme,
+  );
 }
 
 class VertexAttributeWidget extends RefCounted {
@@ -260,7 +266,9 @@ class ShaderCodeOverlay extends Overlay {
     this.attributeWidget = this.registerDisposer(
       makeVertexAttributeWidget(layer),
     );
-    this.codeWidget = this.registerDisposer(makeShaderCodeWidget(layer));
+    this.codeWidget = this.registerDisposer(
+      makeShaderCodeWidget(layer, "light"),
+    );
     this.content.classList.add("neuroglancer-single-mesh-layer-shader-overlay");
     this.content.appendChild(this.attributeWidget.element);
     this.content.appendChild(this.codeWidget.element);

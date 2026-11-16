@@ -539,12 +539,15 @@ void main() {
   static typeAbbreviation = "img";
 }
 
-function makeShaderCodeWidget(layer: ImageUserLayer) {
-  return new ShaderCodeWidget({
-    shaderError: layer.shaderError,
-    fragment: layer.fragmentMain,
-    shaderControlState: layer.shaderControlState,
-  });
+function makeShaderCodeWidget(layer: ImageUserLayer, theme?: "light" | "dark") {
+  return new ShaderCodeWidget(
+    {
+      shaderError: layer.shaderError,
+      fragment: layer.fragmentMain,
+      shaderControlState: layer.shaderControlState,
+    },
+    theme,
+  );
 }
 
 const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
@@ -662,7 +665,9 @@ class ShaderCodeOverlay extends Overlay {
   codeWidget: ShaderCodeWidget;
   constructor(public layer: ImageUserLayer) {
     super();
-    this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
+    this.codeWidget = this.registerDisposer(
+      makeShaderCodeWidget(this.layer, "light"),
+    );
     this.content.classList.add("neuroglancer-image-layer-shader-overlay");
     this.content.appendChild(this.codeWidget.element);
     this.codeWidget.textEditor.refresh();
