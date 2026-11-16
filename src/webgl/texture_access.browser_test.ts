@@ -62,7 +62,7 @@ outputValue = readValue(uOffset);
       const { shader } = tester;
       shader.bind();
 
-      const textureUnit = shader.textureUnit(textureUnitSymbol);
+      const textureUnit = shader.textureUnit(textureUnitSymbol)!;
       const texture = gl.createTexture();
       tester.registerDisposer(() => {
         gl.deleteTexture(texture);

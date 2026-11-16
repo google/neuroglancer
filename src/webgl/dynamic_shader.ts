@@ -45,6 +45,30 @@ export function makeWatchableShaderError() {
   >(undefined);
 }
 
+export function makeAggregateWatchableShaderError(
+  refCounted: RefCounted,
+  shaderErrors: readonly WatchableShaderError[],
+) {
+  const aggregate = makeWatchableShaderError();
+  const update = () => {
+    let pending = false;
+    for (const shaderError of shaderErrors) {
+      const value = shaderError.value;
+      if (value !== undefined && value !== null) {
+        aggregate.value = value;
+        return;
+      }
+      pending ||= value === undefined;
+    }
+    aggregate.value = pending ? undefined : null;
+  };
+  for (const shaderError of shaderErrors) {
+    refCounted.registerDisposer(shaderError.changed.add(update));
+  }
+  update();
+  return aggregate;
+}
+
 export type TrackableFragmentMain = TrackableValue<string>;
 
 export function makeTrackableFragmentMain(value: string) {
