@@ -201,13 +201,13 @@ export class AccordionTab extends Tab {
     this.element.appendChild(container);
 
     chevron.classList.add("neuroglancer-accordion-chevron");
-    chevron.classList.add("neuroglancer-icon");
+    chevron.setAttribute("aria-hidden", "true");
     chevron.innerHTML = svg_chevron_down;
     const headerText = document.createElement("span");
     headerText.classList.add("neuroglancer-accordion-header-text");
     headerText.textContent = option.displayName;
-    header.appendChild(headerText);
     header.appendChild(chevron);
+    header.appendChild(headerText);
 
     container.dataset.expanded = String(option.defaultExpanded ?? false);
     // Adding a child element automatically sets the hidden attribute to false

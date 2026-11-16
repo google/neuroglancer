@@ -36,37 +36,58 @@
   .neuroglancer-accordion-header
   .neuroglancer-accordion-chevron
   svg {
-  transform: rotate(180deg); /* Rotate chevron when expanded */
+  transform: rotate(0deg);
 }
 
 .neuroglancer-accordion-chevron {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
 }
 
 .neuroglancer-accordion-chevron svg {
-  width: 20px;
-  height: 20px;
-  fill: rgba(255, 255, 255, 0.8); /* Chevron color */
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+  transform: rotate(-90deg);
 }
 
 .neuroglancer-accordion-header {
+  box-sizing: border-box;
+  min-height: 24px;
   padding: 8px 2px;
   cursor: pointer;
-  justify-content: space-between;
+  gap: 4px;
   align-items: center;
   display: flex;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 16px;
+  user-select: none;
+}
+
+.neuroglancer-accordion-header:hover {
+  background-color: #222;
+  color: white;
 }
 
 .neuroglancer-accordion-header-text {
-  color: rgba(255, 255, 255, 0.8);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .neuroglancer-accordion-body {
-  padding: 8px 2px;
+  padding: 0 4px 2px;
   overflow-x: visible;
   overflow-y: visible;
-  padding-top: 0;
   flex-direction: column;
 }
 

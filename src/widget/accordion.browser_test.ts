@@ -22,6 +22,7 @@ import {
 } from "#src/widget/accordion.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
 import "#src/ui/annotations.css";
+import "#src/widget/icon.css";
 
 function makeAccordionOptions(): AccordionOptions {
   return {
@@ -92,6 +93,41 @@ describe("accordion", () => {
     // With no section specified, appends to default section
     tab.appendChild(child);
     expect(tab.sections[0].body.contains(child)).toBe(true);
+  });
+
+  it("preserves header padding and dividers with an outline disclosure icon", () => {
+    const state = new AccordionState(makeAccordionOptions());
+    const tab = new AccordionTab(state);
+    tab.element.style.cssText = "width: 300px; font: 10pt sans-serif";
+    const content = document.createElement("div");
+    content.style.height = "40px";
+    tab.appendChild(content, "second");
+    document.body.appendChild(tab.element);
+
+    try {
+      const section = tab.sections[1];
+      const icon = section.chevron.querySelector("svg")!;
+      expect(getComputedStyle(section.header).padding).toBe("8px 2px");
+      expect(getComputedStyle(section.container).borderBottomColor).toBe(
+        "rgb(221, 221, 221)",
+      );
+      expect(
+        section.container.getBoundingClientRect().height -
+          content.getBoundingClientRect().height,
+      ).toBeLessThanOrEqual(36);
+      expect(getComputedStyle(icon).fill).toBe("none");
+      expect(getComputedStyle(icon).stroke).not.toBe("none");
+      expect(icon.getBoundingClientRect().width).toBe(14);
+      expect(section.header.firstElementChild).toBe(section.chevron);
+      expect(getComputedStyle(icon).transform).toBe("matrix(1, 0, 0, 1, 0, 0)");
+      section.header.click();
+      expect(getComputedStyle(icon).transform).not.toBe(
+        "matrix(1, 0, 0, 1, 0, 0)",
+      );
+    } finally {
+      tab.dispose();
+      state.dispose();
+    }
   });
 
   it("keeps the annotation list bounded and scrollable", async () => {
