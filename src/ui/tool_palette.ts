@@ -1080,16 +1080,16 @@ export class MultiToolPaletteManager extends RefCounted {
     this.updatePanels();
     this.registerDisposer(
       this.sidePanelManager.display.multiChannelSetupFinished.add(
-        ({ name, toolsJson }) => {
+        (paletteName, paletteToolsJson) => {
           const palette = this.state.addNew({
-            name: `${name} controls`,
+            name: paletteName,
             location: {
               ...DEFAULT_TOOL_PALETTE_PANEL_LOCATION,
               side: "left",
               row: 0,
             },
           });
-          for (const toolJson of toolsJson) {
+          for (const toolJson of paletteToolsJson) {
             palette.tools.insert(toolJson);
           }
         },

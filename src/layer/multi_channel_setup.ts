@@ -502,10 +502,10 @@ export function createImageLayerAsMultiChannel(
     }
   }
   Promise.all(newRelatedLayers.map(whenLayerTypeDetected)).then(() => {
-    root.display.multiChannelSetupFinished.dispatch({
-      name: startingName,
-      toolsJson: getPaletteToolsJson([managedLayer, ...newLayers]),
-    });
+    root.display.multiChannelSetupFinished.dispatch(
+      `${startingName} controls`,
+      getPaletteToolsJson([managedLayer, ...newLayers]),
+    );
   });
   postCreationSetupFunctions.forEach((fn) => fn());
   reverseGlobalDimOrderIfNeeded(managedLayer);

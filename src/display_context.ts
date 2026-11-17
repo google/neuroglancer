@@ -428,12 +428,6 @@ interface PanelMonitorState {
   addedToResizeObserver?: boolean;
 }
 
-export interface MultiChannelSetup {
-  readonly name: string;
-  // Palette JSON of the tools for the layers that the setup created.
-  readonly toolsJson: readonly object[];
-}
-
 export class DisplayContext extends RefCounted implements FrameNumberCounter {
   canvas = document.createElement("canvas");
   gl: GL;
@@ -441,7 +435,9 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   updateFinished = new NullarySignal();
   continuousCameraMotionStarted = new NullarySignal();
   continuousCameraMotionFinished = new NullarySignal();
-  multiChannelSetupFinished = new Signal<(setup: MultiChannelSetup) => void>();
+  multiChannelSetupFinished = new Signal<
+    (paletteName: string, paletteToolsJson: readonly object[]) => void
+  >();
   changed = this.updateFinished;
   panels = new Set<RenderedPanel>();
   canvasRect: DOMRect | undefined;
