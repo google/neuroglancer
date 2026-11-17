@@ -36,7 +36,6 @@ import type { Borrowed } from "#src/util/disposable.js";
 import type { vec3 } from "#src/util/geom.js";
 import { dataTypeIntervalEqual, defaultDataTypeRange } from "#src/util/lerp.js";
 import type { ShaderImageInvlerpControl } from "#src/webgl/shader_ui_controls.js";
-import { SHADER_CONTROL_TOOL_ID } from "#src/widget/shader_controls.js";
 
 function changeLayerName(managedLayer: ManagedUserLayer, newName: string) {
   newName = managedLayer.manager.root.layerManager.getUniqueLayerName(newName);
@@ -203,8 +202,8 @@ function whenLayerTypeDetected(managedLayer: ManagedUserLayer) {
 function getPaletteToolsJson(layers: readonly ManagedUserLayer[]): object[] {
   const toolsByLayerType: Partial<Record<string, object[]>> = {
     image: [
-      { type: SHADER_CONTROL_TOOL_ID, control: "contrast" },
-      { type: SHADER_CONTROL_TOOL_ID, control: "color" },
+      { type: "shaderControl", control: "contrast" },
+      { type: "shaderControl", control: "color" },
     ],
     segmentation: [{ type: SELECTED_ALPHA_JSON_KEY }],
   };
