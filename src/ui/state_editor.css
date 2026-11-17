@@ -14,8 +14,15 @@
  * limitations under the License.
  */
 
-.neuroglancer-state-editor {
-  width: 80%;
+.neuroglancer-state-editor .neuroglancer-state-editor-text-editor {
+  width: 80vw;
+  height: 65vh;
+}
+
+.neuroglancer-state-editor-save-container {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
 }
 
 .neuroglancer-state-editor .CodeMirror-foldgutter {
@@ -25,9 +32,4 @@
 .neuroglancer-state-editor .CodeMirror-foldmarker {
   color: #82aaff;
   text-shadow: none;
-}
-
-.close-button {
-  position: absolute;
-  right: 15px;
 }

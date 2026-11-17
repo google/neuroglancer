@@ -18,7 +18,6 @@ import { buildShaderPropertyList } from "#src/layer/annotation/shader_ui_propert
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import { SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID } from "#src/layer/segmentation/json_keys.js";
 import { LAYER_CONTROLS } from "#src/layer/segmentation/layer_controls.js";
-import { Overlay } from "#src/overlay.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { addLayerControlToOptionsTab } from "#src/widget/layer_control.js";
 import { LinkedLayerGroupWidget } from "#src/widget/linked_layer.js";
@@ -84,14 +83,16 @@ export class DisplayOptionsTab extends Tab {
     element.appendChild(
       makeShaderCodeWidgetTopRow(
         this.layer,
-        segmentColorCodeWidget,
-        SegmentColorShaderCodeOverlay,
+        segmentColorCodeWidget.element,
+        makeSegmentColorShaderCodeWidget,
         {
-          title: "Documentation on segmentation layer rendering",
-          href: "https://github.com/google/neuroglancer/blob/master/src/layer/segmentation/rendering.md",
+          type: "Segment color",
+          documentation: {
+            title: "Documentation on segmentation layer rendering",
+            href: "https://neuroglancer-docs.web.app/user-guide/segmentation_shaders.html",
+          },
         },
-        "neuroglancer-segmentation-dropdown-shader-header",
-        "Segment Color Shader",
+        { title: "Segment Color Shader" },
       ),
     );
     element.appendChild(segmentColorCodeWidget.element);
@@ -129,15 +130,20 @@ export class DisplayOptionsTab extends Tab {
           parent.appendChild(
             makeShaderCodeWidgetTopRow(
               this.layer,
-              codeWidget,
-              SkeletonShaderCodeOverlay,
+              codeWidget.element,
+              makeSkeletonShaderCodeWidget,
               {
-                title: "Documentation on image layer rendering",
-                href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
+                type: "Skeleton",
+                documentation: {
+                  title: "Documentation on skeleton rendering",
+                  href: "https://neuroglancer-docs.web.app/user-guide/segmentation_shaders.html",
+                },
               },
-              "neuroglancer-segmentation-dropdown-shader-header",
-              "Skeleton Shader",
-              layer.displayState.skeletonRenderingOptions.codeVisible,
+              {
+                title: "Skeleton Shader",
+                codeVisible:
+                  layer.displayState.skeletonRenderingOptions.codeVisible,
+              },
             ),
           );
           parent.appendChild(codeWidget.element);
@@ -163,35 +169,5 @@ export class DisplayOptionsTab extends Tab {
       ),
     );
     element.appendChild(skeletonControls.element);
-  }
-}
-
-class SegmentColorShaderCodeOverlay extends Overlay {
-  codeWidget: ShaderCodeWidget;
-  constructor(public layer: SegmentationUserLayer) {
-    super();
-    this.codeWidget = this.registerDisposer(
-      makeSegmentColorShaderCodeWidget(layer),
-    );
-    this.content.classList.add(
-      "neuroglancer-segmentation-layer-segment-color-shader-overlay",
-    );
-    this.content.appendChild(this.codeWidget.element);
-    this.codeWidget.textEditor.refresh();
-  }
-}
-
-class SkeletonShaderCodeOverlay extends Overlay {
-  codeWidget: ShaderCodeWidget;
-  constructor(public layer: SegmentationUserLayer) {
-    super();
-    this.codeWidget = this.registerDisposer(
-      makeSkeletonShaderCodeWidget(layer),
-    );
-    this.content.classList.add(
-      "neuroglancer-segmentation-layer-skeleton-shader-overlay",
-    );
-    this.content.appendChild(this.codeWidget.element);
-    this.codeWidget.textEditor.refresh();
   }
 }

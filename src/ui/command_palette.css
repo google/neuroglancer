@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-.neuroglancer-command-palette.overlay-content {
-  background: #222;
-  color: #fff;
-  padding: 0;
+.neuroglancer-command-palette.neuroglancer-overlay-content {
   width: 500px;
   max-width: 90vw;
   display: flex;
@@ -25,7 +22,6 @@
   max-height: 60vh;
   top: 20%;
   transform: translate(-50%, 0);
-  font-family: sans-serif;
 }
 
 .neuroglancer-command-palette-input-row {
