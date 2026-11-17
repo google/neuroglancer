@@ -19,27 +19,36 @@ import { RefCounted } from "#src/util/disposable.js";
 import {
   makeAggregateWatchableShaderError,
   makeWatchableShaderError,
-  wrapUserShaderMain,
+  shaderCodeWithLineDirective,
 } from "#src/webgl/dynamic_shader.js";
-import { ShaderCompilationError } from "#src/webgl/shader.js";
+import { ShaderBuilder, ShaderCompilationError } from "#src/webgl/shader.js";
+import { webglTest } from "#src/webgl/testing.js";
 
-describe("wrapUserShaderMain", () => {
-  // The whole output is the contract, the trailing reset most of all: three call
-  // sites append generated code after it.
-  it("renames main and hands line attribution back", () => {
-    expect(wrapUserShaderMain("void main() {\n  emitDefault();\n}")).toBe(
-      "\n#define main userMain\n" +
-        "\n#line 0 1\n" +
-        "void main() {\n  emitDefault();\n}" +
-        "\n#undef main\n#line 1 0\n",
-    );
-  });
+describe("shaderCodeWithLineDirective", () => {
+  it("does not blame the user's code for an error in code generated after it", () => {
+    webglTest((gl) => {
+      const builder = new ShaderBuilder(gl);
+      builder.addOutputBuffer("vec4", "out_color", 0);
+      builder.setVertexMain("gl_Position = vec4(0.0);");
+      builder.addFragmentCode(
+        shaderCodeWithLineDirective("float userValue() {\n  return 1.0;\n}"),
+      );
+      builder.addFragmentCode(
+        "float generatedValue() { return undefinedName; }\n",
+      );
+      builder.setFragmentMain("out_color = vec4(generatedValue());");
 
-  it("ends outside the user's source string", () => {
-    const wrapped = wrapUserShaderMain("void main() {}");
-    const directives = wrapped.match(/#line \d+ \d+/g);
-    expect(directives).toEqual(["#line 0 1", "#line 1 0"]);
-    expect(wrapped.endsWith("#line 1 0\n")).toBe(true);
+      let error: unknown;
+      try {
+        builder.build();
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(ShaderCompilationError);
+      const { errorMessages } = error as ShaderCompilationError;
+      expect(errorMessages.length).toBeGreaterThan(0);
+      expect(errorMessages.map(({ file }) => file)).not.toContain(1);
+    });
   });
 });
 
