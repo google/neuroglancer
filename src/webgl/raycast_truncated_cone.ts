@@ -106,6 +106,7 @@ RaycastResult intersectRaycastPrimitive() {
   VectorSplit dirSplit = splitAlongDir(ray.direction, axisDir);
   highp float perpSpeedSq = dot(dirSplit.perp, dirSplit.perp);
   highp float radiusRate = taperRate * dirSplit.parallelDist;
+  highp float radiusAtOrigin = radiusA + taperRate * originSplit.parallelDist;
 
   highp float quadraticA = perpSpeedSq - radiusRate * radiusRate;
   highp float nearHitDist;
@@ -126,8 +127,6 @@ RaycastResult intersectRaycastPrimitive() {
     nearHitDist = closestDist + roots.nearRoot;
     farHitDist = closestDist + roots.farRoot;
   } else {
-    highp float radiusAtOrigin =
-        radiusA + taperRate * originSplit.parallelDist;
     highp float quadraticB =
         dot(originSplit.perp, dirSplit.perp) - radiusAtOrigin * radiusRate;
     highp float quadraticC =
@@ -147,10 +146,12 @@ RaycastResult intersectRaycastPrimitive() {
   }
 
   highp float hitDist = nearHitDist;
-  bool rayOriginWithinConeAxis =
+  bool rayOriginInsideCone =
       originSplit.parallelDist >= 0.0 &&
-      originSplit.parallelDist <= axisLength;
-  if (!(hitDist >= 0.0) && rayOriginWithinConeAxis) return raycastMiss();
+      originSplit.parallelDist <= axisLength &&
+      dot(originSplit.perp, originSplit.perp) <
+          radiusAtOrigin * radiusAtOrigin;
+  if (!(hitDist >= 0.0) && rayOriginInsideCone) return raycastMiss();
 
   highp float axialDist =
       originSplit.parallelDist + hitDist * dirSplit.parallelDist;
