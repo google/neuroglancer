@@ -15,34 +15,30 @@
  */
 
 /**
- * @file Raycast truncated cone drawn on a camera-facing quad. Symbols below say
- * cone for brevity. The surface is always the truncated one, and its ends are open.
+ * @file Raycast truncated cone with open ends, drawn on a camera-facing quad.
+ * Symbols say cone for short.
  *
- * The radius is given at each end and runs linearly between them, and equal radii
- * give an exact cylinder. A cone sized for a constant on-screen width needs the
- * taper, because the far end of a receding cone sits at a larger radius than the
- * near end.
+ * The radius changes linearly between the ends, because a constant on-screen
+ * width needs a larger radius at the far end of a receding cone.
  *
- * Each end also takes a clip radius, which removes the part of the surface that a
- * primitive drawn at that end covers.
+ * Each end also takes a clip radius, within which the surface is not drawn.
  */
 
 import { defineRaycastAxialObbQuad } from "#src/webgl/raycast_primitive.js";
 import type { ShaderBuilder } from "#src/webgl/shader.js";
 
-// Scaling the two radius vectors comes last. Scaling before the second cross
-// product would normalise the zero vector when a radius is zero, which GLSL ES
-// leaves undefined. The second product is already unit length, being the cross of
-// two perpendicular unit vectors.
+// The radius vectors are scaled last, because GLSL ES leaves normalising a zero
+// vector undefined.
 //
-// The bound uses the wider of the two radii, which covers the whole surface.
+// The second cross product is unit length, because its inputs are perpendicular
+// unit vectors.
 const glsl_emitRaycastCone = `
 void emitRaycastCone(highp vec3 endpointA, highp vec3 endpointB,
                      highp float radiusA, highp float radiusB,
                      highp float clipRadiusA, highp float clipRadiusB) {
   highp float widestRadius = max(radiusA, radiusB);
-  // A segment with both endpoints behind the eye is given zero radii, so this runs
-  // every frame. Positive form, so a non-finite radius culls too.
+  // A segment wholly behind the eye gets zero radii.
+  // Positive form, so a non-finite radius culls too.
   if (!(widestRadius > 0.0)) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
@@ -65,8 +61,8 @@ void emitRaycastCone(highp vec3 endpointA, highp vec3 endpointB,
 }
 `;
 
-// A surface point sits one local radius from the axis, so its distance to an
-// endpoint follows from the axial distance alone.
+// A surface point is radiusAtHit from the axis, so its distance to an endpoint
+// follows from axialDist alone.
 const glsl_coneEndClipped = `
 bool coneEndClipped(highp float axialDist, highp float radiusAtHit) {
   highp float axialDistFromB = axialDist - vConeAxis.w;
@@ -78,28 +74,27 @@ bool coneEndClipped(highp float axialDist, highp float radiusAtHit) {
 }
 `;
 
-// Across the axis the cone is a circle whose radius grows along the axis, so the
-// in-plane test is a quadratic rather than a fixed-radius circle.
+// quadraticA is negative for a ray inside the taper angle, and zero along it.
+// Such a ray can still meet the finite cone through an open end.
 //
-// quadraticA is negative for a ray inside the taper angle and zero on its
-// asymptote. Both can still meet a finite cone, particularly when it widens away
-// from a camera looking through an open end.
+// Measured from the ray's closest approach to the axis, the constant term is a
+// difference of two small numbers.
 //
-// The quadratic is measured from the ray's closest approach to the axis, so that
-// its constant term is a difference of two small numbers. The far root is needed
-// when looking through an open end: the near hit on the infinite cone can be past
-// that end while the far hit lies on the finite surface. A near hit behind the ray
-// origin is rejected only when the origin is within the cone's axial interval;
-// there the camera is inside the finite cone and using the far root would fill the
-// view from inside.
+// Through an open end, the near hit can lie past that end while the far hit is
+// on the surface.
 //
-// The interval test also holds the radius between the two end radii, so a surface
-// past a cone apex never draws. The normal is the gradient of the surface equation,
-// whose axial term is what the taper adds.
+// With the ray origin within the axial interval, a near hit behind it is a miss,
+// so that the far root cannot fill the view from inside.
+//
+// The axial interval test keeps the radius between the end radii, so no surface
+// past the apex draws.
+//
+// The normal is the gradient of the surface equation, with an axial term from the
+// taper.
 const glsl_intersectRaycastCone = `
 highp float raycastConeAxialFraction = 0.0;
 
-RaycastHit intersectRaycastPrimitive() {
+RaycastResult intersectRaycastPrimitive() {
   RaycastRay ray = getRaycastRayThroughFragment();
   highp vec3 axisDir = vConeAxis.xyz;
   highp float axisLength = vConeAxis.w;
@@ -171,7 +166,7 @@ RaycastHit intersectRaycastPrimitive() {
   raycastConeAxialFraction = axialDist * inverseAxisLength;
 
   highp vec3 perpAtHit = originSplit.perp + hitDist * dirSplit.perp;
-  return makeRaycastHit(
+  return raycastHit(
       ray.origin + hitDist * ray.direction,
       perpAtHit - radiusAtHit * taperRate * axisDir);
 }

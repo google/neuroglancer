@@ -31,11 +31,7 @@ export const VERTICES_PER_LINE = VERTICES_PER_QUAD;
 export interface LineShaderOptions {
   /** Adds a borderWidth argument to emitLine, and rounds the two ends. */
   readonly rounded?: boolean;
-  /**
-   * Adds endpointClipRadiusAInPixels and endpointClipRadiusBInPixels arguments
-   * to emitLine, and discards fragments within each radius of its endpoint as it
-   * was given.
-   */
+  /** Adds a clip radius per endpoint to emitLine, and discards fragments inside. */
   readonly endpointClipping?: boolean;
 }
 
@@ -61,7 +57,6 @@ export function defineLineShader(
   if (endpointClipping) {
     // xy: endpoint A, zw: endpoint B, in the window coordinates gl_FragCoord uses.
     // Taken before depth clipping, which moves the drawn ends away from them.
-
     builder.addVarying("highp vec4", "vLineEndpointsWindow", "flat");
     builder.addVarying("highp vec2", "vLineEndpointClipRadii", "flat");
   }
@@ -77,8 +72,7 @@ export function defineLineShader(
 ${
   endpointClipping
     ? `highp vec2 lineClipToWindow(vec4 clip) {
-  // Far off screen unless the endpoint is inside the depth range. A node is drawn
-  // there only if it is, and the disc exists to leave room for one.
+  // Nothing is drawn at an endpoint outside the depth range, so it goes off screen.
   if (!(clip.w > 0.0 && clip.z >= -clip.w && clip.z <= clip.w)) return vec2(-1e6);
   return (clip.xy / clip.w * 0.5 + 0.5) / uLineParams.xy;
 }`

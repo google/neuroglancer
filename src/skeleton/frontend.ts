@@ -131,9 +131,6 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
 }
 `;
 
-// The colour of a raycast primitive, shared by the cone and the sphere.
-// raycastLightingFactor applies spotlight and ambient lighting in a Lambertian
-// shading model.
 const glsl_raycastSkeletonEmit = `
 void emitRGBA(vec4 color) {
   color.a *= uAlpha;
@@ -183,16 +180,14 @@ interface SkeletonShaderParameters {
   skeletonShaderBuilderState: ShaderControlsBuilderState;
 }
 
-// What one draw call covers, which decides how a vertex attribute reaches the
-// fragment shader.
+// Decides how a vertex attribute reaches the fragment shader.
 enum SkeletonShaderGeometry {
   // A quad whose two ends are the edge's endpoints, so the rasteriser interpolates.
   LINE_QUAD = 0,
   // One quad per node, reading that node's attribute.
   CIRCLE_QUAD = 1,
-  // A bounding quad whose vertices are corners, not endpoints. Nothing to
-  // interpolate from, so the fragment shader has to do it: two flat varyings per
-  // attribute instead of one, mixed by where the hit falls along the cone.
+  // Corners, not endpoints, so the fragment shader mixes two flat varyings per
+  // attribute.
   RAYCAST_CONE = 2,
   // One bounding quad per node, as CIRCLE_QUAD.
   RAYCAST_SPHERE = 3,
@@ -496,7 +491,6 @@ void emitDefault() {
     builder.addFragmentCode(
       wrapUserShaderMain(shaderBuilderState.parseResult.code),
     );
-    // The raycast setup runs first so that a miss discards before the user's code.
     builder.setFragmentMain(
       (useRaycast ? glsl_raycastFragmentSetup : "") + "userMain();",
     );
@@ -563,11 +557,8 @@ void emitDefault() {
     this.vertexIdHelper.enable();
   }
 
-  // The raycast solves a true sphere, so it needs a space with no anisotropic
-  // scale left in it. Global coordinates scaled to canonical voxels is that space.
-  // Solving in layer coordinates would draw every node of an anisotropic dataset as
-  // an ellipsoid. The light direction is given in the same space, so the surface
-  // normal needs no further transform.
+  // Canonical voxels have no anisotropic scale, so a node never draws as an
+  // ellipsoid.
   private setRaycastUniforms(
     gl: GL,
     shader: ShaderProgram,
@@ -583,11 +574,8 @@ void emitDefault() {
       canonicalVoxelFactors[1],
       canonicalVoxelFactors[2],
     );
-    // Camera-relative, so that both the geometry and the ray origin the fragment
-    // shader reconstructs sit near zero. Without it both carry the camera's own
-    // coordinates, and float32 cannot hold their difference finely enough: a
-    // dataset 1e4 canonical voxels from the origin loses the surface normal
-    // outright, which shows as dark patches and banding along a tube.
+    // Camera-relative, because float32 loses the surface normal of a dataset 1e4
+    // canonical voxels from the origin.
     const { invViewMatrix } = projectionParameters;
     const cameraOffset = vec3.set(
       tempCameraOffset,
@@ -608,8 +596,8 @@ void emitDefault() {
       projectionParameters.viewProjectionMat,
       vec3.inverse(tempInverseCanonicalVoxelScale, canonicalVoxelScale),
     );
-    // Puts the offset back, so the pair still maps model coordinates to the same
-    // clip coordinates as before.
+    // Undoes the camera offset, so model coordinates reach the same clip
+    // coordinates.
     mat4.translate(canonicalVoxelClip, canonicalVoxelClip, cameraOffset);
     gl.uniformMatrix4fv(
       shader.uniform("uModelToCanonicalVoxel"),
@@ -728,8 +716,7 @@ void emitDefault() {
     gl.disableVertexAttribArray(edgeAttributeIndex);
   }
 
-  // Nodes are drawn in every render mode so that there are no visible gaps
-  // between edges.
+  // Every render mode draws nodes, so that no gap shows between edges.
   drawNodes(gl: GL, shader: ShaderProgram, skeletonChunk: SkeletonChunk) {
     this.bindVertexAttributeTextures(gl, shader, skeletonChunk);
     if (this.raycastEnabled.value) {
@@ -1034,8 +1021,7 @@ export class SkeletonLayer extends RefCounted {
     );
   }
 
-  // Once for both passes. Per pass would run the walk and the pick ID
-  // registration twice per segment, and give a segment two pick IDs.
+  // Once for both passes, so that a segment gets one pick ID.
   private collectVisibleSkeletons(
     layer: RenderLayer,
     renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,

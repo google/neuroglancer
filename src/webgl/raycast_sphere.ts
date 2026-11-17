@@ -38,17 +38,17 @@
 import { raycastPrimitiveCoreModule } from "#src/webgl/raycast_primitive.js";
 import type { ShaderBuilder } from "#src/webgl/shader.js";
 
-// The screen space silhouette of a sphere is a conic. Its clip space form is the
-// dual quadric M * Q * transpose(M), for M the x, y and w rows of uProjection and Q
-// the dual of the sphere. The extent along an axis is the pair of roots of
+// The silhouette is the dual conic M * Q * transpose(M), with M the x, y and w
+// rows of uProjection and Q the dual of the sphere.
+//
+// Along each axis, the extent is the roots of
 // conicWW * t^2 - 2 * conicCross * t + conicDiagonal.
 //
-// conicWW is positive exactly when the sphere clears the eye plane, which is when
-// that conic is an ellipse. Otherwise part of the sphere projects arbitrarily far,
-// and no quad short of the whole viewport covers it.
+// conicWW is positive only for a sphere wholly in front of the eye plane.
+// Otherwise the quad covers the viewport.
 //
-// The fragment shader writes gl_FragDepth and discards a depth outside the range,
-// so the quad's own depth only has to survive clipping. Zero always does.
+// The fragment shader writes gl_FragDepth, so the quad's depth only has to
+// survive clipping.
 const glsl_emitRaycastSphere = `
 void emitRaycastSphereQuad(highp vec3 center, highp float radius) {
   highp vec4 clipCenter = uProjection * vec4(center, 1.0);
@@ -101,7 +101,7 @@ void emitRaycastSphereQuad(highp vec3 center, highp float radius) {
 }
 
 void emitRaycastSphere(highp vec3 center, highp float radius) {
-  // A center behind the eye is given a zero radius, so this runs every frame.
+  // A centre behind the eye gets a zero radius.
   // Positive form, so a non-finite radius culls too.
   if (!(radius > 0.0)) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
@@ -112,14 +112,13 @@ void emitRaycastSphere(highp vec3 center, highp float radius) {
 }
 `;
 
-// Splitting along a unit ray direction leaves the leading coefficient one and the
-// linear term zero, measured from the closest approach to the center.
+// From the ray's closest approach to the centre, the quadratic has a = 1, b = 0.
 //
-// The near root is the one taken. The far one would fill the view when the camera
-// clips inside. The normal is formed from two small terms, rather than a hit point
-// far from the origin minus a center just as far from it.
+// Only the near root counts, because the far root fills the view from inside.
+//
+// The normal sums two small terms, not a far hit point minus a far centre.
 const glsl_intersectRaycastSphere = `
-RaycastHit intersectRaycastPrimitive() {
+RaycastResult intersectRaycastPrimitive() {
   RaycastRay ray = getRaycastRayThroughFragment();
   highp float radius = vSphere.w;
 
@@ -132,7 +131,7 @@ RaycastHit intersectRaycastPrimitive() {
   highp float hitDist = -originSplit.parallelDist + roots.nearRoot;
   if (!(hitDist >= 0.0)) return raycastMiss();
 
-  return makeRaycastHit(
+  return raycastHit(
       ray.origin + hitDist * ray.direction,
       originSplit.perp + roots.nearRoot * ray.direction);
 }

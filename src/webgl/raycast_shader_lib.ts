@@ -31,13 +31,11 @@
  *   notice and this permission notice shall be included in all copies or
  *   substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS".
  *
- * One change. A caller measures its parameter from the ray's closest approach to
- * the axis, rather than forming the original `c = dot(oc, oc) - r * r`.
- * Neuroglancer models can sit far from the origin, and the rearranged form never
- * subtracts two large numbers.
+ * There is one change. A caller measures its parameter from the ray's closest
+ * approach to the axis, not with the original `c = dot(oc, oc) - r * r`. A model
+ * can sit far from the origin, and this form never subtracts two large numbers.
  */
 
-// Splits a vector into the part along a unit direction and the part across it.
 export const glsl_splitAlongDir = `
 struct VectorSplit {
   highp float parallelDist;
@@ -53,15 +51,12 @@ VectorSplit splitAlongDir(highp vec3 vectorToSplit, highp vec3 unitDir) {
 `;
 
 // Both roots of quadraticA * t^2 + 2 * quadraticB * t + quadraticC, for a
-// quadraticA above zero.
+// positive quadraticA.
 //
-// Note the 2. quadraticB is half the linear coefficient, which is the form a ray
-// against a quadric produces and the one thing a caller cannot guess.
+// The halved linear coefficient is the form a ray against a quadric gives.
 //
-// The discriminant is the whole cost, and both roots share it, so returning both
-// is barely more than returning one. Positive form on the discriminant test, so a
-// NaN falls through to no roots. GLSL ES does not promise IEEE NaN comparison, so
-// that is defence and not a guarantee.
+// The positive-form discriminant test gives no roots for a NaN, but only on a GPU
+// with IEEE comparisons. GLSL ES does not guarantee them.
 export const glsl_solveQuadratic = `
 struct QuadraticRoots {
   bool exist;

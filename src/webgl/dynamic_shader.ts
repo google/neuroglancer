@@ -294,13 +294,8 @@ export function parameterizedEmitterDependentShaderGetter<
 }
 
 /**
- * Attributes `code` to `sourceStringNumber`, then hands attribution back to source
- * string 0.
- *
- * The whole shader is one source string, so without the reset the directive stays
- * in effect for whatever the builder appends next. A compile error in that
- * generated code would then mark a line of the user's that has nothing wrong
- * with it.
+ * Attributes `code` to `sourceStringNumber`, then resets to source string 0, so
+ * that an error in code appended later is not blamed on `code`.
  */
 export function shaderCodeWithLineDirective(
   code: string,
@@ -310,10 +305,7 @@ export function shaderCodeWithLineDirective(
   return `\n#line ${line} ${sourceStringNumber}\n` + code + "\n#line 1 0\n";
 }
 
-/**
- * Renames the `main` in user-supplied shader code to `userMain`, so that generated
- * code can call it where it chooses.
- */
+/** Renames the `main` in user shader code to `userMain`. */
 export function wrapUserShaderMain(code: string) {
   return (
     "\n#define main userMain\n" +

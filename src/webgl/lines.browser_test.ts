@@ -27,8 +27,7 @@ import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
 const VIEWPORT = 64;
 
-// Clip space x, y, z, w, so a test can place an endpoint outside the depth range
-// without a projection. Inside means the magnitude of z is at most w.
+// Clip space x, y, z, w. Inside the depth range means |z| <= w.
 type ClipPoint = readonly [number, number, number, number];
 
 interface LineSpec {
@@ -100,8 +99,7 @@ function isCovered(pixels: Uint8Array, x: number, y: number): boolean {
 describe("line endpoint clipping", () => {
   it("removes a disc at each endpoint, so a node drawn there has room", () => {
     webglTest((gl) => {
-      // Endpoint A lands a quarter across
-      // (-0.5 on NDC range -1 to 1), so at pixel 16
+      // Endpoint A lands at pixel 16.
       const spec = {
         endpointA: [-0.5, 0, 0, 1],
         endpointB: [0.5, 0, 0, 1],
@@ -174,8 +172,6 @@ describe("line endpoint clipping", () => {
 
   it("rejects endpoint clipping on a rounded line", () => {
     webglTest((gl) => {
-      // The clip lives in getLineAlpha, which a rounded line never calls, so the
-      // pair would silently ignore the clip radius.
       expect(() =>
         defineLineShader(new ShaderBuilder(gl), {
           rounded: true,

@@ -34,21 +34,16 @@ import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 const VIEWPORT = 64;
 const FIELD_OF_VIEW = Math.PI / 4;
 
-// Writes for every fragment the bounding quad rasterises, so the result measures
-// the quad the vertex stage emitted.
+// Measures the quad the vertex stage emitted.
 const SHADE_WHOLE_QUAD = "out_color = vec4(1.0);\n";
-// Runs the real hit test first, so a miss discards and the result measures the
-// primitive's own surface.
+// Measures the primitive's surface, because a miss discards.
 const SHADE_SURFACE = `${glsl_raycastFragmentSetup}out_color = vec4(1.0);\n`;
-// The lighting factor, which reads the surface normal.
 const SHADE_LIGHTING = `${glsl_raycastFragmentSetup}out_color = vec4(vec3(raycastLightingFactor), 1.0);\n`;
-// Red carries the axial fraction. Green marks a fragment that survived the hit
-// test, since a fraction of zero is indistinguishable from an unwritten pixel.
+// Green marks a hit, because a red fraction of zero looks like an unwritten pixel.
 const SHADE_AXIAL_FRACTION = `${glsl_raycastFragmentSetup}out_color = vec4(raycastConeAxialFraction, 1.0, 0.0, 1.0);\n`;
 
 type Point = readonly [number, number, number];
-// A radius may be a plain number, or a GLSL expression for the tests that drive the
-// pixel-radius helpers.
+// A string is a GLSL expression.
 type Radius = number | string;
 
 interface ConeSpec {
@@ -77,8 +72,8 @@ function cameraAtOrigin(): mat4 {
   return mat4.perspective(mat4.create(), FIELD_OF_VIEW, 1, 0.1, 20);
 }
 
-// As perspective_view/panel.ts builds it: the near bound clamps at 0.1 while the
-// far bound grows with the depth range, and the geometry sits at a depth of 1.
+// The near bound clamps at 0.1 while the far bound grows with the depth range
+// around a depth of 1.
 function depthRange(relativeDepthRange: number): mat4 {
   const range = relativeDepthRange / (1 / Math.tan(FIELD_OF_VIEW / 2));
   return mat4.perspective(
@@ -90,9 +85,7 @@ function depthRange(relativeDepthRange: number): mat4 {
   );
 }
 
-// The same view, with the space's origin moved away from the camera by `offset`.
-// A consumer subtracts the offset from its geometry, so the pair still lands the
-// same pixels while the coordinates the fragment shader works in grow.
+// The camera-at-origin view, translated by `offset` along each axis and back.
 function cameraOffsetFromOrigin(offset: number): mat4 {
   const projection = cameraAtOrigin();
   mat4.translate(projection, projection, [-offset, -offset, -offset]);
@@ -233,7 +226,7 @@ function axialFractionByRow(pixels: Uint8Array): number[] {
 }
 
 describe("raycast cone", () => {
-  it("exposes its depth, lighting and axial fraction to a helper function", () => {
+  it("lets a function outside main read its depth, lighting and axial fraction", () => {
     webglTest((gl) => {
       expect(() =>
         buildWithEmitHelper(
@@ -268,7 +261,6 @@ describe("raycast cone", () => {
 
   it("culls a cone behind the camera", () => {
     webglTest((gl) => {
-      // Positive z is behind the camera, which looks down -z.
       const pixels = drawCone(
         gl,
         {
@@ -286,7 +278,6 @@ describe("raycast cone", () => {
   it("culls a cone that wraps the camera", () => {
     webglTest((gl) => {
       // The axis passes 0.2 ahead and the radius is 0.5, so the camera is inside.
-      // That surface has no bounded screen footprint at all.
       const pixels = drawCone(
         gl,
         {
@@ -303,7 +294,6 @@ describe("raycast cone", () => {
 
   it("culls a cone with no radius", () => {
     webglTest((gl) => {
-      // No radius, so no surface anywhere for a fragment to hit.
       const pixels = drawCone(
         gl,
         {
@@ -359,8 +349,6 @@ describe("raycast cone", () => {
 
   it("draws a constant width when both end radii match", () => {
     webglTest((gl) => {
-      // Equal radii leave the taper rate at zero, so the quadratic collapses to
-      // the fixed-radius circle test and the width must not change.
       const widths = coveredWidthByRow(
         drawCone(
           gl,
@@ -523,13 +511,10 @@ describe("raycast cone", () => {
     });
   });
 
-  it("survives a depth range wide enough to flatten the projection", () => {
+  it("draws the same surface under a depth range wide enough to flatten the projection", () => {
     webglTest((gl) => {
-      // The ray direction used to come from the far plane. Past a far of about
-      // 4e6 the projection's z coefficient rounds to exactly -1 in float32, the
-      // far plane stops being reachable through the inverse, and the direction
-      // came out a zero vector. Lines never hit this because they only ever
-      // project forward, and never invert.
+      // Past a far of about 4e6, float32 rounds the far plane out of reach of the
+      // inverse projection.
       const spec: ConeSpec = {
         endpointA: [0, -0.3, -1],
         endpointB: [0, 0.3, -1],
@@ -547,10 +532,6 @@ describe("raycast cone", () => {
 
   it("keeps the surface normal with the space's origin 1e4 away", () => {
     webglTest((gl) => {
-      // The fragment shader subtracts the cone's position from a ray origin it
-      // reconstructs in the same space, so both carry the space's origin. At 1e4
-      // against a radius of 0.05, float32 destroys the normal outright. A consumer
-      // has to centre the space near the camera, and this is what that buys.
       const spec: ConeSpec = {
         endpointA: [0, -0.3, -1],
         endpointB: [0, 0.3, -1],
@@ -587,7 +568,7 @@ describe("raycast cone", () => {
 });
 
 describe("raycast sphere", () => {
-  it("exposes its depth and lighting to a helper function", () => {
+  it("lets a function outside main read its depth and lighting", () => {
     webglTest((gl) => {
       expect(() =>
         buildWithEmitHelper(
@@ -654,8 +635,6 @@ describe("raycast sphere", () => {
   it("takes the whole viewport when the sphere crosses the eye plane", () => {
     webglTest((gl) => {
       // Centred 0.3 ahead with a radius of 0.5, so the sphere spans the eye plane.
-      // Past that plane the conic is no longer an ellipse and part of the sphere
-      // projects arbitrarily far.
       const pixels = drawSphere(
         gl,
         { center: [0, 0, -0.3], radius: 0.5 },
