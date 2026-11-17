@@ -25,12 +25,11 @@ import { ShaderBuilder } from "#src/webgl/shader.js";
 import { webglTest } from "#src/webgl/testing.js";
 import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
-const VIEWPORT = 64;
-
 // Clip space x, y, z, w. Inside the depth range means |z| <= w.
 type ClipPoint = readonly [number, number, number, number];
 
 interface LineSpec {
+  readonly viewportPixels: number;
   readonly endpointA: ClipPoint;
   readonly endpointB: ClipPoint;
   readonly widthInPixels: number;
@@ -58,21 +57,22 @@ function drawLine(gl: GL, spec: LineSpec): Uint8Array {
   try {
     shader.bind();
     vertexIdHelper.enable();
+    const { viewportPixels } = spec;
     initializeLineShader(
       shader,
-      { width: VIEWPORT, height: VIEWPORT },
+      { width: viewportPixels, height: viewportPixels },
       /*featherWidthInPixels=*/ 0,
     );
-    gl.viewport(0, 0, VIEWPORT, VIEWPORT);
+    gl.viewport(0, 0, viewportPixels, viewportPixels);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
     drawLines(gl, 1, 1);
-    const pixels = new Uint8Array(VIEWPORT * VIEWPORT * 4);
+    const pixels = new Uint8Array(viewportPixels * viewportPixels * 4);
     gl.readPixels(
       0,
       0,
-      VIEWPORT,
-      VIEWPORT,
+      viewportPixels,
+      viewportPixels,
       WebGL2RenderingContext.RGBA,
       WebGL2RenderingContext.UNSIGNED_BYTE,
       pixels,
@@ -86,14 +86,15 @@ function drawLine(gl: GL, spec: LineSpec): Uint8Array {
 
 function coveredCount(pixels: Uint8Array): number {
   let covered = 0;
-  for (let i = 0; i < VIEWPORT * VIEWPORT; ++i) {
+  for (let i = 0; i < pixels.length / 4; ++i) {
     if (pixels[i * 4] !== 0) ++covered;
   }
   return covered;
 }
 
 function isCovered(pixels: Uint8Array, x: number, y: number): boolean {
-  return pixels[(y * VIEWPORT + x) * 4] !== 0;
+  const viewportPixels = Math.sqrt(pixels.length / 4);
+  return pixels[(y * viewportPixels + x) * 4] !== 0;
 }
 
 describe("line endpoint clipping", () => {
@@ -102,6 +103,7 @@ describe("line endpoint clipping", () => {
       // Endpoint A lands at x 16 and endpoint B at x 48. Pixel 47 is the last one
       // the line covers at B.
       const spec = {
+        viewportPixels: 64,
         endpointA: [-0.5, 0, 0, 1],
         endpointB: [0.5, 0, 0, 1],
         widthInPixels: 6,
@@ -119,10 +121,10 @@ describe("line endpoint clipping", () => {
 
       expect(coveredCount(clipped)).toBeGreaterThan(0);
       expect(coveredCount(clipped)).toBeLessThan(coveredCount(unclipped));
-      expect(isCovered(unclipped, 16, VIEWPORT / 2)).toBe(true);
-      expect(isCovered(clipped, 16, VIEWPORT / 2)).toBe(false);
-      expect(isCovered(unclipped, 47, VIEWPORT / 2)).toBe(true);
-      expect(isCovered(clipped, 47, VIEWPORT / 2)).toBe(false);
+      expect(isCovered(unclipped, 16, 32)).toBe(true);
+      expect(isCovered(clipped, 16, 32)).toBe(false);
+      expect(isCovered(unclipped, 47, 32)).toBe(true);
+      expect(isCovered(clipped, 47, 32)).toBe(false);
     });
   });
 
@@ -131,6 +133,7 @@ describe("line endpoint clipping", () => {
       // A is at pixel 24 with the line trimmed to start at 32, so a 10 pixel
       // radius would reach 33. B is at pixel 56, the drawn end, so its disc takes 55.
       const spec = {
+        viewportPixels: 64,
         endpointA: [-0.25, 0, -1.5, 1],
         endpointB: [0.75, 0, 0.5, 1],
         widthInPixels: 6,
@@ -146,10 +149,10 @@ describe("line endpoint clipping", () => {
         clipRadiusBInPixels: 10,
       });
 
-      expect(isCovered(unclipped, 33, VIEWPORT / 2)).toBe(true);
-      expect(isCovered(clipped, 33, VIEWPORT / 2)).toBe(true);
-      expect(isCovered(unclipped, 55, VIEWPORT / 2)).toBe(true);
-      expect(isCovered(clipped, 55, VIEWPORT / 2)).toBe(false);
+      expect(isCovered(unclipped, 33, 32)).toBe(true);
+      expect(isCovered(clipped, 33, 32)).toBe(true);
+      expect(isCovered(unclipped, 55, 32)).toBe(true);
+      expect(isCovered(clipped, 55, 32)).toBe(false);
     });
   });
 
@@ -157,6 +160,7 @@ describe("line endpoint clipping", () => {
     webglTest((gl) => {
       // A lands at pixel 16 and B at pixel 48.
       const spec = {
+        viewportPixels: 64,
         endpointA: [-0.5, 0, 0, 1],
         endpointB: [0.5, 0, 0, 1],
         widthInPixels: 6,
@@ -167,9 +171,9 @@ describe("line endpoint clipping", () => {
         clipRadiusBInPixels: 2,
       });
 
-      expect(isCovered(clipped, 22, VIEWPORT / 2)).toBe(false);
-      expect(isCovered(clipped, 42, VIEWPORT / 2)).toBe(true);
-      expect(isCovered(clipped, 47, VIEWPORT / 2)).toBe(false);
+      expect(isCovered(clipped, 22, 32)).toBe(false);
+      expect(isCovered(clipped, 42, 32)).toBe(true);
+      expect(isCovered(clipped, 47, 32)).toBe(false);
     });
   });
 

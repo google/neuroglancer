@@ -224,22 +224,19 @@ describe("raycast cone", () => {
     });
   });
 
-  it("bounds a visible cone to a small part of the viewport", () => {
+  it("bounds a visible cone closely around its surface", () => {
     webglTest((gl) => {
-      // Upright, one unit ahead, 0.6 long and 0.1 across. That silhouette is well
-      // under a tenth of the viewport.
-      const pixels = drawCone(
-        gl,
-        {
-          endpointA: [0, -0.3, -1],
-          endpointB: [0, 0.3, -1],
-          radiusA: 0.05,
-          radiusB: 0.05,
-        },
-        SHADE_WHOLE_QUAD,
-      );
-      expect(coveredFraction(pixels)).toBeGreaterThan(0);
-      expect(coveredFraction(pixels)).toBeLessThan(0.5);
+      const spec: ConeSpec = {
+        endpointA: [0, -0.3, -1],
+        endpointB: [0, 0.3, -1],
+        radiusA: 0.05,
+        radiusB: 0.05,
+      };
+      const quad = coveredFraction(drawCone(gl, spec, SHADE_WHOLE_QUAD));
+      const surface = coveredFraction(drawCone(gl, spec, SHADE_SURFACE));
+      expect(surface).toBeGreaterThan(0);
+      // Measured at 1.30, from the one pixel margin and the box corners.
+      expect(quad / surface).toBeLessThan(1.5);
     });
   });
 
