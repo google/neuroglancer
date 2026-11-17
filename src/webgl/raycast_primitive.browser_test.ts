@@ -28,11 +28,29 @@ import { ShaderBuilder } from "#src/webgl/shader.js";
 import { webglTest } from "#src/webgl/testing.js";
 import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
-// A 64 pixel square viewport, and a camera at the origin looking down -z with a
-// 45 degree vertical field of view. So a z of -1 is one unit ahead, and a radius r
-// there spans r / tan(22.5 degrees) in NDC, which is 2.414 * r.
-const VIEWPORT = 64;
-const FIELD_OF_VIEW = Math.PI / 4;
+interface Camera {
+  readonly viewportPixels: number;
+  readonly projection: mat4;
+}
+
+// At the origin, looking down -z, so a z of -1 is one unit ahead.
+function makeCamera(options: {
+  viewportPixels: number;
+  fieldOfViewDegrees: number;
+  far?: number;
+}): Camera {
+  const { viewportPixels, fieldOfViewDegrees, far = 20 } = options;
+  return {
+    viewportPixels,
+    projection: mat4.perspective(
+      mat4.create(),
+      (fieldOfViewDegrees * Math.PI) / 180,
+      1,
+      0.1,
+      far,
+    ),
+  };
+}
 
 // Measures the quad the vertex stage emitted.
 const SHADE_WHOLE_QUAD = "out_color = vec4(1.0);\n";
@@ -67,30 +85,14 @@ function glslRadius(radius: Radius): string {
   return typeof radius === "number" ? radius.toFixed(5) : radius;
 }
 
-function cameraAtOrigin(): mat4 {
-  return mat4.perspective(mat4.create(), FIELD_OF_VIEW, 1, 0.1, 20);
-}
-
-// The near bound clamps at 0.1 while the far bound grows with the depth range
-// around a depth of 1.
-function depthRange(relativeDepthRange: number): mat4 {
-  const range = relativeDepthRange / (1 / Math.tan(FIELD_OF_VIEW / 2));
-  return mat4.perspective(
-    mat4.create(),
-    FIELD_OF_VIEW,
-    1,
-    Math.max(0.1, 1 - range),
-    1 + range,
-  );
-}
-
 function render(
   gl: GL,
+  camera: Camera,
   definePrimitive: (builder: ShaderBuilder) => void,
   emitPrimitive: string,
   fragmentMain: string,
-  projection: mat4 = cameraAtOrigin(),
 ): Uint8Array {
+  const { viewportPixels, projection } = camera;
   const builder = new ShaderBuilder(gl);
   builder.addOutputBuffer("vec4", "out_color", 0);
   defineVertexId(builder);
@@ -103,19 +105,19 @@ function render(
     shader.bind();
     vertexIdHelper.enable();
     initializeRaycastPrimitiveShader(shader, projection, {
-      width: VIEWPORT,
-      height: VIEWPORT,
+      width: viewportPixels,
+      height: viewportPixels,
     });
-    gl.viewport(0, 0, VIEWPORT, VIEWPORT);
+    gl.viewport(0, 0, viewportPixels, viewportPixels);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
     drawQuads(gl, 1, 1);
-    const pixels = new Uint8Array(VIEWPORT * VIEWPORT * 4);
+    const pixels = new Uint8Array(viewportPixels * viewportPixels * 4);
     gl.readPixels(
       0,
       0,
-      VIEWPORT,
-      VIEWPORT,
+      viewportPixels,
+      viewportPixels,
       WebGL2RenderingContext.RGBA,
       WebGL2RenderingContext.UNSIGNED_BYTE,
       pixels,
@@ -129,29 +131,31 @@ function render(
 
 function drawCone(
   gl: GL,
+  camera: Camera,
   spec: ConeSpec,
   fragmentMain: string,
-  projection?: mat4,
 ): Uint8Array {
   const { clipRadiusA = 0, clipRadiusB = 0 } = spec;
   return render(
     gl,
+    camera,
     defineRaycastConeShader,
     `emitRaycastCone(${glslPoint(spec.endpointA)}, ${glslPoint(spec.endpointB)},
                      ${glslRadius(spec.radiusA)}, ${glslRadius(spec.radiusB)},
                      ${glslRadius(clipRadiusA)}, ${glslRadius(clipRadiusB)});`,
     fragmentMain,
-    projection,
   );
 }
 
 function drawSphere(
   gl: GL,
+  camera: Camera,
   spec: SphereSpec,
   fragmentMain: string,
 ): Uint8Array {
   return render(
     gl,
+    camera,
     defineRaycastSphereShader,
     `emitRaycastSphere(${glslPoint(spec.center)}, ${glslRadius(spec.radius)});`,
     fragmentMain,
@@ -174,20 +178,22 @@ function buildWithEmitHelper(
 }
 
 function coveredFraction(pixels: Uint8Array): number {
+  const pixelCount = pixels.length / 4;
   let covered = 0;
-  for (let i = 0; i < VIEWPORT * VIEWPORT; ++i) {
+  for (let i = 0; i < pixelCount; ++i) {
     if (pixels[i * 4] !== 0) ++covered;
   }
-  return covered / (VIEWPORT * VIEWPORT);
+  return covered / pixelCount;
 }
 
 // readPixels returns rows bottom up, so index 0 is the lowest drawn row.
 function coveredWidthByRow(pixels: Uint8Array): number[] {
   const widths: number[] = [];
-  for (let row = 0; row < VIEWPORT; ++row) {
+  const viewportPixels = Math.sqrt(pixels.length / 4);
+  for (let row = 0; row < viewportPixels; ++row) {
     let width = 0;
-    for (let column = 0; column < VIEWPORT; ++column) {
-      if (pixels[(row * VIEWPORT + column) * 4 + 1] !== 0) ++width;
+    for (let column = 0; column < viewportPixels; ++column) {
+      if (pixels[(row * viewportPixels + column) * 4 + 1] !== 0) ++width;
     }
     if (width > 0) widths.push(width);
   }
@@ -197,9 +203,10 @@ function coveredWidthByRow(pixels: Uint8Array): number[] {
 // Red of the first shaded pixel in each row, bottom up. Values run 0 to 255.
 function axialFractionByRow(pixels: Uint8Array): number[] {
   const fractions: number[] = [];
-  for (let row = 0; row < VIEWPORT; ++row) {
-    for (let column = 0; column < VIEWPORT; ++column) {
-      const offset = (row * VIEWPORT + column) * 4;
+  const viewportPixels = Math.sqrt(pixels.length / 4);
+  for (let row = 0; row < viewportPixels; ++row) {
+    for (let column = 0; column < viewportPixels; ++column) {
+      const offset = (row * viewportPixels + column) * 4;
       if (pixels[offset + 1] !== 0) {
         fractions.push(pixels[offset]);
         break;
@@ -226,14 +233,19 @@ describe("raycast cone", () => {
 
   it("bounds a visible cone closely around its surface", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       const spec: ConeSpec = {
         endpointA: [0, -0.3, -1],
         endpointB: [0, 0.3, -1],
         radiusA: 0.05,
         radiusB: 0.05,
       };
-      const quad = coveredFraction(drawCone(gl, spec, SHADE_WHOLE_QUAD));
-      const surface = coveredFraction(drawCone(gl, spec, SHADE_SURFACE));
+      const quad = coveredFraction(
+        drawCone(gl, camera, spec, SHADE_WHOLE_QUAD),
+      );
+      const surface = coveredFraction(
+        drawCone(gl, camera, spec, SHADE_SURFACE),
+      );
       expect(surface).toBeGreaterThan(0);
       // Measured at 1.30, from the one pixel margin and the box corners.
       expect(quad / surface).toBeLessThan(1.5);
@@ -242,8 +254,10 @@ describe("raycast cone", () => {
 
   it("culls a cone behind the camera", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       const pixels = drawCone(
         gl,
+        camera,
         {
           endpointA: [0, -0.3, 1],
           endpointB: [0, 0.3, 1],
@@ -258,9 +272,11 @@ describe("raycast cone", () => {
 
   it("culls a cone that wraps the camera", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       // The axis passes 0.2 ahead and the radius is 0.5, so the camera is inside.
       const pixels = drawCone(
         gl,
+        camera,
         {
           endpointA: [-1, 0, -0.2],
           endpointB: [1, 0, -0.2],
@@ -275,8 +291,10 @@ describe("raycast cone", () => {
 
   it("culls a cone with no radius", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       const pixels = drawCone(
         gl,
+        camera,
         {
           endpointA: [0, -0.3, -1],
           endpointB: [0, 0.3, -1],
@@ -291,6 +309,7 @@ describe("raycast cone", () => {
 
   it("keeps a segment whose far endpoint has passed behind the camera", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       const endpointA: Point = [-0.3, -0.2, -1];
       const endpointB: Point = [0.5, 0.4, 1];
       // Endpoint B is behind the camera, so its own pixel radius is zero.
@@ -298,6 +317,7 @@ describe("raycast cone", () => {
         coveredFraction(
           drawCone(
             gl,
+            camera,
             {
               endpointA,
               endpointB,
@@ -314,6 +334,7 @@ describe("raycast cone", () => {
       const borrowed = coveredFraction(
         drawCone(
           gl,
+          camera,
           {
             endpointA,
             endpointB,
@@ -330,9 +351,11 @@ describe("raycast cone", () => {
 
   it("draws a constant width when both end radii match", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       const widths = coveredWidthByRow(
         drawCone(
           gl,
+          camera,
           {
             endpointA: [0, -0.3, -1],
             endpointB: [0, 0.3, -1],
@@ -350,9 +373,11 @@ describe("raycast cone", () => {
 
   it("draws the far side through an open end when facing the camera", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       const shaded = coveredFraction(
         drawCone(
           gl,
+          camera,
           {
             endpointA: [-0.05, 0, -0.6],
             endpointB: [0.15, 0, -1.6],
@@ -368,11 +393,13 @@ describe("raycast cone", () => {
 
   it("tapers the width between two different end radii", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       // Endpoint A is the lower end, so the width grows from bottom to top. These
       // radii are wide enough that whole-pixel rasterisation does not dominate.
       const widths = coveredWidthByRow(
         drawCone(
           gl,
+          camera,
           {
             endpointA: [0, -0.3, -1],
             endpointB: [0, 0.3, -1],
@@ -400,12 +427,14 @@ describe("raycast cone", () => {
 
   it("draws a segment at the radius its pixel width asks for", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       const endpointA: Point = [0, -0.3, -1];
       const endpointB: Point = [0, 0.3, -1];
       const radii = `getRaycastSegmentRadiiForPixels(${glslPoint(endpointA)}, ${glslPoint(endpointB)}, 6.0)`;
       const widths = coveredWidthByRow(
         drawCone(
           gl,
+          camera,
           {
             endpointA,
             endpointB,
@@ -425,10 +454,12 @@ describe("raycast cone", () => {
 
   it("reports the axial fraction from 0 at endpoint A to 1 at endpoint B", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       // Endpoint A is the lower end, so the fraction rises with the row.
       const fractions = axialFractionByRow(
         drawCone(
           gl,
+          camera,
           {
             endpointA: [0, -0.3, -1],
             endpointB: [0, 0.3, -1],
@@ -449,12 +480,14 @@ describe("raycast cone", () => {
 
   it("clips the surface around an endpoint", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       // The surface sits one radius from the axis, so a clip radius of 0.15 reaches
       // sqrt(0.15^2 - 0.05^2) = 0.1414 along a 0.6 long axis. That is the lowest
       // 23.6 percent of it, or 60 as a 0 to 255 value.
       const clipped = axialFractionByRow(
         drawCone(
           gl,
+          camera,
           {
             endpointA: [0, -0.3, -1],
             endpointB: [0, 0.3, -1],
@@ -474,25 +507,31 @@ describe("raycast cone", () => {
 
   it("draws the same surface under a depth range wide enough to flatten the projection", () => {
     webglTest((gl) => {
-      // Past a far of about 4e6, float32 rounds the far plane out of reach of the
-      // inverse projection.
+      // Past a far of about 4e6 at a near of 0.1, float32 rounds the far plane out
+      // of reach of the inverse projection.
       const spec: ConeSpec = {
         endpointA: [0, -0.3, -1],
         endpointB: [0, 0.3, -1],
         radiusA: 0.05,
         radiusB: 0.05,
       };
-      const shaded = (relativeDepthRange: number) =>
+      const shaded = (far: number) =>
         coveredFraction(
-          drawCone(gl, spec, SHADE_SURFACE, depthRange(relativeDepthRange)),
+          drawCone(
+            gl,
+            makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45, far }),
+            spec,
+            SHADE_SURFACE,
+          ),
         );
-      expect(shaded(1e10)).toBeGreaterThan(0);
-      expect(shaded(1e10)).toBeCloseTo(shaded(1), 3);
+      expect(shaded(4e9)).toBeGreaterThan(0);
+      expect(shaded(4e9)).toBeCloseTo(shaded(20), 3);
     });
   });
 
   it("leaves the surface alone when the clip radius cannot reach it", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       const spec: ConeSpec = {
         endpointA: [0, -0.3, -1],
         endpointB: [0, 0.3, -1],
@@ -502,9 +541,16 @@ describe("raycast cone", () => {
       // A clip radius of 0.04 cannot reach a surface 0.05 from the axis.
       expect(
         axialFractionByRow(
-          drawCone(gl, { ...spec, clipRadiusA: 0.04 }, SHADE_AXIAL_FRACTION),
+          drawCone(
+            gl,
+            camera,
+            { ...spec, clipRadiusA: 0.04 },
+            SHADE_AXIAL_FRACTION,
+          ),
         ),
-      ).toEqual(axialFractionByRow(drawCone(gl, spec, SHADE_AXIAL_FRACTION)));
+      ).toEqual(
+        axialFractionByRow(drawCone(gl, camera, spec, SHADE_AXIAL_FRACTION)),
+      );
     });
   });
 });
@@ -525,11 +571,13 @@ describe("raycast sphere", () => {
 
   it("bounds a sphere to the square around its silhouette", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       // A radius of 0.05 one unit ahead has a silhouette 0.12086 in NDC, so 3.87
       // pixels of a 64 pixel viewport. The square around that disc is 59.8 pixels,
       // or 0.0146 of the viewport, against 0.0115 for the disc itself.
       const pixels = drawSphere(
         gl,
+        camera,
         { center: [0, 0, -1], radius: 0.05 },
         SHADE_WHOLE_QUAD,
       );
@@ -540,8 +588,10 @@ describe("raycast sphere", () => {
 
   it("culls a sphere behind the camera", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       const pixels = drawSphere(
         gl,
+        camera,
         { center: [0, 0, 1], radius: 0.05 },
         SHADE_WHOLE_QUAD,
       );
@@ -551,8 +601,10 @@ describe("raycast sphere", () => {
 
   it("culls a sphere with no radius", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       const pixels = drawSphere(
         gl,
+        camera,
         { center: [0, 0, -1], radius: 0 },
         SHADE_WHOLE_QUAD,
       );
@@ -562,12 +614,18 @@ describe("raycast sphere", () => {
 
   it("bounds a sphere without clipping its surface", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       // A radius of 0.2 one unit ahead spans 15.5 pixels of a 64 pixel viewport,
       // so the plain r / d disc is 0.1831 of it. The true silhouette radius is
       // r / sqrt(d^2 - r^2), which is 4 percent more area, so the shaded surface
       // must exceed the plain disc rather than fall short of it.
       const shaded = coveredFraction(
-        drawSphere(gl, { center: [0, 0, -1], radius: 0.2 }, SHADE_SURFACE),
+        drawSphere(
+          gl,
+          camera,
+          { center: [0, 0, -1], radius: 0.2 },
+          SHADE_SURFACE,
+        ),
       );
       expect(shaded).toBeGreaterThan(0.1831);
       expect(shaded).toBeLessThan(0.21);
@@ -576,9 +634,11 @@ describe("raycast sphere", () => {
 
   it("takes the whole viewport when the sphere crosses the eye plane", () => {
     webglTest((gl) => {
+      const camera = makeCamera({ viewportPixels: 64, fieldOfViewDegrees: 45 });
       // Centred 0.3 ahead with a radius of 0.5, so the sphere spans the eye plane.
       const pixels = drawSphere(
         gl,
+        camera,
         { center: [0, 0, -0.3], radius: 0.5 },
         SHADE_WHOLE_QUAD,
       );
