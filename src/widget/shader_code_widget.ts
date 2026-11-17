@@ -19,6 +19,7 @@ import svgCode from "ikonate/icons/code-alt.svg?raw";
 import "codemirror/addon/lint/lint.js";
 import "#src/widget/shader_code_widget.css";
 import "codemirror/lib/codemirror.css";
+import "codemirror/theme/material-darker.css";
 import "codemirror/addon/lint/lint.css";
 
 import { debounce } from "lodash-es";
@@ -81,8 +82,10 @@ export class ShaderCodeWidget extends RefCounted {
     this.textEditor = CodeMirror((_element) => {}, {
       value: this.state.fragment.value,
       mode: "glsl",
+      theme: "material-darker",
       gutters: ["CodeMirror-lint-markers"],
     });
+    this.element.style.colorScheme = "dark";
     this.textEditor.on("change", () => {
       this.setValidState(undefined);
       this.debouncedValueUpdater();

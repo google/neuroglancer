@@ -16,16 +16,16 @@
 
 /* Color variables for the screenshot */
 .neuroglancer-screenshot-overlay {
-  --gray300: #d0d5dd;
-  --gray600: #141415;
-  --gray500: #f7f7f7;
-  --gray50: #e6e6e6;
-  --gray800: #344054;
-  --gray700: rgba(20, 20, 21, 0.6);
-  --gray400: rgba(20, 20, 21, 0.4);
-  --gray200: rgba(20, 20, 21, 0.8);
-  --primary500: #0069eb;
-  --primary700: #0474ff;
+  --gray300: #555;
+  --gray600: #fff;
+  --gray500: #292929;
+  --gray50: #333;
+  --gray800: #eee;
+  --gray700: rgba(255, 255, 255, 0.6);
+  --gray400: rgba(255, 255, 255, 0.4);
+  --gray200: rgba(255, 255, 255, 0.8);
+  --primary500: #70b7ff;
+  --primary700: #8fc7ff;
 }
 
 /* General headings, labels, and top-level containers */
@@ -94,7 +94,7 @@
   margin-right: 10px;
   border-radius: 8px;
   border: 1px solid var(--gray300);
-  background: white;
+  background: #222;
   font-size: 0.813rem;
   font-style: normal;
   padding: 8px 12px;
@@ -153,7 +153,7 @@
 }
 
 .neuroglancer-screenshot-warning {
-  color: red;
+  color: #ff6b6b;
   width: auto;
   font-size: 0.75rem;
   margin: 0.12rem 0 0 -1.25rem;
@@ -208,8 +208,8 @@
 }
 
 .neuroglancer-screenshot-resolution-preview-container {
-  border-top: 1px solid #ccc;
-  border-bottom: 1px solid #ccc;
+  border-top: 1px solid var(--gray300);
+  border-bottom: 1px solid var(--gray300);
   background: var(--gray500);
   width: 100%;
   padding: 1rem 1rem 0.5rem 1rem;
@@ -241,7 +241,7 @@
   font-size: 0.813rem;
   width: 33.33%;
   color: var(--gray700);
-  background: white;
+  background: #222;
   padding: 0.375rem;
   line-height: 1.25rem;
 }
@@ -360,7 +360,7 @@
 .neuroglancer-screenshot-footer-button {
   border-radius: 0.5rem;
   border: 1px solid var(--gray300);
-  background: white;
+  background: #222;
   padding: 0.5rem 0.75rem;
   font-size: 0.813rem;
   font-weight: 590;
