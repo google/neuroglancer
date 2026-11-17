@@ -226,11 +226,7 @@ class DisplayOptionsTab extends Tab {
         this.layer,
         this.codeWidget.element,
         makeShaderCodeWidget,
-        {
-          title: "Documentation on mesh rendering",
-          href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
-          type: "Mesh",
-        },
+        { type: "Mesh" },
       ),
     );
     element.appendChild(this.attributeWidget.element);

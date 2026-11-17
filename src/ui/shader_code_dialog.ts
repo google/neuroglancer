@@ -29,7 +29,7 @@ export class ShaderCodeEditorDialog<
     title: string = "Shader editor",
     makeVertexAttributeWidget?: (layer: Layer) => VertexAttributeWidget,
   ) {
-    super(title, "Close editor", "neuroglancer-shader-code-editor-dialog");
+    super(title, "Close", "neuroglancer-shader-code-editor-dialog");
 
     const codeWidget = this.registerDisposer(
       this.makeShaderCodeWidget(this.layer),

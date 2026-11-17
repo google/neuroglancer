@@ -884,9 +884,11 @@ class RenderingOptionsTab extends Tab {
         this.codeWidget.element,
         makeShaderCodeWidget,
         {
-          title: "Documentation on annotation layer rendering",
-          href: "https://github.com/google/neuroglancer/blob/master/src/annotation/rendering.md",
           type: "Annotation",
+          documentation: {
+            title: "Documentation on annotation layer rendering",
+            href: "https://neuroglancer-docs.web.app/user-guide/annotation_shaders.html",
+          },
         },
       ),
     );

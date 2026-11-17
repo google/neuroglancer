@@ -215,10 +215,9 @@ export function makeShaderCodeWidgetTopRow<
   layer: Layer,
   codeWidgetElement: HTMLElement,
   makeShaderCodeWidget: (layer: Layer) => ShaderCodeWidget,
-  help: {
-    title: string;
-    href: string;
+  shader: {
     type: string;
+    documentation?: { title: string; href: string };
   },
   options: {
     title?: string;
@@ -254,12 +253,14 @@ export function makeShaderCodeWidgetTopRow<
         new ShaderCodeEditorDialog(
           layer,
           makeShaderCodeWidget,
-          `${help.type} shader editor`,
+          `${shader.type} shader editor`,
           options.makeVertexAttributeWidget,
         );
       },
     }),
   );
-  topRow.appendChild(makeHelpButton(help));
+  if (shader.documentation !== undefined) {
+    topRow.appendChild(makeHelpButton(shader.documentation));
+  }
   return topRow;
 }

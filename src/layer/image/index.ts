@@ -627,9 +627,11 @@ class RenderingOptionsTab extends Tab {
         this.codeWidget.element,
         makeShaderCodeWidget,
         {
-          title: "Documentation on image layer rendering",
-          href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
           type: "Image",
+          documentation: {
+            title: "Documentation on image layer rendering",
+            href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
+          },
         },
       ),
     );

@@ -86,9 +86,11 @@ export class DisplayOptionsTab extends Tab {
         segmentColorCodeWidget.element,
         makeSegmentColorShaderCodeWidget,
         {
-          title: "Documentation on segmentation layer rendering",
-          href: "https://github.com/google/neuroglancer/blob/master/src/layer/segmentation/rendering.md",
           type: "Segment color",
+          documentation: {
+            title: "Documentation on segmentation layer rendering",
+            href: "https://neuroglancer-docs.web.app/user-guide/segmentation_shaders.html",
+          },
         },
         { title: "Segment Color Shader" },
       ),
@@ -131,9 +133,11 @@ export class DisplayOptionsTab extends Tab {
               codeWidget.element,
               makeSkeletonShaderCodeWidget,
               {
-                title: "Documentation on skeleton rendering",
-                href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
                 type: "Skeleton",
+                documentation: {
+                  title: "Documentation on skeleton rendering",
+                  href: "https://neuroglancer-docs.web.app/user-guide/segmentation_shaders.html",
+                },
               },
               {
                 title: "Skeleton Shader",
