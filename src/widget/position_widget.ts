@@ -65,6 +65,7 @@ import {
   updateChildren,
   updateInputFieldWidth,
 } from "#src/util/dom.js";
+import { declareAllowedDropEffects } from "#src/util/drag_and_drop.js";
 import { vec3 } from "#src/util/geom.js";
 import { verifyObjectProperty, verifyString } from "#src/util/json.js";
 import type { ActionEvent } from "#src/util/keyboard_bindings.js";
@@ -74,6 +75,7 @@ import {
 } from "#src/util/keyboard_bindings.js";
 import { EventActionMap, MouseEventBinder } from "#src/util/mouse_bindings.js";
 import { formatScaleWithUnit, parseScale } from "#src/util/si_units.js";
+import { formatPositionText } from "#src/util/spatial_units.js";
 import { TrackableEnum } from "#src/util/trackable_enum.js";
 import { getWheelZoomAmount } from "#src/util/wheel_zoom.js";
 import type { Viewer } from "#src/viewer.js";
@@ -293,6 +295,17 @@ function updateScaleElementStyle(scaleElement: HTMLInputElement) {
   scaleElement.parentElement!.dataset.isEmpty = value === "" ? "true" : "false";
 }
 
+export function copyPositionToClipboard(position: Position) {
+  const result = setClipboard(
+    position.valid ? formatPositionText(position.value) : "",
+  );
+  StatusMessage.showTemporaryMessage(
+    result
+      ? "Position copied to clipboard"
+      : "Failed to copy position to clipboard",
+  );
+}
+
 export class PositionWidget extends RefCounted {
   element = document.createElement("div");
   private dimensionContainer = document.createElement("div");
@@ -303,6 +316,7 @@ export class PositionWidget extends RefCounted {
   private allowFocus: boolean;
   private showPlayback: boolean;
   private showDropdown: boolean;
+  private showAllPlotBounds: WatchableValueInterface<boolean> | undefined;
 
   private dimensionWidgets = new Map<DimensionId, DimensionWidget>();
   private dimensionWidgetList: DimensionWidget[] = [];
@@ -332,7 +346,7 @@ export class PositionWidget extends RefCounted {
     }
 
     const plot = dropdownOwner.registerDisposer(
-      new PositionPlot(this.position, widget.id),
+      new PositionPlot(this.position, widget.id, this.showAllPlotBounds),
     );
     dropdown.appendChild(plot.element);
 
@@ -625,6 +639,7 @@ export class PositionWidget extends RefCounted {
     }
     if (this.singleDimensionId === undefined) {
       widget.container.addEventListener("dragstart", (event: DragEvent) => {
+        declareAllowedDropEffects(event, "copyMove");
         this.dragSource = widget;
         event.stopPropagation();
         event.dataTransfer!.setData("neuroglancer-dimension", "");
@@ -1040,6 +1055,7 @@ export class PositionWidget extends RefCounted {
       allowFocus = true,
       showPlayback = true,
       showDropdown = true,
+      showAllPlotBounds = undefined,
     }: {
       copyButton?: boolean;
       velocity?: CoordinateSpacePlaybackVelocity;
@@ -1048,6 +1064,7 @@ export class PositionWidget extends RefCounted {
       allowFocus?: boolean;
       showPlayback?: boolean;
       showDropdown?: boolean;
+      showAllPlotBounds?: WatchableValueInterface<boolean>;
     } = {},
   ) {
     super();
@@ -1058,6 +1075,7 @@ export class PositionWidget extends RefCounted {
     this.allowFocus = allowFocus;
     this.showPlayback = showPlayback;
     this.showDropdown = showDropdown;
+    this.showAllPlotBounds = showAllPlotBounds;
     this.registerDisposer(
       position.coordinateSpace.changed.add(
         this.registerCancellable(
@@ -1071,14 +1089,7 @@ export class PositionWidget extends RefCounted {
     if (copyButton) {
       const copyButton = makeCopyButton({
         title: "Copy position to clipboard",
-        onClick: () => {
-          const result = setClipboard(this.getPositionText());
-          StatusMessage.showTemporaryMessage(
-            result
-              ? "Position copied to clipboard"
-              : "Failed to copy position to clipboard",
-          );
-        },
+        onClick: () => copyPositionToClipboard(position),
       });
       copyButton.addEventListener("dragstart", (event) => {
         event.dataTransfer!.setData(
@@ -1257,7 +1268,7 @@ export class PositionWidget extends RefCounted {
   private getPositionText() {
     const { position } = this;
     if (position.valid) {
-      return position.value.map((x) => Math.floor(x)).join(", ");
+      return formatPositionText(position.value);
     }
     return "";
   }
@@ -1360,6 +1371,7 @@ interface SupportsDimensionTool<ToolContext extends object = object> {
   velocity: CoordinateSpacePlaybackVelocity;
   coordinateSpaceCombiner: CoordinateSpaceCombiner;
   toolBinder: LocalToolBinder<ToolContext>;
+  showAllDimensionPlotBounds: WatchableValueInterface<boolean>;
 }
 
 const TOOL_INPUT_EVENT_MAP = EventActionMap.fromObject({
@@ -1452,12 +1464,18 @@ class DimensionTool<Viewer extends object> extends Tool<Viewer> {
         allowFocus: inPalette,
         showPlayback: false,
         showDropdown: false,
+        showAllPlotBounds: viewer.showAllDimensionPlotBounds,
       },
     );
     positionWidget.element.style.userSelect = "none";
     content.appendChild(activation.registerDisposer(positionWidget).element);
     const plot = activation.registerDisposer(
-      new PositionPlot(viewer.position, this.dimensionId, "row"),
+      new PositionPlot(
+        viewer.position,
+        this.dimensionId,
+        viewer.showAllDimensionPlotBounds,
+        "row",
+      ),
     );
     plot.element.style.flex = "1";
     content.appendChild(plot.element);
@@ -1658,6 +1676,8 @@ export function registerDimensionToolForViewer(contextType: typeof Viewer) {
           coordinateSpaceCombiner:
             viewer.layerSpecification.coordinateSpaceCombiner,
           toolBinder: viewer.toolBinder,
+          showAllDimensionPlotBounds:
+            viewer.uiConfiguration.showAllDimensionPlotBounds,
         },
         obj,
       ),
@@ -1678,6 +1698,7 @@ export function registerDimensionToolForUserLayer(
           velocity: layer.localVelocity,
           coordinateSpaceCombiner: layer.localCoordinateSpaceCombiner,
           toolBinder: layer.toolBinder,
+          showAllDimensionPlotBounds: new WatchableValue(true),
         },
         obj,
       ),
@@ -1697,6 +1718,7 @@ export function registerDimensionToolForLayerGroupViewer(
         coordinateSpaceCombiner:
           layerGroupViewer.layerSpecification.root.coordinateSpaceCombiner,
         toolBinder: layerGroupViewer.toolBinder,
+        showAllDimensionPlotBounds: new WatchableValue(true),
       },
       obj,
     ),

@@ -111,6 +111,8 @@ export interface LayerGroupViewerOptions {
   showLayerPanel: WatchableValueInterface<boolean>;
   showViewerMenu: boolean;
   showLayerHoverValues: WatchableValueInterface<boolean>;
+  showAllPlotBounds?: WatchableValueInterface<boolean>;
+  showPanelControls: WatchableValueInterface<boolean>;
 }
 
 export const viewerDragType = "neuroglancer-layer-group-viewer";
@@ -378,6 +380,9 @@ export class LayerGroupViewer extends RefCounted {
   get pickRadius() {
     return this.viewerState.pickRadius;
   }
+  get showPanelControls() {
+    return this.options.showPanelControls;
+  }
   get visibleLayerRoles() {
     return this.viewerState.visibleLayerRoles;
   }
@@ -412,6 +417,7 @@ export class LayerGroupViewer extends RefCounted {
       showLayerPanel: new TrackableBoolean(true),
       showViewerMenu: false,
       showLayerHoverValues: new TrackableBoolean(true),
+      showPanelControls: new TrackableBoolean(true),
       ...options,
     };
     this.layerSpecification = this.registerDisposer(
@@ -541,6 +547,7 @@ export class LayerGroupViewer extends RefCounted {
         this,
         () => this.layout.toJSON(),
         this.options.showLayerHoverValues,
+        this.options.showAllPlotBounds,
       ));
       if (options.showViewerMenu) {
         layerPanel.registerDisposer(makeViewerMenu(layerPanel.element, this));

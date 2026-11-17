@@ -28,8 +28,10 @@ import "codemirror/addon/lint/lint.css";
 import CodeMirror from "codemirror";
 import { debounce } from "lodash-es";
 import { Overlay } from "#src/overlay.js";
+import { ActionCommand } from "#src/ui/command.js";
 import "#src/ui/state_editor.css";
 
+import { bigintToStringJsonReplacer } from "#src/util/json.js";
 import { getCachedJson } from "#src/util/trackable.js";
 import type { Viewer } from "#src/viewer.js";
 
@@ -149,6 +151,23 @@ export class StateEditorDialog extends Overlay {
   }, valueUpdateDelay);
 
   getJson() {
-    return JSON.stringify(getCachedJson(this.viewer.state).value, null, "  ");
+    return JSON.stringify(
+      getCachedJson(this.viewer.state).value,
+      bigintToStringJsonReplacer,
+      "  ",
+    );
   }
+}
+
+export function bindStateEditor(viewer: Viewer): void {
+  viewer.registerDisposer(
+    viewer.commandRegistry.register(
+      new ActionCommand(
+        "edit-json-state",
+        "Edit JSON State",
+        "Open an editor for the raw viewer JSON state.",
+      ),
+    ),
+  );
+  viewer.bindAction("edit-json-state", () => viewer.editJsonState());
 }

@@ -19,8 +19,9 @@ import { ChunkState } from "#src/chunk_manager/base.js";
 import type {
   ChunkManager,
   ChunkRequesterState,
+  Chunk,
 } from "#src/chunk_manager/frontend.js";
-import { Chunk, ChunkSource } from "#src/chunk_manager/frontend.js";
+import { ChunkSource } from "#src/chunk_manager/frontend.js";
 import { applyRenderViewportToProjectionMatrix } from "#src/display_context.js";
 import type { LayerManager } from "#src/layer/index.js";
 import type {
@@ -51,7 +52,6 @@ import type {
   VisibleLayerSources,
 } from "#src/sliceview/base.js";
 import {
-  forEachPlaneIntersectingVolumetricChunk,
   getNormalizedChunkLayout,
   SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID,
   SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID,
@@ -60,14 +60,16 @@ import {
   SliceViewBase,
   SliceViewProjectionParameters,
 } from "#src/sliceview/base.js";
+import type { SliceViewChunk } from "#src/sliceview/chunk_base.js";
 import { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type { SliceViewerState } from "#src/sliceview/panel.js";
 import { SliceViewRenderLayer } from "#src/sliceview/renderlayer.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { extractScalesFromAffineMatrix } from "#src/util/affine.js";
 import type { Borrowed, Disposer, Owned } from "#src/util/disposable.js";
 import { invokeDisposers, RefCounted } from "#src/util/disposable.js";
 import type { vec4 } from "#src/util/geom.js";
-import { kOneVec, kZeroVec4, mat4, vec3 } from "#src/util/geom.js";
+import { kZeroVec4, mat4, vec3 } from "#src/util/geom.js";
 import { MessageList, MessageSeverity } from "#src/util/message_list.js";
 import { getObjectId } from "#src/util/object_id.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
@@ -88,6 +90,8 @@ import type { ShaderModule, ShaderBuilder } from "#src/webgl/shader.js";
 import { getSquareCornersBuffer } from "#src/webgl/square_corners_buffer.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObjectOwner } from "#src/worker_rpc.js";
+
+export { SliceViewChunk } from "#src/sliceview/chunk_base.js";
 
 export type GenericChunkKey = string;
 
@@ -329,14 +333,11 @@ export class SliceView extends Base {
     chunkLayout: ChunkLayout,
     callback: (key: string) => void,
   ) {
-    forEachPlaneIntersectingVolumetricChunk(
-      this.projectionParameters.value,
-      tsource.renderLayer.localPosition.value,
+    tsource.renderLayer.forEachVisibleChunk(
+      this,
       tsource,
       chunkLayout,
-      () => {
-        callback(tsource.curPositionInChunks.join());
-      },
+      callback,
     );
   }
 
@@ -420,7 +421,9 @@ export class SliceView extends Base {
     visibleLayerList.length = 0;
     for (const renderLayer of this.layerManager.readyRenderLayers()) {
       if (renderLayer instanceof SliceViewRenderLayer) {
-        visibleLayerList.push(renderLayer);
+        if (!renderLayer.drawnByHostLayer) {
+          visibleLayerList.push(renderLayer);
+        }
         let layerInfo = visibleLayers.get(renderLayer);
         if (layerInfo === undefined) {
           const disposers: Disposer[] = [];
@@ -456,22 +459,26 @@ export class SliceView extends Base {
           layerInfo.displayDimensionRenderInfo = displayDimensionRenderInfo;
           layerInfo.transformGeneration = curTransformGeneration;
         }
-        this.flushBackendProjectionParameters();
-        rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, {
-          id: this.rpcId,
-          layerId: renderLayer.rpcId,
-          sources: serializeAllTransformedSources(layerInfo.allSources),
-          displayDimensionRenderInfo: displayDimensionRenderInfo,
-        });
+        if (renderLayer.rpcId !== null) {
+          this.flushBackendProjectionParameters();
+          rpc.invoke(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, {
+            id: this.rpcId,
+            layerId: renderLayer.rpcId,
+            sources: serializeAllTransformedSources(layerInfo.allSources),
+            displayDimensionRenderInfo: displayDimensionRenderInfo,
+          });
+        }
         changed = true;
       }
     }
     for (const [renderLayer, layerInfo] of visibleLayers) {
       if (layerInfo.lastSeenGeneration === curUpdateGeneration) continue;
-      rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, {
-        id: this.rpcId,
-        layerId: renderLayer.rpcId,
-      });
+      if (renderLayer.rpcId !== null) {
+        rpc.invoke(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, {
+          id: this.rpcId,
+          layerId: renderLayer.rpcId,
+        });
+      }
       visibleLayers.delete(renderLayer);
       disposeTransformedSources(renderLayer, layerInfo.allSources);
       invokeDisposers(layerInfo.disposers);
@@ -706,17 +713,6 @@ export interface SliceViewChunkSource {
   // TODO(jbms): Move this declaration to the class definition above and declare abstract once
   // TypeScript supports mixins with abstact classes.
   getChunk(x: any): any;
-}
-
-export class SliceViewChunk extends Chunk {
-  chunkGridPosition: vec3;
-  declare source: SliceViewChunkSource;
-
-  constructor(source: SliceViewChunkSource, x: any) {
-    super(source);
-    this.chunkGridPosition = x.chunkGridPosition;
-    this.state = ChunkState.SYSTEM_MEMORY;
-  }
 }
 
 /**
@@ -1061,17 +1057,14 @@ export function getVolumetricTransformedSources(
         chunkDisplayTransform.displaySubspaceModelMatrix,
         numChunkDisplayDims,
       );
-      // This is an approximation of the voxel size (exact only for permutation/scaling
-      // transforms).  It would be better to model the voxel as an ellipsiod and find the
-      // lengths of the axes.
-      const effectiveVoxelSize = chunkLayout.localSpatialVectorToGlobal(
-        vec3.create(),
-        /*baseVoxelSize=*/ kOneVec,
+      const effectiveVoxelSizeValues = extractScalesFromAffineMatrix(
+        chunkLayout.transform,
+        displayRank,
+        globalScales,
       );
+      const effectiveVoxelSize = vec3.create();
       for (let i = 0; i < displayRank; ++i) {
-        effectiveVoxelSize[i] = Math.abs(
-          effectiveVoxelSize[i] * globalScales[i],
-        );
+        effectiveVoxelSize[i] = effectiveVoxelSizeValues[i];
       }
       effectiveVoxelSize.fill(1, displayRank);
       return {

@@ -28,3 +28,22 @@ def test_config_state_pick_radius():
     c2 = viewer_config_state.ConfigState(pickRadius=20)
     assert c2.pick_radius == 20
     assert c2.pickRadius == 20
+
+
+def test_config_state_ui_control_flags():
+    c = viewer_config_state.ConfigState()
+    assert c.show_panel_controls is True
+    assert c.show_edit_state_button is True
+    assert c.show_annotation_tool_status is True
+
+    c.show_panel_controls = False
+    c.show_edit_state_button = False
+    c.show_annotation_tool_status = False
+    assert c.to_json() == {
+        "showPanelControls": False,
+        "showEditStateButton": False,
+        "showAnnotationToolStatus": False,
+    }
+
+    c2 = viewer_config_state.ConfigState(showPanelControls=False)
+    assert c2.showPanelControls is False

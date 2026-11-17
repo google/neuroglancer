@@ -35,17 +35,21 @@ export interface ShaderErrorMessage {
   message: string;
 }
 
+function getCleanShaderInfoLog(log: string) {
+  return log.replace("\0", "").replace(/(:\d+:\s*)''\s*:\s*/g, "$1");
+}
+
 /**
  * Parses the output of getShaderInfoLog into a list of messages.
  */
 export function parseShaderErrors(log: string) {
-  log = log.replace("\0", "");
   const result: ShaderErrorMessage[] = [];
   for (let line of log.split("\n")) {
     let m = line.match(/^ERROR:\s*(\d+):(\d+)\s*(.+)$/);
     if (m !== null) {
+      const message = m[3].trim();
       result.push({
-        message: m[3].trim(),
+        message,
         file: parseInt(m[1], 10),
         line: parseInt(m[2], 10),
       });
@@ -113,7 +117,7 @@ export function getShader(
   gl.compileShader(shader);
 
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const log = gl.getShaderInfoLog(shader) || "";
+    const log = getCleanShaderInfoLog(gl.getShaderInfoLog(shader) || "");
 
     if (DEBUG_SHADER) {
       const lines = source
@@ -223,6 +227,7 @@ export class ShaderProgram extends RefCounted {
       throw new ShaderLinkError(vertexSource, fragmentSource, log);
     }
     this.program = shaderProgram!;
+    this.textureUnits = new Map<any, number>();
 
     const { uniforms, attributes } = this;
     if (uniformNames) {
@@ -238,16 +243,20 @@ export class ShaderProgram extends RefCounted {
     }
   }
 
-  uniform(name: string): WebGLUniformLocation {
-    return this.uniforms.get(name)!;
+  uniform(name: string): WebGLUniformLocation | null {
+    const location = this.uniforms.get(name);
+    if (location === undefined) {
+      throw new Error(`Invalid uniform: ${name}`);
+    }
+    return location;
   }
 
   attribute(name: string): number {
     return this.attributes.get(name)!;
   }
 
-  textureUnit(symbol: symbol | string): number {
-    return this.textureUnits.get(symbol)!;
+  textureUnit(symbol: symbol | string): number | undefined {
+    return this.textureUnits.get(symbol);
   }
 
   bind() {

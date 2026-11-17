@@ -19,7 +19,7 @@ members:
   - `"ids"`: Array of strings specifying the base-10 representation of the segment IDs for which
     inline property values are specified.
   - `"properties"`: Specifies the supported inline property types. Array of objects, each with the following members:
-    - `"id"`: Required. String identifier to display in the UI. (Not displayed if the `"type"` is
+    - `"id"`: Required. Must be unique. String identifier to display in the UI. (Not displayed if the `"type"` is
       `"label"` or `"description"`.)
     - `"type"`: Required. Must be one of `"label"`, `"description"`, `"string"`, `"tags"`,
       `"number"`. At most one property may have type `"label"` (which is displayed in the UI next

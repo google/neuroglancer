@@ -26,7 +26,7 @@ import type {
   ChunkFormatHandler,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
-import { registerChunkFormatHandler } from "#src/sliceview/volume/frontend.js";
+import { registerChunkFormatHandler } from "#src/sliceview/volume/registry.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { vec3, vec3Key } from "#src/util/geom.js";
 import type { GL } from "#src/webgl/context.js";

@@ -6,12 +6,13 @@ Neuroglancer
    :hidden:
    :caption: User Guide
 
-   user-guide/navigation
+   user-guide/index
 
 .. toctree::
    :hidden:
    :caption: Concepts
 
+   concepts/commands
    concepts/coordinate_spaces
    concepts/data_views
    concepts/layers
@@ -32,6 +33,18 @@ Neuroglancer
    :caption: Python API
 
    python/api/index
+
+.. toctree::
+   :hidden:
+   :caption: Gallery
+
+   gallery/index
+
+.. toctree::
+   :hidden:
+   :caption: Governance
+
+   governance/governance
 
 Neuroglancer is a WebGL-based viewer for volumetric data.  It is capable of
 displaying arbitrary (non axis-aligned) cross-sectional views of volumetric

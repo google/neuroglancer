@@ -17,7 +17,7 @@
 import { describe, it, expect } from "vitest";
 import type { OrientedSliceScales } from "#src/util/geom.js";
 import {
-  getFrustrumPlanes,
+  getFrustumPlanes,
   isAABBVisible,
   mat4,
   quat,
@@ -33,10 +33,10 @@ const AXES_RELATIVE_ORIENTATION = new Map<NamedAxes, quat | undefined>([
   ["yz", quat.rotateY(quat.create(), quat.create(), Math.PI / 2)],
 ]);
 
-describe("getFrustrumPlanes", () => {
+describe("getFrustumPlanes", () => {
   it("works for simple example", () => {
     const m = mat4.perspective(mat4.create(), Math.PI / 2, 4.0, 7, 113);
-    const planes = getFrustrumPlanes(new Float32Array(24), m);
+    const planes = getFrustumPlanes(new Float32Array(24), m);
     const expectedPlanes = [
       // left
       +0.25, 0, -1, 0,
@@ -58,7 +58,7 @@ describe("getFrustrumPlanes", () => {
 describe("isAABBVisible", () => {
   it("works for simple example", () => {
     const m = mat4.perspective(mat4.create(), Math.PI / 2, 4.0, 7, 113);
-    const planes = getFrustrumPlanes(new Float32Array(24), m);
+    const planes = getFrustumPlanes(new Float32Array(24), m);
     expect(isAABBVisible(-1, -1, -20, 1, 1, -15, planes)).toBe(true);
     expect(isAABBVisible(-50, -1, -8, -40, 1, -7, planes)).toBe(false);
     expect(isAABBVisible(40, -1, -8, 50, 1, -7, planes)).toBe(false);

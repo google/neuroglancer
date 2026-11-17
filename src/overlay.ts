@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import svg_close from "ikonate/icons/close.svg?raw";
 import { AutomaticallyFocusedElement } from "#src/util/automatic_focus.js";
 import { RefCounted } from "#src/util/disposable.js";
 import {
@@ -21,6 +22,7 @@ import {
   KeyboardEventBinder,
 } from "#src/util/keyboard_bindings.js";
 import "#src/overlay.css";
+import { makeIcon } from "#src/widget/icon.js";
 
 export const overlayKeyboardHandlerPriority = 100;
 
@@ -60,5 +62,58 @@ export class Overlay extends RefCounted {
     --overlaysOpen;
     document.body.removeChild(this.container);
     super.disposed();
+  }
+}
+
+export class FramedDialog extends Overlay {
+  header: HTMLDivElement;
+  headerTitle: HTMLSpanElement;
+  closeMenuIcon: HTMLElement;
+  primaryButton: HTMLButtonElement;
+  body: HTMLDivElement;
+  footer: HTMLDivElement;
+  constructor(
+    title: string = "Dialog",
+    primaryButtonText: string = "Close",
+    extraClassPrefix?: string,
+    primaryButtonClickListener?: () => void,
+  ) {
+    super();
+
+    const header = (this.header = document.createElement("div"));
+    const closeMenuIcon = (this.closeMenuIcon = makeIcon({ svg: svg_close }));
+    closeMenuIcon.addEventListener("click", () => this.close());
+    const headerTitle = (this.headerTitle = document.createElement("span"));
+    headerTitle.textContent = title;
+    header.appendChild(headerTitle);
+    header.appendChild(closeMenuIcon);
+    this.content.appendChild(header);
+
+    const body = (this.body = document.createElement("div"));
+    this.content.appendChild(body);
+
+    const footer = (this.footer = document.createElement("div"));
+    const primaryButton = (this.primaryButton =
+      document.createElement("button"));
+    primaryButton.textContent = primaryButtonText;
+    const onPrimaryClick = primaryButtonClickListener ?? (() => this.close());
+    primaryButton.addEventListener("click", onPrimaryClick);
+    footer.appendChild(primaryButton);
+    this.content.appendChild(this.footer);
+
+    const classPrefixes = ["neuroglancer-framed-dialog"];
+    if (extraClassPrefix !== undefined) {
+      classPrefixes.push(extraClassPrefix);
+    }
+
+    for (const classPrefix of classPrefixes) {
+      this.content.classList.add(`${classPrefix}`);
+      this.header.classList.add(`${classPrefix}-header`);
+      this.headerTitle.classList.add(`${classPrefix}-title`);
+      this.closeMenuIcon.classList.add(`${classPrefix}-close-icon`);
+      this.body.classList.add(`${classPrefix}-body`);
+      this.footer.classList.add(`${classPrefix}-footer`);
+      this.primaryButton.classList.add(`${classPrefix}-primary-button`);
+    }
   }
 }

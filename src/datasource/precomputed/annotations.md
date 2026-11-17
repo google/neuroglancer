@@ -62,7 +62,7 @@ members:
     May also be a relative path `"/"`-separated path, optionally containing `".."` components, which
     is interpreted relative to the parent directory of the `"info"` file.
   - `"sharding"`: Optional. If specified, must be a [sharding
-    specification](./sharding.md#sharding-specification), and indicates that the [sharded uint64
+    specification](./sharded.md#sharding-specification), and indicates that the [sharded uint64
     index format](#sharded-uint64-index) is used. Otherwise, the [unsharded uint64 index
     format](#unsharded-uint64-index) is used.
 - `"by_id"`: JSON object specifying the location and format of the [annotation id index](#annotation-id-index), with the following members:
@@ -70,7 +70,7 @@ members:
     path `"/"`-separated path, optionally containing `".."` components, which is interpreted
     relative to the parent directory of the `"info"` file.
   - `"sharding"`: Optional. If specified, must be a [sharding
-    specification](./sharding.md#sharding-specification), and indicates that the [sharded uint64
+    specification](./sharded.md#sharding-specification), and indicates that the [sharded uint64
     index format](#sharded-uint64-index) index format is used. Otherwise, the [unsharded uint64
     index format](#unsharded-uint64-index) index format is used.
 - `"spatial"`: Array of JSON objects specifying the spatial index levels from coarse to fine, each
@@ -79,7 +79,7 @@ members:
     path `"/"`-separated path, optionally containing `".."` components, which is interpreted
     relative to the parent directory of the `"info"` file.
   - `"sharding"`: Optional. If specified, must be a [sharding
-    specification](./sharding.md#sharding-specification), and indicates that the [sharded spatial
+    specification](./sharded.md#sharding-specification), and indicates that the [sharded spatial
     index format](#sharded-spatial-index) index format is used. Otherwise, the [unsharded spatial
     index](#unsharded-spatial-index) format is used.
   - `"grid_shape"`: Array of `rank` positive integers specifying the number of cells along each grid dimension for this spatial index level.

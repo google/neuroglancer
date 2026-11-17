@@ -25,6 +25,7 @@ import {
   getDisplayLowerUpperBounds,
 } from "#src/coordinate_transform.js";
 import type { Position } from "#src/navigation_state.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { filterArrayInplace } from "#src/util/array.js";
@@ -106,6 +107,7 @@ export class PositionPlot extends RefCounted {
   constructor(
     public position: Position,
     public dimensionId: DimensionId,
+    private showAllBounds?: WatchableValueInterface<boolean>,
     public orientation: "row" | "column" = "column",
   ) {
     super();
@@ -176,6 +178,15 @@ export class PositionPlot extends RefCounted {
         this.element.style.display = "none";
         this.visible = false;
         return;
+      }
+      if (this.showAllBounds?.value === false) {
+        const { normalizedBounds } = normalizedDimensionBounds;
+        normalizedDimensionBounds.normalizedBounds = [
+          {
+            lower: Math.min(...normalizedBounds.map((b) => b.lower)),
+            upper: Math.max(...normalizedBounds.map((b) => b.upper)),
+          },
+        ];
       }
       this.element.style.display = "";
       this.visible = true;
@@ -282,6 +293,9 @@ export class PositionPlot extends RefCounted {
       animationFrameDebounce(updateView),
     );
     this.registerDisposer(this.position.changed.add(scheduleUpdateView));
+    if (this.showAllBounds !== undefined) {
+      this.registerDisposer(this.showAllBounds.changed.add(scheduleUpdateView));
+    }
     const getPositionFromMouseEvent = (
       event: MouseEvent,
     ): number | undefined => {
