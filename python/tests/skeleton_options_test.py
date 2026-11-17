@@ -248,9 +248,9 @@ def test_skeleton_render_mode(webdriver):
             blue, 0, err_msg=f"{case} put light in the blue channel"
         )
         drawn_red = red[red != 0]
-        assert len(drawn_red) > 200, (
-            f"{case} drew {len(drawn_red)} pixels, too few to judge the shading"
-        )
+        assert (
+            len(drawn_red) > 200
+        ), f"{case} drew {len(drawn_red)} pixels, too few to judge the shading"
         drawn_counts[(layout, mode)] = len(drawn_red)
 
         fully_bright = (drawn_red == FULL_BRIGHTNESS).mean()
@@ -320,9 +320,9 @@ def test_cylinder_default_shader_object_alpha(webdriver):
 
     line = brightest("lines")
     tube = brightest("cylinders")
-    assert line > MIN_BRIGHTNESS_FOR_A_HALF_OPAQUE_LINE, (
-        f"the half opaque line reached only {line}, too dark to compare against"
-    )
+    assert (
+        line > MIN_BRIGHTNESS_FOR_A_HALF_OPAQUE_LINE
+    ), f"the half opaque line reached only {line}, too dark to compare against"
     assert tube >= line, (
         f"the half opaque tube reached {tube} against {line} for a line of the same "
         f"colour and opacity. About {line // 2} means the object alpha was likely applied "
