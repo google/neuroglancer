@@ -73,7 +73,10 @@ import {
 } from "#src/webgl/circles.js";
 import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
-import type { ParameterizedShaderGetterResult } from "#src/webgl/dynamic_shader.js";
+import type {
+  ParameterizedShaderGetterResult,
+  WatchableShaderError,
+} from "#src/webgl/dynamic_shader.js";
 import {
   makeAggregateWatchableShaderError,
   makeTrackableFragmentMain,
@@ -783,7 +786,7 @@ export interface ViewSpecificSkeletonRenderingOptions<
   lineWidth: TrackableSkeletonLineWidth;
 }
 
-export class SkeletonRenderingOptions extends RefCounted implements Trackable {
+export class SkeletonRenderingOptions implements Trackable {
   private compound = new CompoundTrackable();
   get changed() {
     return this.compound.changed;
@@ -792,10 +795,7 @@ export class SkeletonRenderingOptions extends RefCounted implements Trackable {
   shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
   readonly edgeShaderError = makeWatchableShaderError();
   readonly nodeShaderError = makeWatchableShaderError();
-  readonly shaderError = makeAggregateWatchableShaderError(this, [
-    this.edgeShaderError,
-    this.nodeShaderError,
-  ]);
+  readonly shaderError: WatchableShaderError;
   shaderControlState = new ShaderControlState(this.shader);
   codeVisible = new TrackableBoolean(true);
   hideInactiveShaderControls = new TrackableBoolean(false);
@@ -810,8 +810,11 @@ export class SkeletonRenderingOptions extends RefCounted implements Trackable {
     lineWidth: new TrackableSkeletonLineWidth(1),
   };
 
-  constructor() {
-    super();
+  constructor(layer: RefCounted) {
+    this.shaderError = makeAggregateWatchableShaderError(layer, [
+      this.edgeShaderError,
+      this.nodeShaderError,
+    ]);
     const { compound } = this;
     compound.add("shader", this.shader);
     compound.add("shaderControls", this.shaderControlState);
