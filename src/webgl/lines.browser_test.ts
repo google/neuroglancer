@@ -99,7 +99,8 @@ function isCovered(pixels: Uint8Array, x: number, y: number): boolean {
 describe("line endpoint clipping", () => {
   it("removes a disc at each endpoint, so a node drawn there has room", () => {
     webglTest((gl) => {
-      // Endpoint A lands at pixel 16.
+      // Endpoint A lands at x 16 and endpoint B at x 48. Pixel 47 is the last one
+      // the line covers at B.
       const spec = {
         endpointA: [-0.5, 0, 0, 1],
         endpointB: [0.5, 0, 0, 1],
@@ -120,6 +121,8 @@ describe("line endpoint clipping", () => {
       expect(coveredCount(clipped)).toBeLessThan(coveredCount(unclipped));
       expect(isCovered(unclipped, 16, VIEWPORT / 2)).toBe(true);
       expect(isCovered(clipped, 16, VIEWPORT / 2)).toBe(false);
+      expect(isCovered(unclipped, 47, VIEWPORT / 2)).toBe(true);
+      expect(isCovered(clipped, 47, VIEWPORT / 2)).toBe(false);
     });
   });
 

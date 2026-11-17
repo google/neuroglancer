@@ -574,7 +574,7 @@ void emitDefault() {
       canonicalVoxelFactors[1],
       canonicalVoxelFactors[2],
     );
-    // Camera-relative, because float32 loses the surface normal of a dataset 1e4
+    // Camera-relative, because float32 visibly distorts the surface from about 1e6
     // canonical voxels from the origin.
     const { invViewMatrix } = projectionParameters;
     const cameraOffset = vec3.set(

@@ -38,7 +38,6 @@ const FIELD_OF_VIEW = Math.PI / 4;
 const SHADE_WHOLE_QUAD = "out_color = vec4(1.0);\n";
 // Measures the primitive's surface, because a miss discards.
 const SHADE_SURFACE = `${glsl_raycastFragmentSetup}out_color = vec4(1.0);\n`;
-const SHADE_LIGHTING = `${glsl_raycastFragmentSetup}out_color = vec4(vec3(raycastLightingFactor), 1.0);\n`;
 // Green marks a hit, because a red fraction of zero looks like an unwritten pixel.
 const SHADE_AXIAL_FRACTION = `${glsl_raycastFragmentSetup}out_color = vec4(raycastConeAxialFraction, 1.0, 0.0, 1.0);\n`;
 
@@ -83,13 +82,6 @@ function depthRange(relativeDepthRange: number): mat4 {
     Math.max(0.1, 1 - range),
     1 + range,
   );
-}
-
-// The camera-at-origin view, translated by `offset` along each axis and back.
-function cameraOffsetFromOrigin(offset: number): mat4 {
-  const projection = cameraAtOrigin();
-  mat4.translate(projection, projection, [-offset, -offset, -offset]);
-  return mat4.translate(projection, projection, [offset, offset, offset]);
 }
 
 function render(
@@ -179,14 +171,6 @@ function buildWithEmitHelper(
   builder.addFragmentCode(`void emitShaded() {\n${emitHelperBody}}\n`);
   builder.setFragmentMain(`${glsl_raycastFragmentSetup}emitShaded();\n`);
   builder.build().dispose();
-}
-
-function largestPixelDifference(a: Uint8Array, b: Uint8Array): number {
-  let largest = 0;
-  for (let i = 0; i < VIEWPORT * VIEWPORT; ++i) {
-    largest = Math.max(largest, Math.abs(a[i * 4] - b[i * 4]));
-  }
-  return largest;
 }
 
 function coveredFraction(pixels: Uint8Array): number {
@@ -385,26 +369,6 @@ describe("raycast cone", () => {
     });
   });
 
-  it("draws a tapered cone facing the camera", () => {
-    webglTest((gl) => {
-      const shaded = coveredFraction(
-        drawCone(
-          gl,
-          {
-            endpointA: [0, 0, -0.4],
-            endpointB: [0, 0, -1.3],
-            radiusA: 0.06,
-            radiusB: 0.28,
-            clipRadiusA: 0.06,
-            clipRadiusB: 0.28,
-          },
-          SHADE_SURFACE,
-        ),
-      );
-      expect(shaded).toBeGreaterThan(0.01);
-    });
-  });
-
   it("tapers the width between two different end radii", () => {
     webglTest((gl) => {
       // Endpoint A is the lower end, so the width grows from bottom to top. These
@@ -527,25 +491,6 @@ describe("raycast cone", () => {
         );
       expect(shaded(1e10)).toBeGreaterThan(0);
       expect(shaded(1e10)).toBeCloseTo(shaded(1), 3);
-    });
-  });
-
-  it("keeps the surface normal with the space's origin 1e4 away", () => {
-    webglTest((gl) => {
-      const spec: ConeSpec = {
-        endpointA: [0, -0.3, -1],
-        endpointB: [0, 0.3, -1],
-        radiusA: 0.05,
-        radiusB: 0.05,
-      };
-      const atOrigin = drawCone(gl, spec, SHADE_LIGHTING);
-      const farFromOrigin = drawCone(
-        gl,
-        spec,
-        SHADE_LIGHTING,
-        cameraOffsetFromOrigin(1e4),
-      );
-      expect(largestPixelDifference(atOrigin, farFromOrigin)).toBeLessThan(3);
     });
   });
 

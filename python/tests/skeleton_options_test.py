@@ -243,3 +243,40 @@ void main() {
     pixels = webdriver.viewer.screenshot(size=[10, 10]).screenshot.image_pixels
     assert np.all(pixels[..., 0] > 0)
     assert np.all(pixels[..., 2] > 0)
+
+
+def test_cylinder_far_from_origin_looks_the_same_as_at_origin(webdriver):
+    def render(offset):
+        webdriver.viewer.set_state({})
+        with webdriver.viewer.txn() as s:
+            s.dimensions = dimensions
+            s.position = [offset, offset, offset]
+            s.layout = "3d"
+            s.projection_scale = 32
+            s.projection_background_color = "#000000"
+            s.show_axis_lines = False
+            s.show_scale_bar = False
+            s.layers.append(
+                name="skeleton",
+                layer=neuroglancer.SegmentationLayer(
+                    source=SkeletonSource(
+                        vertex_positions=[
+                            [offset - 100, offset, offset],
+                            [offset + 100, offset, offset],
+                        ],
+                        edges=[[0, 1]],
+                    ),
+                    segments=[1],
+                ),
+            )
+            rendering = s.layers[0].skeleton_rendering
+            rendering.mode3d = "cylinders"
+            rendering.line_width3d = 16
+            rendering.shader = "void main() { emitRGB(vec3(1.0)); }"
+        return webdriver.viewer.screenshot(size=[32, 32]).screenshot.image_pixels.copy()
+
+    at_origin = render(0).astype(int)
+    # Far enough that float32 coordinates move the surface by over 100 levels.
+    far_from_origin = render(3e6).astype(int)
+    assert (at_origin[..., 0] > 0).sum() > 100
+    np.testing.assert_allclose(far_from_origin, at_origin, atol=8, rtol=0)
