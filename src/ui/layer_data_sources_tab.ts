@@ -34,12 +34,19 @@ import type {
 } from "#src/layer/layer_data_source.js";
 import { LoadedLayerDataSource } from "#src/layer/layer_data_source.js";
 import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
+import { getVoxelEditingIncompatibility } from "#src/layer/voxel_editing/eligibility.js";
 import { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
 import { SkeletonSource } from "#src/skeleton/frontend.js";
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
-import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import {
+  ElementVisibilityFromTrackableBoolean,
+  TrackableBooleanCheckbox,
+} from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
-import { WatchableValue } from "#src/trackable_value.js";
+import {
+  makeCachedDerivedWatchableValue,
+  WatchableValue,
+} from "#src/trackable_value.js";
 import type { DebouncedFunction } from "#src/util/animation_frame_debounce.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { DataType } from "#src/util/data_type.js";
@@ -193,21 +200,63 @@ export class DataSourceSubsourceView extends RefCounted {
     this.registerDisposer(
       loadedSource.enabledSubsourcesChanged.add(updateActiveAttribute),
     );
+    const enabledState: WatchableValueInterface<boolean> & {
+      set value(v: boolean);
+    } = {
+      get value() {
+        return loadedSubsource.enabled;
+      },
+      set value(value: boolean) {
+        if (loadedSubsource.enabled === value) return;
+        loadedSubsource.enabled = value;
+        loadedSource.enableDefaultSubsources = false;
+        loadedSource.enabledSubsourcesChanged.dispatch();
+      },
+      changed: loadedSource.enabledSubsourcesChanged,
+    };
     const enabledCheckbox = this.registerDisposer(
-      new TrackableBooleanCheckbox({
-        get value() {
-          return loadedSubsource.enabled;
-        },
-        set value(value: boolean) {
-          loadedSubsource.enabled = value;
-          loadedSource.enableDefaultSubsources = false;
-          loadedSource.enabledSubsourcesChanged.dispatch();
-        },
-        changed: loadedSource.enabledSubsourcesChanged,
-      }),
+      new TrackableBooleanCheckbox(enabledState),
     );
     sourceInfoLine.classList.add("neuroglancer-layer-data-sources-info-line");
     sourceInfoLine.appendChild(enabledCheckbox.element);
+
+    const { subsource } = loadedSubsource.subsourceEntry;
+    if (subsource.volume instanceof MultiscaleVolumeChunkSource) {
+      const writableCheckbox = this.registerDisposer(
+        new TrackableBooleanCheckbox(loadedSubsource.writingEnabled),
+      );
+      writableCheckbox.element.title = "Enable voxel editing for this source";
+      const writableLabel = document.createElement("label");
+      writableLabel.className = "neuroglancer-layer-data-source-writable-label";
+      writableLabel.appendChild(writableCheckbox.element);
+      writableLabel.appendChild(document.createTextNode("[Enable writing?]"));
+
+      const incompatibility =
+        subsource.writingIncompatibility ??
+        getVoxelEditingIncompatibility(subsource.volume);
+      if (incompatibility !== undefined) {
+        writableCheckbox.element.disabled = true;
+        writableLabel.title = incompatibility;
+        writableLabel.classList.add(
+          "neuroglancer-layer-data-source-writable-label-disabled",
+        );
+      }
+
+      this.registerDisposer(
+        new ElementVisibilityFromTrackableBoolean(
+          makeCachedDerivedWatchableValue(
+            (enabled, supportsWriting) => enabled && supportsWriting,
+            [
+              enabledState,
+              new WatchableValue(subsource.supportsWriting ?? false),
+            ],
+          ),
+          writableLabel,
+        ),
+      );
+
+      sourceInfoLine.appendChild(writableLabel);
+    }
 
     const sourceId = document.createElement("span");
     sourceId.classList.add("neuroglancer-layer-data-sources-source-id");
@@ -224,7 +273,6 @@ export class DataSourceSubsourceView extends RefCounted {
     sourceInfoLine.appendChild(sourceType);
     element.appendChild(messagesView.element);
     let sourceTypeStr = "";
-    const { subsource } = loadedSubsource.subsourceEntry;
     const { volume } = subsource;
     if (volume instanceof MultiscaleVolumeChunkSource) {
       sourceTypeStr = `${DataType[volume.dataType].toLowerCase()} volume`;

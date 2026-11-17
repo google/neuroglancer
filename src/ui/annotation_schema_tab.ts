@@ -1679,7 +1679,7 @@ export class AnnotationSchemaView extends Tab {
 
   private defaultValuePerType(uiType: AnnotationPropertyType): number {
     if (uiType === "bool") {
-      return 1;
+      return 0;
     }
     if (uiType === "rgb") {
       return packColor(vec3.fromValues(1, 1, 1));

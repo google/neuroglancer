@@ -108,14 +108,17 @@ export async function buildPackage(options: {
     });
   }
 
-  const otherSources = await glob(["**/*.{css,js,html,wasm}"], {
+  const otherSources = await glob(["**/*.{css,js,html,wasm,svg}"], {
     cwd: srcDir,
     nodir: true,
   });
   await Promise.all(
-    otherSources.map((name) =>
-      fs.copyFile(path.resolve(srcDir, name), path.resolve(libDir, name)),
-    ),
+    otherSources.map(async (name) => {
+      // Directories without TypeScript sources are not created by esbuild.
+      const dest = path.resolve(libDir, name);
+      await fs.mkdir(path.dirname(dest), { recursive: true });
+      await fs.copyFile(path.resolve(srcDir, name), dest);
+    }),
   );
 
   if (!inplace) {
