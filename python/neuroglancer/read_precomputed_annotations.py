@@ -177,7 +177,7 @@ def _point_check_bounds(annotation, lower_bound, upper_bound):
 
 
 def _bbox_check_bounds(min_pt, max_pt, lower_bound, upper_bound):
-    return np.all(min_pt <= upper_bound) and np.all(max_pt <= lower_bound)
+    return np.all(min_pt <= upper_bound) and np.all(max_pt >= lower_bound)
 
 
 def _line_check_bounds(annotation, lower_bound, upper_bound):
@@ -199,7 +199,7 @@ def _axis_aligned_bounding_box_check_bounds(annotation, lower_bound, upper_bound
 
 
 def _ellipsoid_check_bounds(annotation, lower_bound, upper_bound):
-    center = annotation.point_a
+    center = annotation.center
     radii = annotation.radii
     return _bbox_check_bounds(center - radii, center + radii, lower_bound, upper_bound)
 
@@ -397,9 +397,20 @@ class AnnotationReader:
             viewer_state.AnnotationPropertySpec(prop)
             for prop in self.metadata.get("properties", [])
         ]
-        self._property_dtype = write_annotations._get_dtype_for_properties(
-            self.properties
+        # Properties are encoded in order of decreasing alignment, which may
+        # differ from the order in which they are listed in the metadata.
+        alignments = [
+            write_annotations._PROPERTY_DTYPES[p.type][1] for p in self.properties
+        ]
+        encoded_order = sorted(
+            range(len(self.properties)), key=lambda i: -alignments[i]
         )
+        self._property_dtype = write_annotations._get_dtype_for_properties(
+            [self.properties[i] for i in encoded_order]
+        )
+        self._property_field_names = [""] * len(self.properties)
+        for encoded_index, i in enumerate(encoded_order):
+            self._property_field_names[i] = f"property{encoded_index}"
         self._dtype = (
             write_annotations._get_dtype_for_geometry(
                 self.annotation_type, self.coordinate_space.rank
@@ -430,7 +441,7 @@ class AnnotationReader:
         dtype = self._get_dtype(encoded)
         decoded = np.frombuffer(encoded, dtype=dtype, count=1)[0]
         geom = decoded["geometry"]
-        props = [decoded[f"property{i}"] for i in range(len(self.properties))]
+        props = [decoded[name] for name in self._property_field_names]
         offset = decoded.nbytes
         segments = []
         for i in range(len(self.relationships)):
@@ -473,12 +484,12 @@ class AnnotationReader:
             )
         constructor = _ANNOTATION_TYPE_CONSTRUCTORS[self.annotation_type]
         rank = self.coordinate_space.rank
-        num_properties = len(self.properties)
+        property_field_names = self._property_field_names
         return [
             constructor(
                 decoded[annotation_i]["geometry"],
                 rank,
-                [decoded[annotation_i][f"property{i}"] for i in range(num_properties)],
+                [decoded[annotation_i][name] for name in property_field_names],
                 None,
                 str(ids[annotation_i]),
             )

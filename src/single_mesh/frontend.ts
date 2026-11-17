@@ -312,7 +312,7 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
     const bindTexture = (texture: WebGLTexture | null) => {
       const textureUnit =
         WebGL2RenderingContext.TEXTURE0 +
-        shader.textureUnit(vertexAttributeSamplerSymbols[index]);
+        shader.textureUnit(vertexAttributeSamplerSymbols[index])!;
       gl.activeTexture(textureUnit);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
       ++index;
@@ -338,7 +338,7 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
     }
     for (let i = 0; i < numTextures; ++i) {
       const curTextureUnit =
-        shader.textureUnit(vertexAttributeSamplerSymbols[i]) +
+        shader.textureUnit(vertexAttributeSamplerSymbols[i])! +
         WebGL2RenderingContext.TEXTURE0;
       gl.activeTexture(curTextureUnit);
       gl.bindTexture(gl.TEXTURE_2D, null);

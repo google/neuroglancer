@@ -40,6 +40,30 @@ function makeCheckboxControlParseResult(
   };
 }
 
+function makePropertyControlParseResult(
+  code: string,
+): ShaderControlsParseResult {
+  return {
+    source: code,
+    code,
+    controls: new Map([
+      [
+        "selectedProperty",
+        {
+          type: "property",
+          segmentProperties: {
+            tags: [],
+            numericalProperties: new Map([["value", 2]]),
+            stringProperties: [],
+          },
+        },
+      ],
+    ]),
+    preprocessing: { stringLiteralIds: new Map() },
+    errors: [],
+  };
+}
+
 const shaderWithoutUniforms = {
   uniforms: new Map(),
 } as unknown as ShaderProgram;
@@ -60,6 +84,28 @@ vec4 segmentColor(vec4 color) {
   it("does not match a checkbox control as part of another identifier", () => {
     const parseResult = makeCheckboxControlParseResult(
       "bool value = enabledFallback;",
+    );
+
+    expect(computeActiveControls(shaderWithoutUniforms, parseResult)).toEqual(
+      new Set(),
+    );
+  });
+
+  it("marks a referenced property control active", () => {
+    const parseResult = makePropertyControlParseResult(`
+vec4 segmentColor(vec4 color) {
+  if (!selectedProperty) color.a = 0.2;
+  return color;
+}`);
+
+    expect(computeActiveControls(shaderWithoutUniforms, parseResult)).toEqual(
+      new Set(["selectedProperty"]),
+    );
+  });
+
+  it("does not match a property control as part of another identifier", () => {
+    const parseResult = makePropertyControlParseResult(
+      "bool value = selectedPropertyFallback;",
     );
 
     expect(computeActiveControls(shaderWithoutUniforms, parseResult)).toEqual(

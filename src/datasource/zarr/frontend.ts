@@ -33,6 +33,7 @@ import type {
 } from "#src/datasource/index.js";
 import { getKvStorePathCompletions } from "#src/datasource/kvstore_completions.js";
 import { VolumeChunkSourceParameters } from "#src/datasource/zarr/base.js";
+import { codecChainSupportsWriting } from "#src/datasource/zarr/codec/index.js";
 import "#src/datasource/zarr/codec/bytes/resolve.js";
 import "#src/datasource/zarr/codec/crc32c/resolve.js";
 import "#src/datasource/zarr/codec/gzip/resolve.js";
@@ -518,6 +519,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
       this.zarrVersion === undefined ? "" : ` v${this.zarrVersion}`;
     return `Zarr${versionStr} data source`;
   }
+
   get(options: GetKvStoreBasedDataSourceOptions): Promise<DataSource> {
     let { kvStoreUrl, additionalPath, fragment } = resolveUrl(options);
     kvStoreUrl = kvstoreEnsureDirectoryPipelineUrl(
@@ -583,6 +585,16 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
           sharedKvStoreContext,
           multiscaleInfo,
         );
+        const supportsWriting =
+          sharedKvStoreContext.kvStoreContext.getKvStore(kvStoreUrl).store
+            .write !== undefined;
+        const writingIncompatibility = multiscaleInfo.scales.every((scale) =>
+          codecChainSupportsWriting(scale.metadata.codecs),
+        )
+          ? undefined
+          : "Writing is not supported for arrays whose codec chain includes " +
+            "sharding_indexed, an array-to-array codec such as transpose, or " +
+            "a codec without an encoder such as zstd or crc32c.";
         const modelTransform = {
           rank: volume.modelSpace.rank,
           sourceRank: volume.modelSpace.rank,
@@ -600,7 +612,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
               id: "default",
               default: true,
               url: undefined,
-              subsource: { volume },
+              subsource: { volume, supportsWriting, writingIncompatibility },
             },
             {
               id: "bounds",
