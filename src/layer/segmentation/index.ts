@@ -779,6 +779,11 @@ vColor = segmentColorUserShader(uint64_t(aID));
     }
     if (numIds === 0) return colors;
     const gl = this.layer.manager.chunkManager.chunkQueueManager.gl;
+    // The scissor or blend state of a panel that is drawing would return the previous lookup.
+    const scissorTestEnabled = gl.isEnabled(gl.SCISSOR_TEST);
+    const blendEnabled = gl.isEnabled(gl.BLEND);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.disable(gl.BLEND);
     try {
       const { shader, parameters, fallback } = this.getSegmentColorShader(
         emptySegmentColorShaderModule,
@@ -855,6 +860,8 @@ vColor = segmentColorUserShader(uint64_t(aID));
       gl.useProgram(null);
       gl.bindVertexArray(null);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      if (scissorTestEnabled) gl.enable(gl.SCISSOR_TEST);
+      if (blendEnabled) gl.enable(gl.BLEND);
     }
   };
 
