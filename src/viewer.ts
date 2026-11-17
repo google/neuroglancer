@@ -627,8 +627,11 @@ export class Viewer extends RefCounted implements ViewerState {
     setViewerUiConfiguration(uiConfiguration, options);
 
     const optionsWithDefaults = { ...defaultViewerOptions, ...options };
-    const { resetStateWhenEmpty, showLayerDialog } = optionsWithDefaults;
-    const { chrome = true } = options;
+    const {
+      resetStateWhenEmpty,
+      showLayerDialog,
+      chrome = true,
+    } = optionsWithDefaults;
 
     // The top bar override, like the layer panel override below, may hide the
     // top bar within what the configuration permits, but can never reveal one
