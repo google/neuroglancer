@@ -171,9 +171,9 @@ function hasEnlargedNodes(mode: SkeletonRenderMode) {
 }
 
 interface VisibleSkeletonToDraw {
-  skeleton: SkeletonChunk;
-  pickIndex: number;
-  colorObjectId: bigint;
+  readonly skeleton: SkeletonChunk;
+  readonly pickIndex: number;
+  readonly colorObjectId: bigint;
 }
 
 interface SkeletonShaderParameters {
@@ -703,20 +703,14 @@ void emitDefault() {
     }
   }
 
-  // Held between beginEdges and endEdges, which bracket the edge pass the way
-  // beginLayer and endLayer bracket the whole draw.
-  private edgeAttributeIndex = -1;
-
-  beginEdges(shader: ShaderProgram) {
-    const { gl } = this;
-    this.edgeAttributeIndex = shader.attribute("aVertexIndex");
-    gl.vertexAttribDivisor(this.edgeAttributeIndex, 1);
+  beginEdges(gl: GL, shader: ShaderProgram) {
+    gl.vertexAttribDivisor(shader.attribute("aVertexIndex"), 1);
   }
 
   drawEdges(gl: GL, shader: ShaderProgram, skeletonChunk: SkeletonChunk) {
     this.bindVertexAttributeTextures(gl, shader, skeletonChunk);
     skeletonChunk.indexBuffer.bindToVertexAttribI(
-      this.edgeAttributeIndex,
+      shader.attribute("aVertexIndex"),
       2,
       WebGL2RenderingContext.UNSIGNED_INT,
     );
@@ -728,11 +722,10 @@ void emitDefault() {
     }
   }
 
-  endEdges() {
-    const { gl } = this;
-    gl.vertexAttribDivisor(this.edgeAttributeIndex, 0);
-    gl.disableVertexAttribArray(this.edgeAttributeIndex);
-    this.edgeAttributeIndex = -1;
+  endEdges(gl: GL, shader: ShaderProgram) {
+    const edgeAttributeIndex = shader.attribute("aVertexIndex");
+    gl.vertexAttribDivisor(edgeAttributeIndex, 0);
+    gl.disableVertexAttribArray(edgeAttributeIndex);
   }
 
   // Nodes are drawn in every render mode so that there are no visible gaps
@@ -746,11 +739,14 @@ void emitDefault() {
     }
   }
 
-  endLayer(gl: GL, ...shaders: (ShaderProgram | null)[]) {
+  endLayer(
+    gl: GL,
+    ...shaderResults: ParameterizedShaderGetterResult<SkeletonShaderParameters>[]
+  ) {
     const { vertexAttributes } = this;
     const { segmentationColorUserShader } = this.base.displayState;
     const numAttributes = vertexAttributes.length;
-    for (const shader of shaders) {
+    for (const { shader, parameters } of shaderResults) {
       if (shader === null) continue;
       for (let i = 0; i < numAttributes; ++i) {
         const textureUnit =
@@ -759,7 +755,11 @@ void emitDefault() {
         gl.activeTexture(textureUnit);
         gl.bindTexture(gl.TEXTURE_2D, null);
       }
-      segmentationColorUserShader.disable(gl, shader);
+      segmentationColorUserShader.disable(
+        gl,
+        shader,
+        parameters.segmentColorParameters,
+      );
     }
     this.vertexIdHelper.disable();
   }
@@ -863,8 +863,6 @@ export class SkeletonLayer extends RefCounted {
   redrawNeeded = new NullarySignal();
   private sharedObject: SegmentationLayerSharedObject;
   vertexAttributes: VertexAttributeRenderInfo[];
-  private readonly visibleSkeletons: VisibleSkeletonToDraw[] = [];
-  private visibleSkeletonCount = 0;
 
   get visibility() {
     return this.sharedObject.visibility;
@@ -960,7 +958,7 @@ export class SkeletonLayer extends RefCounted {
 
     const { projectionParameters } = renderContext;
 
-    this.collectVisibleSkeletons(layer, renderContext);
+    const visibleSkeletons = this.collectVisibleSkeletons(layer, renderContext);
 
     if (edgeShader !== null) {
       edgeShader.bind();
@@ -973,11 +971,15 @@ export class SkeletonLayer extends RefCounted {
         lineWidth,
         nodeDiameter,
       );
-      renderHelper.beginEdges(edgeShader);
-      this.drawPass(renderContext, renderHelper, edgeShader, (skeleton) =>
-        renderHelper.drawEdges(gl, edgeShader, skeleton),
+      renderHelper.beginEdges(gl, edgeShader);
+      this.drawPass(
+        renderContext,
+        visibleSkeletons,
+        renderHelper,
+        edgeShader,
+        (skeleton) => renderHelper.drawEdges(gl, edgeShader, skeleton),
       );
-      renderHelper.endEdges();
+      renderHelper.endEdges(gl, edgeShader);
     }
 
     if (nodeShader !== null) {
@@ -990,12 +992,16 @@ export class SkeletonLayer extends RefCounted {
         nodeDiameter,
       );
       this.enableShaderControls(nodeShader, nodeShaderResult, attachment);
-      this.drawPass(renderContext, renderHelper, nodeShader, (skeleton) =>
-        renderHelper.drawNodes(gl, nodeShader, skeleton),
+      this.drawPass(
+        renderContext,
+        visibleSkeletons,
+        renderHelper,
+        nodeShader,
+        (skeleton) => renderHelper.drawNodes(gl, nodeShader, skeleton),
       );
     }
 
-    renderHelper.endLayer(gl, edgeShader, nodeShader);
+    renderHelper.endLayer(gl, edgeShaderResult, nodeShaderResult);
   }
 
   private enableShaderControls(
@@ -1034,9 +1040,9 @@ export class SkeletonLayer extends RefCounted {
     layer: RenderLayer,
     renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
   ) {
-    const { displayState, visibleSkeletons } = this;
+    const { displayState } = this;
     const skeletons = this.source.chunks;
-    let count = 0;
+    const visibleSkeletons: VisibleSkeletonToDraw[] = [];
     forEachVisibleSegmentToDraw(
       displayState,
       layer,
@@ -1049,39 +1055,29 @@ export class SkeletonLayer extends RefCounted {
         ) {
           return;
         }
-        let entry = visibleSkeletons[count];
-        if (entry === undefined) {
-          entry = visibleSkeletons[count] = {
-            skeleton,
-            pickIndex: 0,
-            colorObjectId: 0n,
-          };
-        }
-        entry.skeleton = skeleton;
-        entry.pickIndex = pickIndex ?? 0;
-        entry.colorObjectId = colorObjectId;
-        ++count;
+        visibleSkeletons.push({
+          skeleton,
+          pickIndex: pickIndex ?? 0,
+          colorObjectId,
+        });
       },
     );
-    // A no-op while the count holds steady. On a drop it releases the records, so
-    // the pool cannot hold a skeleton alive after it leaves the view.
-    visibleSkeletons.length = count;
-    this.visibleSkeletonCount = count;
+    return visibleSkeletons;
   }
 
   private drawPass(
     renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
+    visibleSkeletons: readonly VisibleSkeletonToDraw[],
     renderHelper: RenderHelper,
     shader: ShaderProgram,
     drawCallback: (skeleton: SkeletonChunk) => void,
   ) {
-    const { gl, visibleSkeletons, visibleSkeletonCount } = this;
+    const { gl } = this;
     const { emitPickID } = renderContext;
-    for (let i = 0; i < visibleSkeletonCount; ++i) {
-      const entry = visibleSkeletons[i];
-      renderHelper.setID(gl, shader, entry.colorObjectId);
-      if (emitPickID) renderHelper.setPickID(gl, shader, entry.pickIndex);
-      drawCallback(entry.skeleton);
+    for (const { skeleton, pickIndex, colorObjectId } of visibleSkeletons) {
+      renderHelper.setID(gl, shader, colorObjectId);
+      if (emitPickID) renderHelper.setPickID(gl, shader, pickIndex);
+      drawCallback(skeleton);
     }
   }
 

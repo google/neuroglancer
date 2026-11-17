@@ -308,7 +308,7 @@ vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
               }
               gl.vertexAttribDivisor(attribute, 0);
               gl.disableVertexAttribArray(attribute);
-              renderHelper.endLayer(gl, shader);
+              renderHelper.endLayer(gl, result);
             }
           }
         } finally {
