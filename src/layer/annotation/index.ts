@@ -952,13 +952,6 @@ for (const control of Object.values(LAYER_CONTROLS)) {
   registerLayerControl(AnnotationUserLayer, control);
 }
 
-declare module "#src/layer/index.js" {
-  interface RegisteredLayerTypes {
-    annotation: AnnotationUserLayer;
-    pointAnnotation: AnnotationUserLayer;
-  }
-}
-
 registerLayerType(AnnotationUserLayer);
 registerLayerType(AnnotationUserLayer, "pointAnnotation");
 

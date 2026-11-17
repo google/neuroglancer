@@ -98,8 +98,6 @@ class ZarrVolumeChunkSource extends WithParameters(
 ) {}
 
 export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSource {
-  volumeType: VolumeType;
-
   get dataType() {
     return this.multiscale.dataType;
   }
@@ -115,9 +113,9 @@ export class MultiscaleVolumeChunkSource extends GenericMultiscaleVolumeChunkSou
   constructor(
     public sharedKvStoreContext: SharedKvStoreContext,
     public multiscale: ZarrMultiscaleInfo,
+    public readonly volumeType: VolumeType,
   ) {
     super(sharedKvStoreContext.chunkManager);
-    this.volumeType = VolumeType.IMAGE;
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
@@ -549,6 +547,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
         });
         let channelMetadata: ChannelMetadata | undefined;
         let relatedSources: RelatedDataSource[] | undefined;
+        let volumeType = VolumeType.IMAGE;
         if (metadata === undefined) {
           throw new Error("No zarr metadata found");
         }
@@ -564,6 +563,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
             throw new Error("Neither array nor OME multiscale metadata found");
           }
           channelMetadata = omeMetadata.channels;
+          volumeType = omeMetadata.volumeType;
           [multiscaleInfo, relatedSources] = await Promise.all([
             resolveOmeMultiscale(sharedKvStoreContext, omeMetadata.multiscale, {
               ...progressOptions,
@@ -584,6 +584,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
         const volume = new MultiscaleVolumeChunkSource(
           sharedKvStoreContext,
           multiscaleInfo,
+          volumeType,
         );
         const supportsWriting =
           sharedKvStoreContext.kvStoreContext.getKvStore(kvStoreUrl).store

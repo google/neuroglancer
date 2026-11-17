@@ -38,7 +38,6 @@ import {
   parseUrlSuffix,
   splitPipelineUrl,
 } from "#src/kvstore/url.js";
-import type { LayerTypeName } from "#src/layer/index.js";
 import type { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
 import type { SegmentPropertyMap } from "#src/segmentation_display_state/property_map.js";
 import type { SegmentationGraphSource } from "#src/segmentation_graph/source.js";
@@ -199,7 +198,6 @@ export interface SingleChannelMetadata {
 export interface RelatedDataSource {
   readonly name: string;
   readonly url: string;
-  readonly suggestedLayerType: LayerTypeName;
 }
 
 export interface DataSource {

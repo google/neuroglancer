@@ -1721,13 +1721,6 @@ export class SegmentationUserLayer extends Base {
 }
 
 registerLayerControls(SegmentationUserLayer);
-
-declare module "#src/layer/index.js" {
-  interface RegisteredLayerTypes {
-    segmentation: SegmentationUserLayer;
-  }
-}
-
 registerVoxelEditingTools(SegmentationUserLayer);
 registerVoxelEditingLayerControls(SegmentationUserLayer);
 registerLayerType(SegmentationUserLayer);

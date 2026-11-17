@@ -669,12 +669,6 @@ class ShaderCodeOverlay extends Overlay {
   }
 }
 
-declare module "#src/layer/index.js" {
-  interface RegisteredLayerTypes {
-    image: ImageUserLayer;
-  }
-}
-
 registerLayerType(ImageUserLayer);
 registerVoxelEditingTools(ImageUserLayer);
 registerVoxelEditingLayerControls(ImageUserLayer);

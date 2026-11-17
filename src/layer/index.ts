@@ -43,7 +43,7 @@ import {
   LayerDataSource,
   layerDataSourceSpecificationFromJson,
 } from "#src/layer/layer_data_source.js";
-import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
+import { createImageLayerAsMultiChannelWhenReady } from "#src/layer/multi_channel_setup.js";
 import type {
   DisplayDimensions,
   WatchableDisplayDimensionRenderInfo,
@@ -2363,13 +2363,6 @@ export class LayerSubsetSpecification extends LayerListSpecification {
 export type UserLayerConstructor<LayerType extends UserLayer = UserLayer> =
   typeof UserLayer & AnyConstructor<LayerType>;
 
-export interface RegisteredLayerTypes {
-  new: NewUserLayer;
-  auto: AutoUserLayer;
-}
-
-export type LayerTypeName = keyof RegisteredLayerTypes;
-
 export const layerTypes = new Map<string, UserLayerConstructor>();
 const volumeLayerTypes = new Map<VolumeType, UserLayerConstructor>();
 export interface LayerTypeGuess {
@@ -2533,15 +2526,7 @@ export class AutoUserLayer extends UserLayer {
       detectLayerTypeFromSubsources(subsources)?.layerConstructor;
     if (layerConstructor !== undefined) {
       changeLayerType(this.managedLayer, layerConstructor);
-      this.registerDisposer(
-        this.managedLayer.readyStateChanged.add(() => {
-          if (this.managedLayer.isReady()) {
-            // If you want to restore the old auto image setup, pass true here
-            // This will then make the previous image layer setup
-            createImageLayerAsMultiChannel(this.managedLayer, makeLayer);
-          }
-        }),
-      );
+      createImageLayerAsMultiChannelWhenReady(this.managedLayer, makeLayer);
     }
   }
 }

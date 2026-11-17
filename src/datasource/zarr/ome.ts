@@ -25,6 +25,7 @@ import {
   joinBaseUrlAndPath,
   kvstoreEnsureDirectoryPipelineUrl,
 } from "#src/kvstore/url.js";
+import { VolumeType } from "#src/sliceview/volume/base.js";
 import {
   makeAffineRelativeToBaseTransform,
   extractScalesFromAffineMatrix,
@@ -63,6 +64,7 @@ export interface OmeMultiscaleMetadata {
 export interface OmeMetadata {
   multiscale: OmeMultiscaleMetadata;
   channels: ChannelMetadata | undefined;
+  volumeType: VolumeType;
 }
 
 const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set([
@@ -846,9 +848,8 @@ export function parseOmeLabelsGroup(
     verifyStringArray,
   );
   return paths?.map((path) => ({
-    name: path,
+    name: `labels/${path}`,
     url: `${kvstoreEnsureDirectoryPipelineUrl(joinBaseUrlAndPath(labelsGroupUrl, path))}|zarr${zarrVersion}:`,
-    suggestedLayerType: "segmentation",
   }));
 }
 
@@ -894,7 +895,14 @@ export function parseOmeMetadata(
     }
     const multiScaleInfo = parseOmeMultiscale(url, multiscale, version);
     const channelMetadata = omero ? parseOmeroMetadata(omero) : undefined;
-    return { multiscale: multiScaleInfo, channels: channelMetadata };
+    return {
+      multiscale: multiScaleInfo,
+      channels: channelMetadata,
+      volumeType:
+        metadata["image-label"] === undefined
+          ? VolumeType.IMAGE
+          : VolumeType.SEGMENTATION,
+    };
   }
   if (errors.length !== 0) {
     throw new Error(errors[0]);

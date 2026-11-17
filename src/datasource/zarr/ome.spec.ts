@@ -19,6 +19,7 @@ import {
   parseOmeLabelsGroup,
   parseOmeMetadata,
 } from "#src/datasource/zarr/ome.js";
+import { VolumeType } from "#src/sliceview/volume/base.js";
 import { createIdentity } from "#src/util/matrix.js";
 
 const intrinsicCoordinateSystem = {
@@ -1421,8 +1422,24 @@ it("should handle anisotropic scales with rotations for 0.6 (issue #952)", () =>
   expect(baseTransform.slice(12)).toEqual(new Float64Array([0, 0, 0, 1]));
 });
 
+it("opens a label image as segmentation and a plain image as image", () => {
+  const imageAttrs = makeOmeAttrsWithTransform({
+    type: "identity",
+    output: "physical",
+  });
+  const labelAttrs = {
+    ome: { ...imageAttrs.ome, "image-label": { colors: [] } },
+  };
+  expect(parseOmeMetadata("test://", imageAttrs, 3)!.volumeType).toBe(
+    VolumeType.IMAGE,
+  );
+  expect(parseOmeMetadata("test://", labelAttrs, 3)!.volumeType).toBe(
+    VolumeType.SEGMENTATION,
+  );
+});
+
 describe("OME-Zarr labels group", () => {
-  it("lists the label images of a 0.5 labels group as segmentation sources", () => {
+  it("lists the label images of a 0.5 labels group", () => {
     const attrs = {
       ome: { version: "0.5", labels: ["cells", "nuclei/v2"] },
     };
@@ -1430,27 +1447,24 @@ describe("OME-Zarr labels group", () => {
       parseOmeLabelsGroup("http://host/image.zarr/labels/", attrs, 3),
     ).toEqual([
       {
-        name: "cells",
+        name: "labels/cells",
         url: "http://host/image.zarr/labels/cells/|zarr3:",
-        suggestedLayerType: "segmentation",
       },
       {
-        name: "nuclei/v2",
+        name: "labels/nuclei/v2",
         url: "http://host/image.zarr/labels/nuclei/v2/|zarr3:",
-        suggestedLayerType: "segmentation",
       },
     ]);
   });
 
-  it("lists the label images of a 0.4 labels group as segmentation sources", () => {
+  it("lists the label images of a 0.4 labels group", () => {
     const attrs = { labels: ["cells"] };
     expect(
       parseOmeLabelsGroup("http://host/image.zarr/labels/", attrs, 2),
     ).toEqual([
       {
-        name: "cells",
+        name: "labels/cells",
         url: "http://host/image.zarr/labels/cells/|zarr2:",
-        suggestedLayerType: "segmentation",
       },
     ]);
   });
