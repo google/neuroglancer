@@ -27,3 +27,7 @@
   flex-direction: row;
   align-items: center;
 }
+
+.neuroglancer-shader-code-widget.cm-s-material-darker .cm-comment {
+  color: #d9a066;
+}

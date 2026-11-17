@@ -30,6 +30,10 @@
 
 import { registerEventListener } from "#src/util/disposable.js";
 import { hexEncode, hexDecode } from "#src/util/hex.js";
+import {
+  commandOrControlLabel,
+  hasCommandOrControl,
+} from "#src/util/platform.js";
 
 export function encodeStringAsDragType(s: string) {
   return hexEncode(new TextEncoder().encode(s));
@@ -102,6 +106,20 @@ function getAllowedDropEffect(
       return dropEffect == "link" || dropEffect == "move" ? dropEffect : "link";
   }
   return effectAllowed;
+}
+
+/**
+ * Declares the drop effects this drag source supports.
+ *
+ * macOS intersects this mask with the operation its own drag modifiers request,
+ * and reports "none" when the two do not overlap, which rejects the drop. A
+ * source that leaves the mask unset can therefore never be moved with Command.
+ */
+export function declareAllowedDropEffects(
+  event: DragEvent,
+  allowed: DataTransfer["effectAllowed"],
+) {
+  event.dataTransfer!.effectAllowed = allowed;
 }
 
 /**
@@ -223,10 +241,12 @@ export function getDropEffectFromModifiers<DropEffect extends string>(
   moveAllowed: boolean,
 ): { dropEffect: DropEffect | "move" | "copy"; dropEffectMessage: string } {
   const modifiers = savedModifiers ?? event;
+  const moveModifierActive = hasCommandOrControl(modifiers);
+  const moveModifierLabel = commandOrControlLabel().toUpperCase();
   let dropEffect: DropEffect | "move" | "copy";
   if (modifiers.shiftKey) {
     dropEffect = "copy";
-  } else if (modifiers.ctrlKey && moveAllowed) {
+  } else if (moveModifierActive && moveAllowed) {
     dropEffect = "move";
   } else {
     dropEffect = defaultDropEffect;
@@ -244,14 +264,14 @@ export function getDropEffectFromModifiers<DropEffect extends string>(
     if (modifiers.shiftKey) {
       addMessage(`release SHIFT to ${defaultDropEffect}`);
     } else {
-      addMessage(`release CONTROL to ${defaultDropEffect}`);
+      addMessage(`release ${moveModifierLabel} to ${defaultDropEffect}`);
     }
   }
   if (dropEffect !== "copy") {
     addMessage("hold SHIFT to copy");
   }
   if (dropEffect !== "move" && moveAllowed && defaultDropEffect !== "move") {
-    addMessage("hold CONTROL to move");
+    addMessage(`hold ${moveModifierLabel} to move`);
   }
 
   if (message !== "" && mustRestartDragToChangeModifiers) {

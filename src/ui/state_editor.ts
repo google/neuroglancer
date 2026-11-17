@@ -19,6 +19,7 @@
  */
 
 import "codemirror/lib/codemirror.css";
+import "codemirror/theme/material-darker.css";
 import "codemirror/mode/javascript/javascript.js";
 import "codemirror/addon/fold/foldcode.js";
 import "codemirror/addon/fold/foldgutter.js";
@@ -27,8 +28,9 @@ import "codemirror/addon/fold/foldgutter.css";
 import "codemirror/addon/lint/lint.css";
 import CodeMirror from "codemirror";
 import { debounce } from "lodash-es";
-import "#src/ui/state_editor.css";
 import { FramedDialog } from "#src/overlay.js";
+import { ActionCommand } from "#src/ui/command.js";
+import "#src/ui/state_editor.css";
 
 import { bigintToStringJsonReplacer } from "#src/util/json.js";
 import { getCachedJson } from "#src/util/trackable.js";
@@ -67,6 +69,7 @@ export class StateEditorDialog extends FramedDialog {
     this.textEditor = CodeMirror((_element) => {}, <any>{
       value: "",
       mode: { name: "javascript", json: true },
+      theme: "material-darker",
       foldGutter: true,
       gutters: ["CodeMirror-lint-markers", "CodeMirror-foldgutter"],
       lineNumbers: true,
@@ -158,4 +161,17 @@ export class StateEditorDialog extends FramedDialog {
       "  ",
     );
   }
+}
+
+export function bindStateEditor(viewer: Viewer): void {
+  viewer.registerDisposer(
+    viewer.commandRegistry.register(
+      new ActionCommand(
+        "edit-json-state",
+        "Edit JSON State",
+        "Open an editor for the raw viewer JSON state.",
+      ),
+    ),
+  );
+  viewer.bindAction("edit-json-state", () => viewer.editJsonState());
 }

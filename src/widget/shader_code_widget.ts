@@ -19,6 +19,7 @@ import svgCode from "ikonate/icons/code-alt.svg?raw";
 import "codemirror/addon/lint/lint.js";
 import "#src/widget/shader_code_widget.css";
 import "codemirror/lib/codemirror.css";
+import "codemirror/theme/material-darker.css";
 import "codemirror/addon/lint/lint.css";
 
 import { debounce } from "lodash-es";
@@ -60,7 +61,7 @@ type UserLayerWithCodeEditor = UserLayer & {
 interface ShaderCodeState {
   shaderError: WatchableShaderError;
   shaderControlState?: ShaderControlState;
-  fragmentMain: WatchableValue<string>;
+  fragment: WatchableValue<string>;
   sourceStringNumber?: number;
 }
 
@@ -73,7 +74,7 @@ export class ShaderCodeWidget extends RefCounted {
   private debouncedValueUpdater = debounce(() => {
     this.changingValue = true;
     try {
-      this.state.fragmentMain.value = this.textEditor.getValue();
+      this.state.fragment.value = this.textEditor.getValue();
     } finally {
       this.changingValue = false;
     }
@@ -82,19 +83,21 @@ export class ShaderCodeWidget extends RefCounted {
   constructor(public state: ShaderCodeState) {
     super();
     this.textEditor = CodeMirror((_element) => {}, {
-      value: this.state.fragmentMain.value,
+      value: this.state.fragment.value,
       mode: "glsl",
+      theme: "material-darker",
       gutters: ["CodeMirror-lint-markers"],
       lineNumbers: true,
     });
+    this.element.style.colorScheme = "dark";
     this.textEditor.on("change", () => {
       this.setValidState(undefined);
       this.debouncedValueUpdater();
     });
     this.registerDisposer(
-      this.state.fragmentMain.changed.add(() => {
+      this.state.fragment.changed.add(() => {
         if (!this.changingValue) {
-          this.textEditor.setValue(this.state.fragmentMain.value);
+          this.textEditor.setValue(this.state.fragment.value);
         }
       }),
     );
@@ -206,35 +209,37 @@ export class ShaderCodeWidget extends RefCounted {
   }
 }
 
-export function makeShaderCodeWidgetTopRow(
-  layer: UserLayerWithCodeEditor,
+export function makeShaderCodeWidgetTopRow<
+  Layer extends UserLayerWithCodeEditor,
+>(
+  layer: Layer,
   codeWidgetElement: HTMLElement,
-  makeShaderCodeWidget: (layer: UserLayerWithCodeEditor) => ShaderCodeWidget,
+  makeShaderCodeWidget: (layer: Layer) => ShaderCodeWidget,
   help: {
     title: string;
     href: string;
     type: string;
   },
-  makeVertexAttributeWidget?: (
-    layer: UserLayerWithCodeEditor,
-  ) => VertexAttributeWidget,
+  options: {
+    title?: string;
+    codeVisible?: TrackableBoolean;
+    makeVertexAttributeWidget?: (layer: Layer) => VertexAttributeWidget;
+  } = {},
 ) {
+  const { title = "Shader", codeVisible = layer.codeVisible } = options;
   const spacer = document.createElement("div");
   spacer.style.flex = "1";
 
   const topRow = document.createElement("div");
   topRow.classList.add("neuroglancer-shader-code-widget-top-row");
-  topRow.appendChild(document.createTextNode("Shader"));
+  topRow.appendChild(document.createTextNode(title));
   topRow.appendChild(spacer);
 
   layer.registerDisposer(
-    new ElementVisibilityFromTrackableBoolean(
-      layer.codeVisible,
-      codeWidgetElement,
-    ),
+    new ElementVisibilityFromTrackableBoolean(codeVisible, codeWidgetElement),
   );
 
-  const codeVisibilityControl = new CheckboxIcon(layer.codeVisible, {
+  const codeVisibilityControl = new CheckboxIcon(codeVisible, {
     enableTitle: "Show code",
     disableTitle: "Hide code",
     backgroundScheme: "dark",
@@ -250,7 +255,7 @@ export function makeShaderCodeWidgetTopRow(
           layer,
           makeShaderCodeWidget,
           `${help.type} shader editor`,
-          makeVertexAttributeWidget,
+          options.makeVertexAttributeWidget,
         );
       },
     }),

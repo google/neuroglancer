@@ -20,12 +20,14 @@ import type { VertexAttributeWidget } from "#src/layer/single_mesh/index.js";
 import { FramedDialog } from "#src/overlay.js";
 import type { ShaderCodeWidget } from "#src/widget/shader_code_widget.js";
 
-export class ShaderCodeEditorDialog extends FramedDialog {
+export class ShaderCodeEditorDialog<
+  Layer extends UserLayer,
+> extends FramedDialog {
   constructor(
-    public layer: UserLayer,
-    private makeShaderCodeWidget: (layer: UserLayer) => ShaderCodeWidget,
+    public layer: Layer,
+    private makeShaderCodeWidget: (layer: Layer) => ShaderCodeWidget,
     title: string = "Shader editor",
-    makeVertexAttributeWidget?: (layer: UserLayer) => VertexAttributeWidget,
+    makeVertexAttributeWidget?: (layer: Layer) => VertexAttributeWidget,
   ) {
     super(title, "Close editor", "neuroglancer-shader-code-editor-dialog");
 

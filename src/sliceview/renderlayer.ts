@@ -38,9 +38,12 @@ import type {
 } from "#src/sliceview/base.js";
 import {
   filterVisibleSources,
+  forEachPlaneIntersectingVolumetricChunk,
   SLICEVIEW_RENDERLAYER_RPC_ID,
 } from "#src/sliceview/base.js";
+import type { ChunkLayout } from "#src/sliceview/chunk_layout.js";
 import type {
+  FrontendTransformedSource,
   MultiscaleSliceViewChunkSource,
   SliceView,
   SliceViewChunkSource,
@@ -97,6 +100,10 @@ export abstract class SliceViewRenderLayer<
 
   renderScaleTarget: WatchableValueInterface<number>;
   renderScaleHistogram?: RenderScaleHistogram;
+
+  // Set on a layer that another layer draws from its own `draw`, so that the
+  // slice view does not also draw it by itself.
+  drawnByHostLayer = false;
 
   // This is only used by `ImageRenderLayer` currently, but is defined here because
   // `sliceview/frontend.ts` is responsible for providing the texture buffers used for accumulating
@@ -246,6 +253,23 @@ export abstract class SliceViewRenderLayer<
     sources: readonly TransformedSource[],
   ): Iterable<TransformedSource> {
     return filterVisibleSources(sliceView, this, sources);
+  }
+
+  forEachVisibleChunk(
+    sliceView: SliceView,
+    tsource: FrontendTransformedSource,
+    chunkLayout: ChunkLayout,
+    callback: (key: string) => void,
+  ) {
+    forEachPlaneIntersectingVolumetricChunk(
+      sliceView.projectionParameters.value,
+      this.localPosition.value,
+      tsource,
+      chunkLayout,
+      () => {
+        callback(tsource.curPositionInChunks.join());
+      },
+    );
   }
 }
 

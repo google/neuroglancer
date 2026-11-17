@@ -142,7 +142,7 @@ export class SingleMeshUserLayer extends UserLayer {
 
 function makeShaderCodeWidget(layer: SingleMeshUserLayer) {
   return new ShaderCodeWidget({
-    fragmentMain: layer.displayState.fragmentMain,
+    fragment: layer.displayState.fragmentMain,
     shaderError: layer.displayState.shaderError,
     shaderControlState: layer.displayState.shaderControlState,
   });

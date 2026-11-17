@@ -28,10 +28,18 @@ import {
 import { ShaderControls } from "#src/widget/shader_controls.js";
 import { Tab } from "#src/widget/tab_view.js";
 
+function makeSegmentColorShaderCodeWidget(layer: SegmentationUserLayer) {
+  return new ShaderCodeWidget({
+    fragment: layer.displayState.fragmentSegmentColor,
+    shaderError: layer.displayState.shaderError,
+    shaderControlState: layer.displayState.segmentColorShaderControlState,
+  });
+}
+
 function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
   return new ShaderCodeWidget({
-    fragmentMain: layer.displayState.skeletonRenderingOptions.shader,
-    shaderError: layer.displayState.shaderError,
+    fragment: layer.displayState.skeletonRenderingOptions.shader,
+    shaderError: layer.displayState.skeletonRenderingOptions.shaderError,
     shaderControlState:
       layer.displayState.skeletonRenderingOptions.shaderControlState,
   });
@@ -69,6 +77,34 @@ export class DisplayOptionsTab extends Tab {
       );
     }
 
+    const segmentColorCodeWidget = this.registerDisposer(
+      makeSegmentColorShaderCodeWidget(layer),
+    );
+    element.appendChild(
+      makeShaderCodeWidgetTopRow(
+        this.layer,
+        segmentColorCodeWidget.element,
+        makeSegmentColorShaderCodeWidget,
+        {
+          title: "Documentation on segmentation layer rendering",
+          href: "https://github.com/google/neuroglancer/blob/master/src/layer/segmentation/rendering.md",
+          type: "Segment color",
+        },
+        { title: "Segment Color Shader" },
+      ),
+    );
+    element.appendChild(segmentColorCodeWidget.element);
+    element.appendChild(
+      this.registerDisposer(
+        new ShaderControls(
+          this.layer.displayState.segmentColorShaderControlState,
+          this.layer.manager.root.display,
+          this.layer,
+          { visibility: this.visibility },
+        ),
+      ).element,
+    );
+
     const skeletonControls = this.registerDisposer(
       new DependentViewWidget(
         layer.hasSkeletonsLayer,
@@ -98,6 +134,11 @@ export class DisplayOptionsTab extends Tab {
                 title: "Documentation on skeleton rendering",
                 href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
                 type: "Skeleton",
+              },
+              {
+                title: "Skeleton Shader",
+                codeVisible:
+                  layer.displayState.skeletonRenderingOptions.codeVisible,
               },
             ),
           );

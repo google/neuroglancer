@@ -428,30 +428,20 @@ function validateCoordinateTransformations(
     const input = verifyOptionalObjectProperty(
       transform,
       "input",
-      verifyString,
-    );
-    const output = verifyOptionalObjectProperty(
-      transform,
-      "output",
-      verifyString,
+      parseOmeInputOutput,
     );
     const type = verifyObjectProperty(transform, "type", verifyString);
 
     // Validate input matches expected (array path)
     // Empty string or undefined means the field is not specified
-    if (input !== undefined && input !== "" && input !== expectedInput) {
+    if (
+      input !== undefined &&
+      input.path !== "" &&
+      input.path !== expectedInput
+    ) {
       throw new Error(
         `Invalid coordinate transformation for dataset at path "${path}": ` +
-          `input is "${input}" but expected "${expectedInput}"`,
-      );
-    }
-
-    // Validate output matches expected (intrinsic coordinate system)
-    // Empty string or undefined means the field is not specified
-    if (output !== undefined && output !== "" && output !== expectedOutput) {
-      throw new Error(
-        `Invalid coordinate transformation for dataset at path "${path}": ` +
-          `output is "${output}" but expected "${expectedOutput}"`,
+          `input is "${input.path}" but expected "${expectedInput}"`,
       );
     }
 
@@ -471,23 +461,23 @@ function validateCoordinateTransformations(
           const innerInput = verifyOptionalObjectProperty(
             innerTransform,
             "input",
-            verifyString,
+            parseOmeInputOutput,
           );
           const innerOutput = verifyOptionalObjectProperty(
             innerTransform,
             "output",
-            verifyString,
+            parseOmeInputOutput,
           );
 
           // First transform in sequence should have input matching the sequence's input
           if (
             i === 0 &&
             innerInput !== undefined &&
-            innerInput !== expectedInput
+            innerInput.path !== expectedInput
           ) {
             throw new Error(
               `Invalid sequence transformation for dataset at path "${path}": ` +
-                `first inner transform has input "${innerInput}" but expected "${expectedInput}"`,
+                `first inner transform has input "${innerInput.path}" but expected "${expectedInput}"`,
             );
           }
 
@@ -495,11 +485,11 @@ function validateCoordinateTransformations(
           if (
             i === innerTransforms.length - 1 &&
             innerOutput !== undefined &&
-            innerOutput !== expectedOutput
+            innerOutput.name !== expectedOutput
           ) {
             throw new Error(
               `Invalid sequence transformation for dataset at path "${path}": ` +
-                `last inner transform has output "${innerOutput}" but expected "${expectedOutput}"`,
+                `last inner transform has output "${innerOutput.name}" but expected "${expectedOutput}"`,
             );
           }
 
@@ -510,17 +500,17 @@ function validateCoordinateTransformations(
             const prevOutput = verifyOptionalObjectProperty(
               prevTransform,
               "output",
-              verifyString,
+              parseOmeInputOutput,
             );
 
             if (
-              prevOutput !== undefined &&
-              innerInput !== undefined &&
-              prevOutput !== innerInput
+              prevOutput?.name !== undefined &&
+              innerInput?.name !== undefined &&
+              prevOutput.name !== innerInput.name
             ) {
               throw new Error(
                 `Invalid sequence transformation for dataset at path "${path}": ` +
-                  `transform ${i - 1} has output "${prevOutput}" but transform ${i} has input "${innerInput}". ` +
+                  `transform ${i - 1} has output "${prevOutput.name}" but transform ${i} has input "${innerInput.name}". ` +
                   `Transforms in a sequence must have matching input/output for consecutive transforms.`,
               );
             }
@@ -529,6 +519,76 @@ function validateCoordinateTransformations(
       }
     }
   }
+}
+
+function parseOmeInputOutput(obj: unknown) {
+  // OME 0.6 expects object but the RFC allowed strings where
+  // the string represented either path or name depending on level
+  // and we declare to support dev versions
+  if (typeof obj === "object") {
+    return {
+      name: verifyOptionalObjectProperty(obj, "name", verifyString),
+      path: verifyOptionalObjectProperty(obj, "path", verifyString),
+    };
+  } else if (typeof obj === "string") {
+    return {
+      name: obj,
+      path: obj,
+    };
+  } else {
+    throw new Error("Expected input/output to be string or object");
+  }
+}
+
+function parseMultiscaleOutput(obj: unknown) {
+  const transformationInputs = verifyObjectProperty(
+    obj,
+    "coordinateTransformations",
+    (y) => parseArray(y, (x) => x.output),
+  );
+  return parseOmeInputOutput(transformationInputs[0]);
+}
+
+// Find each coordinate transform with an input of the intrinsic system
+// as those are the only ones which could be applied directly
+function findTransformationsWithIntrinsicInput(
+  transformations: unknown,
+  intrinsicCoordinateSystemName: string,
+): { transformation: unknown; outputCoordinateSystemName: string }[] {
+  if (transformations === undefined) return [];
+  const parsed = parseArray(transformations, (transformation) => {
+    verifyObject(transformation);
+    return {
+      transformation,
+      input: verifyOptionalObjectProperty(
+        transformation,
+        "input",
+        parseOmeInputOutput,
+      ),
+      output: verifyOptionalObjectProperty(
+        transformation,
+        "output",
+        parseOmeInputOutput,
+      ),
+    };
+  });
+  const transforms = [];
+  for (const { transformation, input, output } of parsed) {
+    if (input?.name !== intrinsicCoordinateSystemName) continue;
+    if (output?.name === undefined) continue;
+    // Avoid finding child labels groups
+    if (
+      output.path !== undefined &&
+      output.path.includes("labels") &&
+      output.path !== output.name
+    )
+      continue;
+    transforms.push({
+      transformation,
+      outputCoordinateSystemName: output.name,
+    });
+  }
+  return transforms;
 }
 
 function parseMultiscaleScale(
@@ -572,44 +632,85 @@ function parseOmeMultiscale(
   let coordinateSpace: CoordinateSpace;
   let intrinsicCoordinateSystemName: string | undefined;
 
-  const coordinateSystemsRaw = verifyOptionalObjectProperty(
+  const coordinateSystemsJson = verifyOptionalObjectProperty(
     multiscale,
     "coordinateSystems",
     (x) => x,
   );
+  const coordinateTransformsJson = verifyOptionalObjectProperty(
+    multiscale,
+    "coordinateTransformations",
+    (x) => x,
+  );
+  let coordinateTransformsToApply: unknown = coordinateTransformsJson;
 
   if (
-    coordinateSystemsRaw !== undefined &&
-    Array.isArray(coordinateSystemsRaw) &&
-    coordinateSystemsRaw.length > 0
+    coordinateSystemsJson !== undefined &&
+    Array.isArray(coordinateSystemsJson) &&
+    coordinateSystemsJson.length > 0
   ) {
-    // OME-ZARR 0.6+: Use the last (intrinsic) coordinate system
+    // 0.6+ - Directly from the OME-Zarr spec:
+    // "In terms of metadata, the coordinate system referred to as the “intrinsic” coordinate system in this document, is the coordinate system that is referenced by all multiscale coordinate transformations under datasets as their output."
+    // As such, we iterate over all the scales once to find this output name
+    const outputNames = verifyObjectProperty(multiscale, "datasets", (obj) =>
+      parseArray(obj, parseMultiscaleOutput),
+    );
+    intrinsicCoordinateSystemName = outputNames[0]?.name;
+    const mismatch = outputNames.findIndex(
+      (x) => x?.name !== intrinsicCoordinateSystemName,
+    );
+    if (mismatch !== -1) {
+      throw new Error(
+        `All output names of multiscale.datasets must be the same, candidate name from first scale is ${intrinsicCoordinateSystemName}, but found ${outputNames[mismatch].name} at scale ${mismatch}`,
+      );
+    }
+    if (intrinsicCoordinateSystemName === undefined) {
+      throw new Error(`There must be an intrinsic coordinateSystem`);
+    }
+
     const coordinateSystems = parseArray(
-      coordinateSystemsRaw,
+      coordinateSystemsJson,
       parseOmeCoordinateSystem,
     );
-    coordinateSpace = coordinateSystems[coordinateSystems.length - 1];
 
-    // Extract the name of the intrinsic coordinate system from the raw object
-    const intrinsicCoordinateSystemRaw =
-      coordinateSystemsRaw[coordinateSystemsRaw.length - 1];
-    verifyObject(intrinsicCoordinateSystemRaw);
-    intrinsicCoordinateSystemName = verifyObjectProperty(
-      intrinsicCoordinateSystemRaw,
-      "name",
-      verifyString,
+    const applicableCoordinateTransforms =
+      findTransformationsWithIntrinsicInput(
+        coordinateTransformsJson,
+        intrinsicCoordinateSystemName,
+      );
+    // As we have no coordinate space selector, we just apply
+    // the first found applicable transform
+    coordinateTransformsToApply =
+      applicableCoordinateTransforms.length === 0
+        ? undefined
+        : [applicableCoordinateTransforms[0].transformation];
+
+    // The image ends in the space that the applied transformation outputs to, or in the
+    // intrinsic space when no transformation applies.
+    const nameToMatch =
+      applicableCoordinateTransforms[0]?.outputCoordinateSystemName ??
+      intrinsicCoordinateSystemName;
+
+    const coordinateSpaceMatch = coordinateSystemsJson.findIndex(
+      (x) => x.name === nameToMatch,
     );
+    if (coordinateSpaceMatch === -1) {
+      const reason =
+        nameToMatch === intrinsicCoordinateSystemName ? "intrinsic" : "output";
+      throw new Error(
+        `Could not find any coordinate system for the ${reason} system ${nameToMatch}`,
+      );
+    }
+    coordinateSpace = coordinateSystems[coordinateSpaceMatch];
   } else {
     // OME-ZARR 0.4/0.5: Use axes directly
     coordinateSpace = verifyObjectProperty(multiscale, "axes", parseOmeAxes);
   }
 
   const rank = coordinateSpace.rank;
-  const transform = verifyOptionalObjectProperty(
-    multiscale,
-    "coordinateTransformations",
-    (x) => parseOmeCoordinateTransforms(rank, x),
-    matrix.createIdentity(Float64Array, rank + 1),
+  const transform = parseOmeCoordinateTransforms(
+    rank,
+    coordinateTransformsToApply,
   );
   const scales = verifyObjectProperty(multiscale, "datasets", (obj) =>
     parseArray(obj, (x) => {

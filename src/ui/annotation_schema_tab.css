@@ -258,6 +258,12 @@
   margin-bottom: 2px;
 }
 
+.neuroglancer-annotation-schema-keybind,
+.neuroglancer-annotation-schema-enum-keybind {
+  flex-shrink: 0;
+  align-self: center;
+}
+
 .neuroglancer-annotation-schema-enum-entry
   .neuroglancer-annotation-schema-default-value-input {
   line-height: 18px;
@@ -335,8 +341,9 @@
   gap: var(--spacing-md, 8px);
   font-family: sans-serif;
   border-radius: 2px;
-  border: 1px solid #d0d5dd;
-  background: #fff;
+  border: 1px solid #555;
+  background: #1a1a1a;
+  color: inherit;
   overflow-y: auto;
   resize: none;
   height: 20vh;

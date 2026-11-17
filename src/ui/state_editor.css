@@ -24,3 +24,12 @@
   justify-content: flex-end;
   align-items: center;
 }
+
+.neuroglancer-state-editor .CodeMirror-foldgutter {
+  color: #aaa;
+}
+
+.neuroglancer-state-editor .CodeMirror-foldmarker {
+  color: #82aaff;
+  text-shadow: none;
+}

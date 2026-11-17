@@ -77,6 +77,10 @@ export class PrefetchManager extends RefCounted {
   );
 
   private makePrefetchState(state: any, priority: number) {
+    // The viewer keeps the chrome. A hidden `SidePanelManager` reserves the
+    // side panel space without building the panels, so the data panels have
+    // the same size as those of the main viewer, and the viewer prefetches the
+    // same chunks.
     const viewer = new Viewer(this.display, {
       showLayerDialog: false,
       resetStateWhenEmpty: false,
