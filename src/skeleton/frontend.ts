@@ -75,6 +75,7 @@ import { glsl_COLORMAPS } from "#src/webgl/colormaps.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ParameterizedShaderGetterResult } from "#src/webgl/dynamic_shader.js";
 import {
+  makeAggregateWatchableShaderError,
   makeTrackableFragmentMain,
   makeWatchableShaderError,
   parameterizedEmitterDependentShaderGetter,
@@ -310,13 +311,13 @@ vec4 premultiplyAlpha(vec4 color) {
       encodeParameters: (p: SkeletonShaderParameters) =>
         `${p.skeletonShaderBuilderState.key}/${p.segmentColorShaderBuilderState.key}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify(p.segmentColorProperties.map(encodeSegmentPropertyShaderDefinition))}`,
       extraParameters: this.raycastEnabled,
-      shaderError: displayState.skeletonRenderingOptions.shaderError,
     };
     this.edgeShaderGetter = parameterizedEmitterDependentShaderGetter(
       this,
       this.gl,
       {
         ...sharedShaderOptions,
+        shaderError: displayState.skeletonRenderingOptions.edgeShaderError,
         fallbackParameters: new WatchableValue(initialFallbackParameters),
         memoizeKey: {
           type: "skeleton/edge",
@@ -330,6 +331,7 @@ vec4 premultiplyAlpha(vec4 color) {
       this.gl,
       {
         ...sharedShaderOptions,
+        shaderError: displayState.skeletonRenderingOptions.nodeShaderError,
         fallbackParameters: new WatchableValue(initialFallbackParameters),
         memoizeKey: {
           type: "skeleton/node",
@@ -794,14 +796,19 @@ export interface ViewSpecificSkeletonRenderingOptions<
   lineWidth: TrackableSkeletonLineWidth;
 }
 
-export class SkeletonRenderingOptions implements Trackable {
+export class SkeletonRenderingOptions extends RefCounted implements Trackable {
   private compound = new CompoundTrackable();
   get changed() {
     return this.compound.changed;
   }
 
   shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
-  shaderError = makeWatchableShaderError();
+  readonly edgeShaderError = makeWatchableShaderError();
+  readonly nodeShaderError = makeWatchableShaderError();
+  readonly shaderError = makeAggregateWatchableShaderError(this, [
+    this.edgeShaderError,
+    this.nodeShaderError,
+  ]);
   shaderControlState = new ShaderControlState(this.shader);
   codeVisible = new TrackableBoolean(true);
   hideInactiveShaderControls = new TrackableBoolean(false);
@@ -817,6 +824,7 @@ export class SkeletonRenderingOptions implements Trackable {
   };
 
   constructor() {
+    super();
     const { compound } = this;
     compound.add("shader", this.shader);
     compound.add("shaderControls", this.shaderControlState);
@@ -870,12 +878,15 @@ export class SkeletonLayer extends RefCounted {
     super();
 
     registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
-    const { shaderError } = this.displayState.skeletonRenderingOptions;
-    shaderError.value = undefined;
     const { skeletonRenderingOptions: renderingOptions } = displayState;
+    const resetShaderErrors = () => {
+      renderingOptions.edgeShaderError.value = undefined;
+      renderingOptions.nodeShaderError.value = undefined;
+    };
+    resetShaderErrors();
     this.registerDisposer(
       renderingOptions.shader.changed.add(() => {
-        shaderError.value = undefined;
+        resetShaderErrors();
         this.redrawNeeded.dispatch();
       }),
     );
