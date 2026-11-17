@@ -17,21 +17,22 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ChunkState } from "#src/chunk_manager/base.js";
+import { DisplayContext } from "#src/display_context.js";
 import { HashMapUint64 } from "#src/gpu_hash/hash_table.js";
+import { makeLayer } from "#src/layer/index.js";
+import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import "#layer/segmentation";
 import {
   OffscreenTextures,
   perspectivePanelEmit,
 } from "#src/perspective_view/panel.js";
 import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
-import { SegmentColorHash } from "#src/segment_color.js";
 import {
-  DEFAULT_FRAGMENT_MAIN,
   RenderHelper,
-  type SegmentAppearanceParameters,
   type SkeletonChunkBase,
+  SkeletonGeometryKind,
   type SkeletonGPUGeometry,
   SkeletonLayer,
-  SkeletonRenderingOptions,
   SkeletonRenderMode,
   SkeletonSegmentState,
   type SkeletonShaderContext,
@@ -42,22 +43,19 @@ import {
   vertexPositionAttribute,
 } from "#src/skeleton/frontend.js";
 import { uploadSegmentIdTexture } from "#src/skeleton/spatial/frontend.js";
-import { WatchableValue } from "#src/trackable_value.js";
-import { Uint64Map } from "#src/uint64_map.js";
-import { Uint64Set } from "#src/uint64_set.js";
+import { packColor } from "#src/util/color.js";
 import { DataType } from "#src/util/data_type.js";
-import { mat4, vec4 } from "#src/util/geom.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { mat4, vec3 } from "#src/util/geom.js";
 import { NullarySignal } from "#src/util/signal.js";
+import { Viewer } from "#src/viewer.js";
 import type { GL } from "#src/webgl/context.js";
 import {
   FramebufferConfiguration,
   makeTextureBuffers,
 } from "#src/webgl/offscreen.js";
-import {
-  getFallbackBuilderState,
-  parseShaderUiControls,
-} from "#src/webgl/shader_ui_controls.js";
-import { webglTest } from "#src/webgl/testing.js";
+import type { ShaderBuilder } from "#src/webgl/shader.js";
+import { setControlsInShader } from "#src/webgl/shader_ui_controls.js";
 import {
   computeTextureFormat,
   TextureFormat,
@@ -113,9 +111,69 @@ describe("precomputed skeleton layer", () => {
   });
 });
 
-const CANVAS_SIZE = 16;
+type SegmentationDisplayState = SegmentationUserLayer["displayState"];
 
-function makeFramebuffer(gl: GL) {
+function segmentationLayerTest(
+  body: (
+    displayState: SegmentationDisplayState,
+    gl: GL,
+    resources: RefCounted,
+  ) => void,
+) {
+  const resources = new RefCounted();
+  try {
+    const display = resources.registerDisposer(
+      new DisplayContext(document.createElement("div")),
+    );
+    const viewer = resources.registerDisposer(new Viewer(display));
+    const managedLayer = resources.registerDisposer(
+      makeLayer(viewer.layerSpecification, "test", { type: "segmentation" }),
+    );
+    const { displayState } = managedLayer.layer as SegmentationUserLayer;
+    body(displayState, viewer.chunkManager.chunkQueueManager.gl, resources);
+  } finally {
+    resources.dispose();
+  }
+}
+
+function makeRenderHelper(
+  displayState: SegmentationDisplayState,
+  gl: GL,
+  resources: RefCounted,
+  options: {
+    geometryKind: SkeletonGeometryKind;
+    targetIsSliceView?: boolean;
+    segmentStates?: [bigint, SkeletonSegmentState][];
+  },
+) {
+  const segmentStatesHashMap = new HashMapUint64();
+  for (const [segmentId, state] of options.segmentStates ?? []) {
+    segmentStatesHashMap.set(segmentId, BigInt(state));
+  }
+  const base = {
+    vertexAttributes: [vertexPositionAttribute],
+    gl,
+    displayState,
+    geometryKind: options.geometryKind,
+    segmentStatesHashMap,
+  } as unknown as SkeletonShaderContext;
+  return resources.registerDisposer(
+    new RenderHelper(base, options.targetIsSliceView ?? false),
+  );
+}
+
+function setSegmentColor(
+  displayState: SegmentationDisplayState,
+  segmentId: bigint,
+  color: vec3,
+) {
+  displayState.segmentStatedColors.value.set(
+    segmentId,
+    BigInt(packColor(color)),
+  );
+}
+
+function makeOffscreenFramebuffer(gl: GL, size: number) {
   const framebuffer = new FramebufferConfiguration(gl, {
     colorBuffers: makeTextureBuffers(
       gl,
@@ -125,7 +183,7 @@ function makeFramebuffer(gl: GL) {
       WebGL2RenderingContext.FLOAT,
     ),
   });
-  framebuffer.bind(CANVAS_SIZE, CANVAS_SIZE);
+  framebuffer.bind(size, size);
   gl.clearColor(0, 0, 0, 0);
   gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
   return framebuffer;
@@ -138,12 +196,12 @@ function readPixel(
   clipX: number,
   clipY: number,
 ) {
-  const { gl } = framebuffer;
+  const { gl, width, height } = framebuffer;
   const pixel = new Float32Array(4);
   framebuffer.bindSingle(texture);
   gl.readPixels(
-    Math.floor(((clipX + 1) / 2) * CANVAS_SIZE),
-    Math.floor(((clipY + 1) / 2) * CANVAS_SIZE),
+    Math.floor(((clipX + 1) / 2) * width),
+    Math.floor(((clipY + 1) / 2) * height),
     1,
     1,
     WebGL2RenderingContext.RGBA,
@@ -154,81 +212,32 @@ function readPixel(
   return pixel;
 }
 
-function makeRenderHelper(
-  gl: GL,
-  options: {
-    segmentAppearance?: SegmentAppearanceParameters;
-    spatialIndexChunks?: boolean;
-    visibleSegmentIds?: bigint[];
-    segmentStates?: [bigint, SkeletonSegmentState][];
-    objectAlpha?: number;
-  } = {},
+function makeRenderContext(
+  emitter: PerspectiveViewRenderContext["emitter"],
+  size: number,
 ) {
-  const visibleSegments = new Uint64Set();
-  visibleSegments.add(options.visibleSegmentIds ?? []);
-  const segmentStates = new HashMapUint64();
-  for (const [segmentId, state] of options.segmentStates ?? []) {
-    segmentStates.set(segmentId, BigInt(state));
-  }
-  const displayState = {
-    segmentationGroupState: new WatchableValue({
-      visibleSegments,
-      temporaryVisibleSegments: new Uint64Set(),
-      useTemporaryVisibleSegments: new WatchableValue(false),
-    }),
-    segmentationColorGroupState: new WatchableValue({
-      segmentColorHash: new WatchableValue(SegmentColorHash.getDefault()),
-      segmentStatedColors: new Uint64Map(),
-      segmentDefaultColor: new WatchableValue(undefined),
-    }),
-    objectAlpha: new WatchableValue(options.objectAlpha ?? 1),
-    hiddenObjectAlpha: new WatchableValue(0),
-    saturation: new WatchableValue(1),
-    skeletonRenderingOptions: new SkeletonRenderingOptions(),
-    shaderError: new WatchableValue(undefined),
-  };
-  const base = {
-    vertexAttributes: [vertexPositionAttribute],
-    gl,
-    fallbackShaderParameters: new WatchableValue(
-      getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)),
-    ),
-    displayState,
-    skeletonShaderParameters: new WatchableValue({
-      segmentAppearance: options.segmentAppearance,
-      spatialIndexChunks: options.spatialIndexChunks ?? false,
-    }),
-    segmentStatesHashMap: segmentStates,
-  } as unknown as SkeletonShaderContext;
-  return new RenderHelper(base, /*targetIsSliceView=*/ false);
-}
-
-function makeSegmentAppearance(): SegmentAppearanceParameters {
   return {
-    hasSegmentStatedColors: false,
-    hasSegmentDefaultColor: false,
-    hoverHighlight: false,
-  };
-}
-
-function makeRenderContext() {
-  return {
-    emitter: perspectivePanelEmit,
+    emitter,
     projectionParameters: {
       viewProjectionMat: mat4.create(),
-      width: CANVAS_SIZE,
-      height: CANVAS_SIZE,
+      width: size,
+      height: size,
     },
   } as unknown as PerspectiveViewRenderContext;
 }
 
-function makeDrawOptions(mode: SkeletonRenderMode, lineWidth: number) {
+function makeDrawOptions(
+  mode: SkeletonRenderMode,
+  lineWidth: number,
+  binding: RefCounted,
+) {
   return {
     modelMatrix: mat4.create(),
     renderOptions: {
       mode: new TrackableSkeletonRenderMode(mode),
       lineWidth: new TrackableSkeletonLineWidth(lineWidth),
     },
+    binding,
   };
 }
 
@@ -258,10 +267,13 @@ function makeGeometry(
 }
 
 describe("skeleton render helper", () => {
-  it("gives the edges and nodes of a skeleton its colour and pick ID", () => {
-    webglTest((gl) => {
-      const framebuffer = makeFramebuffer(gl);
-      const renderHelper = makeRenderHelper(gl);
+  it("gives the edges and nodes of a skeleton its segment colour and pick ID", () => {
+    segmentationLayerTest((displayState, gl, resources) => {
+      const framebuffer = makeOffscreenFramebuffer(gl, 16);
+      const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        geometryKind: SkeletonGeometryKind.SINGLE_SEGMENT,
+      });
+      setSegmentColor(displayState, 3n, vec3.fromValues(0, 0, 1));
       const skeleton = makeGeometry(
         gl,
         [
@@ -272,13 +284,10 @@ describe("skeleton render helper", () => {
       );
 
       renderHelper.draw(
-        makeRenderContext(),
-        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
+        makeRenderContext(perspectivePanelEmit, 16),
+        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2, resources),
         (drawSkeleton) =>
-          drawSkeleton(skeleton, {
-            color: vec4.fromValues(0, 0, 1, 1),
-            pickIds: 5,
-          }),
+          drawSkeleton(skeleton, { colorSegmentId: 3n, pickIds: 5 }),
       );
 
       expect([
@@ -292,19 +301,23 @@ describe("skeleton render helper", () => {
     });
   });
 
-  it("draws each skeleton in the colour given for it", () => {
-    webglTest((gl) => {
-      const framebuffer = makeFramebuffer(gl);
-      const renderHelper = makeRenderHelper(gl);
+  it("draws each skeleton in the colour of its own segment", () => {
+    segmentationLayerTest((displayState, gl, resources) => {
+      const framebuffer = makeOffscreenFramebuffer(gl, 16);
+      const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        geometryKind: SkeletonGeometryKind.SINGLE_SEGMENT,
+      });
+      setSegmentColor(displayState, 1n, vec3.fromValues(1, 0, 0));
+      setSegmentColor(displayState, 2n, vec3.fromValues(0, 1, 0));
       const left = makeGeometry(gl, [[-0.5, 0, 0]], []);
       const right = makeGeometry(gl, [[0.5, 0, 0]], []);
 
       renderHelper.draw(
-        makeRenderContext(),
-        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
+        makeRenderContext(perspectivePanelEmit, 16),
+        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2, resources),
         (drawSkeleton) => {
-          drawSkeleton(left, { color: vec4.fromValues(1, 0, 0, 1) });
-          drawSkeleton(right, { color: vec4.fromValues(0, 1, 0, 1) });
+          drawSkeleton(left, { colorSegmentId: 1n });
+          drawSkeleton(right, { colorSegmentId: 2n });
         },
       );
 
@@ -318,12 +331,12 @@ describe("skeleton render helper", () => {
   });
 
   it("reports the picked node and edge of a chunk", () => {
-    webglTest((gl) => {
-      const framebuffer = makeFramebuffer(gl);
-      const renderHelper = makeRenderHelper(gl, {
-        segmentAppearance: makeSegmentAppearance(),
-        visibleSegmentIds: [7n],
+    segmentationLayerTest((displayState, gl, resources) => {
+      const framebuffer = makeOffscreenFramebuffer(gl, 16);
+      const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        geometryKind: SkeletonGeometryKind.SEGMENT_PER_VERTEX,
       });
+      displayState.segmentationGroupState.value.visibleSegments.add(7n);
       const chunk = makeGeometry(
         gl,
         [
@@ -336,8 +349,8 @@ describe("skeleton render helper", () => {
       );
 
       renderHelper.draw(
-        makeRenderContext(),
-        makeDrawOptions(SkeletonRenderMode.LINES, 3),
+        makeRenderContext(perspectivePanelEmit, 16),
+        makeDrawOptions(SkeletonRenderMode.LINES, 3, resources),
         (drawSkeleton) =>
           drawSkeleton(chunk, {
             pickIds: { firstEdgePickId: 10, firstNodePickId: 20 },
@@ -357,22 +370,23 @@ describe("skeleton render helper", () => {
   });
 
   it("moves a dragged node only in the chunk that holds it", () => {
-    webglTest((gl) => {
-      const framebuffer = makeFramebuffer(gl);
-      const renderHelper = makeRenderHelper(gl);
+    segmentationLayerTest((displayState, gl, resources) => {
+      const framebuffer = makeOffscreenFramebuffer(gl, 16);
+      const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        geometryKind: SkeletonGeometryKind.SINGLE_SEGMENT,
+      });
       const draggedChunk = makeGeometry(gl, [[-0.5, 0, 0]], []);
       const otherChunk = makeGeometry(gl, [[0.5, 0, 0]], []);
 
       renderHelper.draw(
-        makeRenderContext(),
-        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
+        makeRenderContext(perspectivePanelEmit, 16),
+        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2, resources),
         (drawSkeleton) => {
-          const color = vec4.fromValues(1, 1, 1, 1);
           drawSkeleton(draggedChunk, {
-            color,
+            colorSegmentId: 1n,
             nodePositionOverride: { vertexIndex: 0, position: [-0.5, 0.5, 0] },
           });
-          drawSkeleton(otherChunk, { color });
+          drawSkeleton(otherChunk, { colorSegmentId: 1n });
         },
       );
 
@@ -389,14 +403,13 @@ describe("skeleton render helper", () => {
   });
 
   it("hides, in spatial index chunks, the skeletons that another pass draws whole", () => {
-    webglTest((gl) => {
-      const framebuffer = makeFramebuffer(gl);
-      const renderHelper = makeRenderHelper(gl, {
-        segmentAppearance: makeSegmentAppearance(),
-        spatialIndexChunks: true,
-        visibleSegmentIds: [1n, 2n],
+    segmentationLayerTest((displayState, gl, resources) => {
+      const framebuffer = makeOffscreenFramebuffer(gl, 16);
+      const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        geometryKind: SkeletonGeometryKind.SPATIAL_INDEX_CHUNK,
         segmentStates: [[2n, SkeletonSegmentState.EXCLUDED_FROM_CHUNKS]],
       });
+      displayState.segmentationGroupState.value.visibleSegments.add([1n, 2n]);
       const chunk = makeGeometry(
         gl,
         [
@@ -408,8 +421,8 @@ describe("skeleton render helper", () => {
       );
 
       renderHelper.draw(
-        makeRenderContext(),
-        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
+        makeRenderContext(perspectivePanelEmit, 16),
+        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2, resources),
         (drawSkeleton) =>
           drawSkeleton(chunk, {
             chunkBounds: {
@@ -429,18 +442,18 @@ describe("skeleton render helper", () => {
   });
 
   it("draws, outside spatial index chunks, a skeleton that the chunks hide", () => {
-    webglTest((gl) => {
-      const framebuffer = makeFramebuffer(gl);
-      const renderHelper = makeRenderHelper(gl, {
-        segmentAppearance: makeSegmentAppearance(),
-        visibleSegmentIds: [2n],
+    segmentationLayerTest((displayState, gl, resources) => {
+      const framebuffer = makeOffscreenFramebuffer(gl, 16);
+      const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        geometryKind: SkeletonGeometryKind.SEGMENT_PER_VERTEX,
         segmentStates: [[2n, SkeletonSegmentState.EXCLUDED_FROM_CHUNKS]],
       });
+      displayState.segmentationGroupState.value.visibleSegments.add(2n);
       const skeleton = makeGeometry(gl, [[0.5, 0, 0]], [], [2n]);
 
       renderHelper.draw(
-        makeRenderContext(),
-        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
+        makeRenderContext(perspectivePanelEmit, 16),
+        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2, resources),
         (drawSkeleton) => drawSkeleton(skeleton, {}),
       );
 
@@ -451,11 +464,10 @@ describe("skeleton render helper", () => {
   });
 
   it("draws a provisional skeleton in red when spatial index chunks would hide it", () => {
-    webglTest((gl) => {
-      const framebuffer = makeFramebuffer(gl);
-      const renderHelper = makeRenderHelper(gl, {
-        segmentAppearance: makeSegmentAppearance(),
-        visibleSegmentIds: [3n],
+    segmentationLayerTest((displayState, gl, resources) => {
+      const framebuffer = makeOffscreenFramebuffer(gl, 16);
+      const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        geometryKind: SkeletonGeometryKind.SEGMENT_PER_VERTEX,
         segmentStates: [
           [
             3n,
@@ -464,11 +476,12 @@ describe("skeleton render helper", () => {
           ],
         ],
       });
+      displayState.segmentationGroupState.value.visibleSegments.add(3n);
       const skeleton = makeGeometry(gl, [[0.5, 0, 0]], [], [3n]);
 
       renderHelper.draw(
-        makeRenderContext(),
-        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2),
+        makeRenderContext(perspectivePanelEmit, 16),
+        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2, resources),
         (drawSkeleton) => drawSkeleton(skeleton, {}),
       );
 
@@ -479,14 +492,13 @@ describe("skeleton render helper", () => {
   });
 
   it("draws an edge held by two chunks only once", () => {
-    webglTest((gl) => {
-      const framebuffer = makeFramebuffer(gl);
-      const renderHelper = makeRenderHelper(gl, {
-        segmentAppearance: makeSegmentAppearance(),
-        spatialIndexChunks: true,
-        visibleSegmentIds: [1n],
-        objectAlpha: 0.5,
+    segmentationLayerTest((displayState, gl, resources) => {
+      const framebuffer = makeOffscreenFramebuffer(gl, 16);
+      const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        geometryKind: SkeletonGeometryKind.SPATIAL_INDEX_CHUNK,
       });
+      displayState.segmentationGroupState.value.visibleSegments.add(1n);
+      displayState.objectAlpha.value = 0.5;
       const edge = makeGeometry(
         gl,
         [
@@ -500,8 +512,8 @@ describe("skeleton render helper", () => {
       gl.blendFunc(WebGL2RenderingContext.ONE, WebGL2RenderingContext.ONE);
 
       renderHelper.draw(
-        makeRenderContext(),
-        makeDrawOptions(SkeletonRenderMode.LINES, 4),
+        makeRenderContext(perspectivePanelEmit, 16),
+        makeDrawOptions(SkeletonRenderMode.LINES, 4, resources),
         (drawSkeleton) => {
           drawSkeleton(edge, {
             chunkBounds: {
@@ -517,6 +529,7 @@ describe("skeleton render helper", () => {
           });
         },
       );
+      gl.disable(WebGL2RenderingContext.BLEND);
 
       expect(readPixel(framebuffer, OffscreenTextures.COLOR, -0.4, 0)[3]).toBe(
         0.5,
@@ -527,3 +540,203 @@ describe("skeleton render helper", () => {
     });
   });
 });
+
+function emitColor(builder: ShaderBuilder) {
+  builder.addOutputBuffer("vec4", "outColor", 0);
+  builder.addFragmentCode(`
+void emit(vec4 color, highp uint pickId) {
+  outColor = color;
+}
+`);
+}
+
+describe.each([true, false])(
+  "skeleton control namespaces with targetIsSliceView=%s",
+  (targetIsSliceView) => {
+    it("keeps same-named segment and skeleton controls independent", () => {
+      segmentationLayerTest((displayState, gl, resources) => {
+        const renderHelper = makeRenderHelper(displayState, gl, resources, {
+          geometryKind: SkeletonGeometryKind.SINGLE_SEGMENT,
+          targetIsSliceView,
+        });
+        displayState.fragmentSegmentColor.value = `
+#uicontrol float gain slider(min=0, max=1, default=0.25)
+#uicontrol float unused slider(min=0, max=1, default=0.5)
+#uicontrol bool enabled checkbox(default=true)
+#uicontrol int choice select(options={"First": 0, "Second": 1}, default=0)
+vec3 segmentColor(vec3 color, bool hasProperties, bool isStated) {
+  if (false) { color *= unused; }
+  return enabled ? vec3(gain + float(choice)) : color;
+}`;
+        const skeletonState =
+          displayState.skeletonRenderingOptions.shaderControlState;
+        displayState.skeletonRenderingOptions.shader.value = `
+#uicontrol float gain slider(min=0, max=1, default=0.75)
+#uicontrol float unused slider(min=0, max=1, default=0.5)
+#uicontrol bool enabled checkbox(default=true)
+#uicontrol int choice select(options={"First": 0, "Second": 1}, default=1)
+void main() {
+  emitRGB(enabled ? segmentColor().rgb * gain + vec3(unused + float(choice)) : vec3(0.0));
+}`;
+        const segmentState = displayState.segmentColorShaderControlState;
+        for (const getShader of [
+          renderHelper.edgeShaderGetter,
+          renderHelper.nodeShaderGetter,
+        ]) {
+          segmentState.state.get("enabled")!.trackable.value = true;
+          const result = getShader(emitColor);
+          expect(result.fallback).toBe(false);
+          expect(result.shader).not.toBeNull();
+          const shader = result.shader!;
+          shader.bind();
+          for (const [segmentGain, skeletonGain] of [
+            [0.25, 0.75],
+            [0.5, 0.125],
+          ]) {
+            segmentState.state.get("gain")!.trackable.value = segmentGain;
+            skeletonState.state.get("gain")!.trackable.value = skeletonGain;
+            setControlsInShader(
+              gl,
+              shader,
+              skeletonState,
+              result.parameters.skeletonShaderBuilderState.parseResult,
+            );
+            displayState.segmentationColorUserShader.enable(
+              gl,
+              shader,
+              result.parameters.segmentColorShaderBuilderState,
+              { fallback: result.fallback, binding: resources },
+              result.parameters.segmentColorParameters,
+            );
+            expect(
+              gl.getUniform(
+                shader.program,
+                shader.uniform("u_shaderControl_gain")!,
+              ),
+            ).toBeCloseTo(skeletonGain);
+            expect(
+              gl.getUniform(
+                shader.program,
+                shader.uniform("u_segmentColorShaderControl_gain")!,
+              ),
+            ).toBeCloseTo(segmentGain);
+            expect(
+              gl.getUniform(
+                shader.program,
+                shader.uniform("u_shaderControl_choice")!,
+              ),
+            ).toBe(1);
+            expect(
+              gl.getUniform(
+                shader.program,
+                shader.uniform("u_segmentColorShaderControl_choice")!,
+              ),
+            ).toBe(0);
+          }
+          skeletonState.activeControls.trackShader(
+            {
+              ...result,
+              parameters: result.parameters.skeletonShaderBuilderState,
+            },
+            resources,
+          );
+          expect(skeletonState.activeControls.hint.value).toEqual(
+            new Set(["gain", "unused", "enabled", "choice"]),
+          );
+          expect(segmentState.activeControls.hint.value).toEqual(
+            new Set(["gain", "enabled", "choice"]),
+          );
+          segmentState.state.get("enabled")!.trackable.value = false;
+          const disabledResult = getShader(emitColor);
+          expect(disabledResult.fallback).toBe(false);
+          const disabledShader = disabledResult.shader!;
+          disabledShader.bind();
+          displayState.segmentationColorUserShader.enable(
+            gl,
+            disabledShader,
+            disabledResult.parameters.segmentColorShaderBuilderState,
+            { fallback: disabledResult.fallback, binding: resources },
+            disabledResult.parameters.segmentColorParameters,
+          );
+          skeletonState.activeControls.trackShader(
+            {
+              ...disabledResult,
+              parameters: disabledResult.parameters.skeletonShaderBuilderState,
+            },
+            resources,
+          );
+          expect(segmentState.activeControls.hint.value).toEqual(
+            new Set(["enabled"]),
+          );
+          expect(skeletonState.activeControls.hint.value).toEqual(
+            new Set(["gain", "unused", "enabled", "choice"]),
+          );
+        }
+      });
+    });
+  },
+);
+
+describe.each([true, false])(
+  "skeleton edge alpha with targetIsSliceView=%s",
+  (targetIsSliceView) => {
+    it.each([false, true])(
+      "inherits segment alpha only with emitDefault=%s",
+      (useDefaultColor) => {
+        segmentationLayerTest((displayState, gl, resources) => {
+          const renderHelper = makeRenderHelper(displayState, gl, resources, {
+            geometryKind: SkeletonGeometryKind.SINGLE_SEGMENT,
+            targetIsSliceView,
+          });
+          const framebuffer = resources.registerDisposer(
+            new FramebufferConfiguration(gl, {
+              colorBuffers: makeTextureBuffers(gl, 1),
+            }),
+          );
+          const edge = makeGeometry(
+            gl,
+            [
+              [-1, 0, 0],
+              [1, 0, 0],
+            ],
+            [[0, 1]],
+          );
+          displayState.skeletonRenderingOptions.shader.value = useDefaultColor
+            ? "void main() { emitDefault(); }"
+            : "void main() { emitRGB(vec3(1.0, 0.5, 0.25)); }";
+
+          for (const segmentAlpha of [0.25, 1]) {
+            displayState.fragmentSegmentColor.value = `
+vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
+  return vec4(0.25, 0.5, 1.0, ${segmentAlpha.toFixed(2)});
+}`;
+            for (const layerAlpha of [1, 0.5]) {
+              displayState.objectAlpha.value = layerAlpha;
+              framebuffer.bind(9, 9);
+              gl.clearColor(0, 0, 0, 0);
+              gl.clear(gl.COLOR_BUFFER_BIT);
+
+              renderHelper.draw(
+                makeRenderContext(emitColor, 9),
+                makeDrawOptions(SkeletonRenderMode.LINES, 3, resources),
+                (drawSkeleton) => drawSkeleton(edge, { colorSegmentId: 1n }),
+              );
+
+              const pixel = new Uint8Array(4);
+              gl.readPixels(4, 4, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+              const alpha = layerAlpha * (useDefaultColor ? segmentAlpha : 1);
+              expect(Math.abs(pixel[3] / 255 - alpha)).toBeLessThan(2 / 255);
+              const color = useDefaultColor ? [0.25, 0.5, 1] : [1, 0.5, 0.25];
+              const rgbScale = targetIsSliceView ? 1 : alpha;
+              for (const [component, value] of color.entries()) {
+                expect(
+                  Math.abs(pixel[component] / 255 - value * rgbScale),
+                ).toBeLessThan(2 / 255);
+              }
+            }
+          }
+        });
+      },
+    );
+  },
+);

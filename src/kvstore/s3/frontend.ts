@@ -16,7 +16,7 @@
 
 import type { SharedKvStoreContext } from "#src/kvstore/frontend.js";
 import type { DriverListOptions, ListResponse } from "#src/kvstore/index.js";
-import { ReadableS3KvStore } from "#src/kvstore/s3/common.js";
+import { S3KvStoreBase } from "#src/kvstore/s3/common.js";
 import {
   getS3BucketListing,
   listS3CompatibleUrl,
@@ -24,7 +24,7 @@ import {
 import { joinBaseUrlAndPath } from "#src/kvstore/url.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
 
-export class S3KvStore extends ReadableS3KvStore<SharedKvStoreContext> {
+export class S3KvStore extends S3KvStoreBase<SharedKvStoreContext> {
   list(prefix: string, options: DriverListOptions): Promise<ListResponse> {
     const { progressListener } = options;
     using _span =

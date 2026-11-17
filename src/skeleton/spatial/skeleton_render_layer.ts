@@ -60,16 +60,15 @@ import {
 } from "#src/skeleton/api.js";
 import type { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import {
-  DEFAULT_FRAGMENT_MAIN,
   getSkeletonNodeDiameter,
   RenderHelper,
   type SkeletonDrawOptions,
+  SkeletonGeometryKind,
   type SkeletonGPUGeometry,
   type SkeletonLayerDisplayState,
   type SkeletonShaderContext,
-  type SkeletonShaderParameters,
   type VertexAttributeRenderInfo,
-  skeletonShaderEmitsAlpha,
+  skeletonEmitsAlpha,
   type ViewSpecificSkeletonRenderingOptions,
 } from "#src/skeleton/frontend.js";
 import type { SkeletonNodeAccess } from "#src/skeleton/navigation.js";
@@ -121,7 +120,6 @@ import {
   constantWatchableValue,
   makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
-  WatchableValue,
   registerNested,
 } from "#src/trackable_value.js";
 import { gatherUpdate } from "#src/util/array.js";
@@ -141,10 +139,6 @@ import { GLBuffer } from "#src/webgl/buffer.js";
 import type { GL } from "#src/webgl/context.js";
 import type { ParameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
 import { parameterizedEmitterDependentShaderGetter } from "#src/webgl/dynamic_shader.js";
-import {
-  getFallbackBuilderState,
-  parseShaderUiControls,
-} from "#src/webgl/shader_ui_controls.js";
 import {
   computeTextureFormat,
   setOneDimensionalTextureData,
@@ -302,11 +296,7 @@ export class SpatiallyIndexedSkeletonLayer
   redrawNeeded = new NullarySignal();
   vertexAttributes: VertexAttributeRenderInfo[];
   readonly browsePassLayerView: SkeletonShaderContext;
-  readonly skeletonShaderParameters: WatchableValue<SkeletonShaderParameters>;
-  readonly browsePassSkeletonShaderParameters: WatchableValueInterface<SkeletonShaderParameters>;
-  fallbackShaderParameters = new WatchableValue(
-    getFallbackBuilderState(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN)),
-  );
+  readonly geometryKind = SkeletonGeometryKind.SEGMENT_PER_VERTEX;
   localPosition: WatchableValueInterface<Float32Array>;
   readonly chunkTransform: WatchableValueInterface<
     ValueOrError<ChunkTransformParameters>
@@ -445,53 +435,17 @@ export class SpatiallyIndexedSkeletonLayer
         this.redrawNeeded.dispatch,
       ),
     );
-    displayState.shaderError.value = undefined;
     const { skeletonRenderingOptions: renderingOptions } = displayState;
+    const { shaderError } = renderingOptions;
+    shaderError.value = undefined;
     this.registerDisposer(
       renderingOptions.shader.changed.add(() => {
-        displayState.shaderError.value = undefined;
+        shaderError.value = undefined;
         this.redrawNeeded.dispatch();
       }),
     );
 
     this.vertexAttributes = [...this.source.vertexAttributes];
-    const getSkeletonShaderParameters = (): SkeletonShaderParameters => {
-      const colorGroupState = displayState.segmentationColorGroupState.value;
-      return {
-        segmentAppearance: {
-          hasSegmentStatedColors:
-            colorGroupState.segmentStatedColors.size !== 0,
-          hasSegmentDefaultColor:
-            colorGroupState.segmentDefaultColor.value !== undefined,
-          hoverHighlight: displayState.hoverHighlight.value,
-        },
-        spatialIndexChunks: false,
-      };
-    };
-    this.skeletonShaderParameters = new WatchableValue(
-      getSkeletonShaderParameters(),
-    );
-    const updateSkeletonShaderParameters = () => {
-      this.skeletonShaderParameters.value = getSkeletonShaderParameters();
-    };
-    this.registerDisposer(
-      registerNested((context, colorGroupState) => {
-        context.registerDisposer(
-          colorGroupState.segmentStatedColors.changed.add(
-            updateSkeletonShaderParameters,
-          ),
-        );
-        context.registerDisposer(
-          colorGroupState.segmentDefaultColor.changed.add(
-            updateSkeletonShaderParameters,
-          ),
-        );
-        updateSkeletonShaderParameters();
-      }, displayState.segmentationColorGroupState),
-    );
-    this.registerDisposer(
-      displayState.hoverHighlight.changed.add(updateSkeletonShaderParameters),
-    );
     this.registerDisposer(
       editSession.spatialSkeletonDisplay.changed.add(
         this.redrawNeeded.dispatch,
@@ -500,19 +454,11 @@ export class SpatiallyIndexedSkeletonLayer
     this.registerDisposer(
       overlaySegments.changed.add(this.redrawNeeded.dispatch),
     );
-    this.browsePassSkeletonShaderParameters = this.registerDisposer(
-      makeCachedLazyDerivedWatchableValue(
-        (params) => ({ ...params, spatialIndexChunks: true }),
-        this.skeletonShaderParameters,
-      ),
-    );
-
     this.browsePassLayerView = {
       vertexAttributes: this.source.vertexAttributes,
       gl: this.gl,
-      fallbackShaderParameters: this.fallbackShaderParameters,
       displayState,
-      skeletonShaderParameters: this.browsePassSkeletonShaderParameters,
+      geometryKind: SkeletonGeometryKind.SPATIAL_INDEX_CHUNK,
       segmentStatesHashMap: this.segmentStates.hashMap,
     };
   }
@@ -744,8 +690,7 @@ export class SpatiallyIndexedSkeletonLayer
     layer: RenderLayer,
     overlayRenderHelper: RenderHelper,
     browseRenderHelper: RenderHelper,
-    renderOptions: ViewSpecificSkeletonRenderingOptions,
-    modelMatrix: mat4,
+    options: SkeletonDrawOptions,
     visibleChunks: VisibleChunk[],
   ) {
     const { displayState } = this;
@@ -756,7 +701,6 @@ export class SpatiallyIndexedSkeletonLayer
       return;
     }
 
-    const options: SkeletonDrawOptions = { modelMatrix, renderOptions };
     this.drawBrowsePass(
       renderContext,
       layer,
@@ -1039,9 +983,9 @@ gl_Position = uChunkToClip * vec4(uTranslation + boxVertex * uChunkDataSize, 1.0
   }
 
   get isTransparent() {
-    const { objectAlpha, hiddenObjectAlpha, skeletonRenderingOptions } =
-      this.base.displayState;
-    if (skeletonShaderEmitsAlpha(skeletonRenderingOptions.shader.value)) {
+    const { displayState } = this.base;
+    const { objectAlpha, hiddenObjectAlpha } = displayState;
+    if (skeletonEmitsAlpha(displayState)) {
       return true;
     }
     const opaque =
@@ -1107,8 +1051,7 @@ gl_Position = uChunkToClip * vec4(uTranslation + boxVertex * uChunkDataSize, 1.0
       this,
       this.renderHelper,
       this.browseRenderHelper,
-      this.renderOptions,
-      modelMatrix,
+      { modelMatrix, renderOptions: this.renderOptions, binding: attachment },
       visibleChunks,
     );
     if (renderContext.wireFrame) {
@@ -1268,8 +1211,7 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
       this,
       this.renderHelper,
       this.browseRenderHelper,
-      this.renderOptions,
-      modelMatrix,
+      { modelMatrix, renderOptions: this.renderOptions, binding: attachment },
       visibleChunks,
     );
   }

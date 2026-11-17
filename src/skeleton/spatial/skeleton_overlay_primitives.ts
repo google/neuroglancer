@@ -52,7 +52,7 @@ const SELECTED_NODE_PALETTE: readonly vec3[] = [
   vec3.fromValues(0.5, 0.45, 0.15),
 ];
 
-// A colour that is already saturated is desaturated instead, as getObjectColor does.
+// A colour that is already saturated is desaturated instead, as segmentColorUserShader does.
 const HOVERED_SATURATION_CHANGE = 0.5;
 const HOVERED_SATURATION_THRESHOLD = 0.5;
 

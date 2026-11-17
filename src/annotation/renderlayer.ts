@@ -613,7 +613,7 @@ function AnnotationRenderLayer<
     drawGeometryChunkData(
       chunk: AnnotationGeometryData,
       renderContext: PerspectiveViewRenderContext | SliceViewPanelRenderContext,
-      state: AnnotationChunkRenderParameters,
+      attachment: VisibleLayerInfo<LayerView, AttachmentState>,
       drawFraction = 1,
     ) {
       if (!chunk.bufferValid) {
@@ -629,7 +629,7 @@ function AnnotationRenderLayer<
       this.drawGeometry(
         chunk as AnnotationGeometryDataInterface,
         renderContext,
-        state,
+        attachment,
         drawFraction,
       );
     }
@@ -637,9 +637,10 @@ function AnnotationRenderLayer<
     drawGeometry(
       chunk: AnnotationGeometryDataInterface,
       renderContext: PerspectiveViewRenderContext | SliceViewPanelRenderContext,
-      state: AnnotationChunkRenderParameters,
+      attachment: VisibleLayerInfo<LayerView, AttachmentState>,
       drawFraction = 1,
     ) {
+      const state = attachment.state!.chunkRenderParameters!;
       const { base } = this;
       const { chunkDisplayTransform } = state;
       const { serializedAnnotations } = chunk;
@@ -663,6 +664,7 @@ function AnnotationRenderLayer<
       const context: AnnotationRenderContext = {
         annotationLayer: base,
         renderContext,
+        attachment,
         selectedIndex: 0,
         basePickId: pickId,
         buffer: chunk.buffer!,
@@ -881,7 +883,7 @@ const NonSpatiallyIndexedAnnotationRenderLayer = <
         this.drawGeometry(
           base as AnnotationGeometryDataInterface,
           renderContext,
-          chunkRenderParameters,
+          attachment,
         );
       } else {
         const { renderScaleHistogram } = this;
@@ -892,7 +894,7 @@ const NonSpatiallyIndexedAnnotationRenderLayer = <
         this.drawGeometryChunkData(
           source.temporary.data!,
           renderContext,
-          chunkRenderParameters,
+          attachment,
         );
         const { value: segmentationStates } = this.base.segmentationStates;
         let presentChunks = 0;
@@ -913,11 +915,7 @@ const NonSpatiallyIndexedAnnotationRenderLayer = <
                 ) {
                   const { data } = chunk;
                   if (data === undefined) return;
-                  this.drawGeometryChunkData(
-                    data,
-                    renderContext,
-                    chunkRenderParameters,
-                  );
+                  this.drawGeometryChunkData(data, renderContext, attachment);
                   ++presentChunks;
                 } else {
                   ++notPresentChunks;
@@ -1142,7 +1140,7 @@ const SpatiallyIndexedAnnotationLayer = <
               this.drawGeometryChunkData(
                 data,
                 renderContext,
-                chunkRenderParameters,
+                attachment,
                 drawFraction,
               );
             }
