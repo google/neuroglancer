@@ -135,11 +135,16 @@ export class ImageRenderLayer extends SliceViewVolumeRenderLayer<ShaderControlsB
   }
 
   initializeShader(
-    _sliceView: SliceView,
+    sliceView: SliceView,
     shader: ShaderProgram,
     parameters: ShaderControlsBuilderState,
+    fallback: boolean,
   ) {
     const { gl } = this;
+    this.shaderControlState.activeControls.trackShader(
+      { shader, parameters, fallback },
+      sliceView.visibleLayers.get(this)!,
+    );
     gl.uniform1f(shader.uniform("uOpacity"), this.opacity.value);
     setControlsInShader(
       gl,

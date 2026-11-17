@@ -15,7 +15,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { wrapUserShaderMain } from "#src/webgl/dynamic_shader.js";
+import { RefCounted } from "#src/util/disposable.js";
+import {
+  makeAggregateWatchableShaderError,
+  makeWatchableShaderError,
+  wrapUserShaderMain,
+} from "#src/webgl/dynamic_shader.js";
+import { ShaderCompilationError } from "#src/webgl/shader.js";
 
 describe("wrapUserShaderMain", () => {
   // The whole output is the contract, the trailing reset most of all: three call
@@ -34,5 +40,29 @@ describe("wrapUserShaderMain", () => {
     const directives = wrapped.match(/#line \d+ \d+/g);
     expect(directives).toEqual(["#line 0 1", "#line 1 0"]);
     expect(wrapped.endsWith("#line 1 0\n")).toBe(true);
+  });
+});
+
+describe("makeAggregateWatchableShaderError", () => {
+  it("does not let one shader success clear another shader error", () => {
+    const refCounted = new RefCounted();
+    const volumeError = makeWatchableShaderError();
+    const meshError = makeWatchableShaderError();
+    const offscreenError = makeWatchableShaderError();
+    const aggregate = makeAggregateWatchableShaderError(refCounted, [
+      volumeError,
+      meshError,
+      offscreenError,
+    ]);
+    const error = Object.create(ShaderCompilationError.prototype);
+
+    volumeError.value = error;
+    meshError.value = null;
+    offscreenError.value = null;
+
+    expect(aggregate.value).toBe(error);
+    volumeError.value = null;
+    expect(aggregate.value).toBeNull();
+    refCounted.dispose();
   });
 });

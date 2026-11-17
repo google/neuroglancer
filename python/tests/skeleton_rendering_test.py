@@ -13,8 +13,10 @@
 # limitations under the License.
 """Screenshot tests for skeleton rendering.
 
-`test_skeleton_options` checks that a skeleton layer draws, and that turning its
-subsource off stops it. `test_skeleton_render_mode` checks that each render mode
+`test_skeleton_options` checks that a skeleton layer draws, that the layer
+opacity blends it with the background, and that turning its subsource off stops
+it. `test_skeleton_opacity` checks how the layer opacity combines with each
+shader output. `test_skeleton_render_mode` checks that each render mode
 produces the shading it is supposed to, and that the modes which enlarge the nodes
 cover more than the ones that do not.
 """
@@ -22,6 +24,7 @@ cover more than the ones that do not.
 import neuroglancer
 import neuroglancer.skeleton
 import numpy as np
+import pytest
 
 dimensions = neuroglancer.CoordinateSpace(
     names=["x", "y", "z"], units="nm", scales=[1, 1, 1]
@@ -50,26 +53,28 @@ void main () {
 """
 
 
-class SinglePointSkeletonSource(neuroglancer.skeleton.SkeletonSource):
-    def __init__(self):
+class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
+    def __init__(
+        self,
+        *,
+        vertex_positions=((0, 0, 0),),
+        edges=((0, 0),),
+    ):
         super().__init__(dimensions=dimensions)
-
-    def get_skeleton(self, object_id):
-        return neuroglancer.skeleton.Skeleton(
-            vertex_positions=[[0, 0, 0]],
-            edges=[[0, 0]],
+        self.skeleton = neuroglancer.skeleton.Skeleton(
+            vertex_positions=vertex_positions,
+            edges=edges,
         )
 
-
-class TwoNodeSkeletonSource(neuroglancer.skeleton.SkeletonSource):
-    def __init__(self):
-        super().__init__(dimensions=dimensions)
-
     def get_skeleton(self, object_id):
-        return neuroglancer.skeleton.Skeleton(
-            vertex_positions=[[-20, -20, 0], [20, 20, 0]],
-            edges=[[0, 1]],
-        )
+        return self.skeleton
+
+
+def two_node_skeleton_source():
+    return SkeletonSource(
+        vertex_positions=[[-20, -20, 0], [20, 20, 0]],
+        edges=[[0, 1]],
+    )
 
 
 def screenshot_pixels(webdriver, size):
@@ -139,16 +144,44 @@ def test_skeleton_options(webdriver):
     # A marker wider than the viewport, so the colour can be checked exactly.
     image = render_skeleton(
         webdriver,
-        SinglePointSkeletonSource(),
+        SkeletonSource(),
         layout="xy",
         line_width=100,
         size=10,
     )
     assert_solid_color(image, [255, 0, 0, 255])
+    opaque_pixels_2d = image.copy()
+
+    with webdriver.viewer.txn() as s:
+        s.layers[0].source[0].subsources["default"] = False
+    background_pixels_2d = screenshot_pixels(webdriver, 10).copy()
+
+    with webdriver.viewer.txn() as s:
+        s.layers[0].source[0].subsources["default"] = True
+        s.layers[0].object_alpha = 0.5
+    pixels = screenshot_pixels(webdriver, 10)
+    np.testing.assert_allclose(
+        pixels[..., :3],
+        opaque_pixels_2d[..., :3] * 0.5 + background_pixels_2d[..., :3] * 0.5,
+        atol=2,
+    )
+    np.testing.assert_array_equal(pixels[..., 3], 255)
 
     with webdriver.viewer.txn() as s:
         s.layout = "3d"
-    assert_solid_color(screenshot_pixels(webdriver, 10), [255, 0, 0, 255])
+        s.layers[0].object_alpha = 1.0
+    opaque_pixels = screenshot_pixels(webdriver, 10).copy()
+    assert_solid_color(opaque_pixels, [255, 0, 0, 255])
+
+    # Perspective OIT requires premultiplied RGB, so reducing opacity must
+    # reduce the red intensity rather than leave it saturated or brighten it.
+    with webdriver.viewer.txn() as s:
+        s.layers[0].object_alpha = 0.5
+    pixels = screenshot_pixels(webdriver, 10)
+    np.testing.assert_allclose(pixels[..., 0], opaque_pixels[..., 0] * 0.5, atol=2)
+    np.testing.assert_array_equal(pixels[..., 1], 0)
+    np.testing.assert_array_equal(pixels[..., 2], 0)
+    np.testing.assert_array_equal(pixels[..., 3], 255)
 
     with webdriver.viewer.txn() as s:
         s.layers[0].source[0].subsources["default"] = False
@@ -200,7 +233,7 @@ def test_skeleton_render_mode(webdriver):
         case = f"{layout}/{mode}"
         image = render_skeleton(
             webdriver,
-            TwoNodeSkeletonSource(),
+            two_node_skeleton_source(),
             layout=layout,
             line_width=10,
             size=100,
@@ -215,9 +248,9 @@ def test_skeleton_render_mode(webdriver):
             blue, 0, err_msg=f"{case} put light in the blue channel"
         )
         drawn_red = red[red != 0]
-        assert (
-            len(drawn_red) > 200
-        ), f"{case} drew {len(drawn_red)} pixels, too few to judge the shading"
+        assert len(drawn_red) > 200, (
+            f"{case} drew {len(drawn_red)} pixels, too few to judge the shading"
+        )
         drawn_counts[(layout, mode)] = len(drawn_red)
 
         fully_bright = (drawn_red == FULL_BRIGHTNESS).mean()
@@ -275,7 +308,7 @@ def test_cylinder_default_shader_object_alpha(webdriver):
         return brightest_red(
             render_skeleton(
                 webdriver,
-                TwoNodeSkeletonSource(),
+                two_node_skeleton_source(),
                 layout="3d",
                 line_width=10,
                 size=100,
@@ -287,9 +320,9 @@ def test_cylinder_default_shader_object_alpha(webdriver):
 
     line = brightest("lines")
     tube = brightest("cylinders")
-    assert (
-        line > MIN_BRIGHTNESS_FOR_A_HALF_OPAQUE_LINE
-    ), f"the half opaque line reached only {line}, too dark to compare against"
+    assert line > MIN_BRIGHTNESS_FOR_A_HALF_OPAQUE_LINE, (
+        f"the half opaque line reached only {line}, too dark to compare against"
+    )
     assert tube >= line, (
         f"the half opaque tube reached {tube} against {line} for a line of the same "
         f"colour and opacity. About {line // 2} means the object alpha was likely applied "
@@ -301,7 +334,7 @@ def test_edge_only_user_shader_still_draws_edges(webdriver):
     # The node program's fallback is that same source, so it ends up with no shader.
     image = render_skeleton(
         webdriver,
-        TwoNodeSkeletonSource(),
+        two_node_skeleton_source(),
         layout="xy",
         line_width=10,
         size=100,
@@ -311,3 +344,127 @@ def test_edge_only_user_shader_still_draws_edges(webdriver):
         f"drew {drawn_pixel_count(image)} pixels, so a node shader that failed to "
         "compile meant the edge pass never happened"
     )
+
+
+@pytest.mark.parametrize("layout", ["xy", "3d"])
+@pytest.mark.parametrize("primitive", ["edge", "node"])
+@pytest.mark.parametrize(
+    "shader_output,shader_alpha",
+    [
+        ("rgba", 1),
+        ("rgba", 0.5),
+        ("rgb", 1),
+        ("default", 1),
+        ("segment-rgb", 1),
+        ("segment-rgba", 1),
+    ],
+)
+@pytest.mark.parametrize("layer_alpha", [1, 0.5])
+def test_skeleton_opacity(
+    webdriver, layout, primitive, shader_output, shader_alpha, layer_alpha
+):
+    if primitive == "edge":
+        source = SkeletonSource(
+            vertex_positions=[[-100, 0, 0], [100, 0, 0]],
+            edges=[[0, 1]],
+        )
+    else:
+        source = SkeletonSource(edges=np.empty((0, 2), dtype=np.uint32))
+
+    with webdriver.viewer.txn() as s:
+        s.dimensions = dimensions
+        s.position = [0, 0, 0]
+        s.layout = layout
+        s.cross_section_scale = 1
+        s.projection_scale = 32
+        s.projection_orientation = [0, 0, 0, 1]
+        s.cross_section_background_color = "#000000"
+        s.projection_background_color = "#000000"
+        s.show_axis_lines = False
+        s.show_scale_bar = False
+        s.layers.append(
+            name="skeleton",
+            layer=neuroglancer.SegmentationLayer(
+                source=source,
+                segments=[1],
+                object_alpha=layer_alpha,
+                segment_colors={1: "#ff8040"},
+            ),
+        )
+        rendering = s.layers[0].skeleton_rendering
+        rendering.mode2d = "lines"
+        rendering.mode3d = "lines"
+        rendering.line_width2d = 16
+        rendering.line_width3d = 16
+        if shader_output == "rgba":
+            rendering.shader = f"""
+void main() {{
+  emitRGBA(vec4(1.0, 0.5, 0.25, {shader_alpha:.1f}));
+}}
+"""
+        elif shader_output == "rgb":
+            rendering.shader = "void main() { emitRGB(vec3(1.0, 0.5, 0.25)); }"
+        elif shader_output == "default":
+            rendering.shader = "void main() { emitDefault(); }"
+        elif shader_output == "segment-rgb":
+            rendering.shader = "void main() { emitRGB(segmentColor().rgb); }"
+        else:
+            rendering.shader = "void main() { emitRGBA(segmentColor()); }"
+
+    pixels = webdriver.viewer.screenshot(size=[32, 32]).screenshot.image_pixels
+    color = (
+        np.array([255, 128, 64])
+        if shader_output in ("default", "segment-rgb", "segment-rgba")
+        else np.array([255, 127.5, 63.75])
+    )
+    expected_rgb = color * shader_alpha * layer_alpha
+    expected = np.tile(np.append(expected_rgb, 255), (4, 4, 1))
+    np.testing.assert_allclose(pixels[14:18, 14:18], expected, atol=2, rtol=0)
+
+
+def test_segment_color_shader_alpha_makes_skeleton_transparent(webdriver):
+    image_data = np.zeros((20, 20, 20), dtype=np.uint8)
+    image_data[1:19, 1:19, 11:20] = 255
+
+    with webdriver.viewer.txn() as s:
+        s.dimensions = dimensions
+        s.layers.append(
+            name="image",
+            layer=neuroglancer.ImageLayer(
+                source=neuroglancer.LocalVolume(data=image_data, dimensions=dimensions),
+                volume_rendering_mode="Max",
+                shader="""
+#uicontrol invlerp normalized
+void main() {
+  emitRGBA(vec4(0.0, 0.0, normalized(), 1.0));
+}
+""",
+            ),
+        )
+        s.layers.append(
+            name="skeleton",
+            layer=neuroglancer.SegmentationLayer(
+                source=SkeletonSource(vertex_positions=[(10, 10, 5)]),
+                segments=[1],
+                segment_color_shader="""
+vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
+  return vec4(color.rgb, 0.5);
+}
+""",
+                skeleton_shader="""
+void main() {
+  emitRGB(vec3(1.0, 0.0, 0.0));
+}
+""",
+            ),
+        )
+        s.layers["skeleton"].skeleton_rendering.line_width3d = 100
+        s.layout = "3d"
+        s.show_axis_lines = False
+        s.position = [10, 10, 10]
+        s.projection_scale = 15
+
+    webdriver.sync()
+    pixels = webdriver.viewer.screenshot(size=[10, 10]).screenshot.image_pixels
+    assert np.all(pixels[..., 0] > 0)
+    assert np.all(pixels[..., 2] > 0)

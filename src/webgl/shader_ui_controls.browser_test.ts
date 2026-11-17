@@ -15,8 +15,17 @@
  */
 
 import { expect, describe, it } from "vitest";
-import { constantWatchableValue } from "#src/trackable_value.js";
+import {
+  PreprocessedSegmentPropertyMap,
+  SegmentPropertyMap,
+} from "#src/segmentation_display_state/property_map.js";
+import {
+  constantWatchableValue,
+  TrackableValue,
+  WatchableValue,
+} from "#src/trackable_value.js";
 import { DataType } from "#src/util/data_type.js";
+import { RefCounted } from "#src/util/disposable.js";
 import { vec3, vec4 } from "#src/util/geom.js";
 import { defaultDataTypeRange } from "#src/util/lerp.js";
 import { glsl_string } from "#src/webgl/shader_lib.js";
@@ -27,6 +36,7 @@ import {
   getFallbackBuilderState,
   setControlsInShader,
   ShaderControlState,
+  type ShaderDataContext,
   TrackableTransferFunctionParameters,
   parseShaderUiControls,
   parseTransferFunctionParameters,
@@ -518,6 +528,7 @@ void main() {
           {
             type: "propertyInvlerp",
             properties,
+            propertySource: "annotation",
             clamp: true,
             default: {
               range: undefined,
@@ -561,6 +572,7 @@ void main() {
           {
             type: "propertyInvlerp",
             properties,
+            propertySource: "annotation",
             clamp: true,
             default: {
               range: undefined,
@@ -604,6 +616,7 @@ void main() {
           {
             type: "propertyInvlerp",
             properties,
+            propertySource: "annotation",
             clamp: true,
             default: {
               range: [1, 10],
@@ -647,6 +660,7 @@ void main() {
           {
             type: "propertyInvlerp",
             properties,
+            propertySource: "annotation",
             clamp: true,
             default: {
               range: undefined,
@@ -1108,6 +1122,401 @@ void main() {
   });
 });
 
+describe("ShaderControlState property controls", () => {
+  const makeSegmentPropertyMap = () =>
+    new PreprocessedSegmentPropertyMap(
+      new SegmentPropertyMap({
+        inlineProperties: {
+          ids: new BigUint64Array([1n]),
+          properties: [
+            {
+              id: "tags",
+              type: "tags",
+              tags: ["red", "blue"],
+              tagDescriptions: ["red", "blue"],
+              values: ["\u0000"],
+            },
+            {
+              id: "score",
+              type: "number",
+              dataType: DataType.UINT8,
+              values: new Uint8Array([1]),
+              description: "score",
+              bounds: [0, 1],
+            },
+            {
+              id: "name",
+              type: "string",
+              values: ["alpha"],
+            },
+          ],
+        },
+      }),
+    );
+
+  const getSelectedPropertyValue = (shaderControlState: ShaderControlState) =>
+    shaderControlState.state.get("selected")!.trackable.value;
+
+  it("uses fallback data context while real data context is loading", () => {
+    const code = `
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(code);
+    const dataContext = new WatchableValue<ShaderDataContext | null>(null);
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+      undefined,
+      {},
+    );
+    try {
+      expect(shaderControlState.parseResult.value).toEqual({
+        source: code,
+        code,
+        controls: new Map(),
+        preprocessing: emptyParsePreprocessing,
+        errors: [],
+      });
+      expect(shaderControlState.builderState.value.parseResult.source).toBe(
+        code,
+      );
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("does not report fallback errors for metadata-dependent controls", () => {
+    const code = `
+#uicontrol property selected
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(code);
+    const dataContext = new WatchableValue<ShaderDataContext | null>(null);
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+      undefined,
+      {},
+    );
+    try {
+      expect(shaderControlState.parseErrors.value).toEqual([]);
+      expect(shaderControlState.parseResult.value.source).toBe("");
+      expect(shaderControlState.state.size).toBe(0);
+
+      dataContext.value = { segmentPropertyMap: makeSegmentPropertyMap() };
+      expect(shaderControlState.parseErrors.value).toEqual([]);
+      expect(shaderControlState.parseResult.value.source).toBe(code);
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("can use a fallback shader while metadata-dependent controls are loading", () => {
+    const code = `
+#uicontrol property selected
+void main() {
+}
+`;
+    const fallbackCode = `
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(code);
+    const dataContext = new WatchableValue<ShaderDataContext | null>(null);
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+      undefined,
+      {},
+      fallbackCode,
+    );
+    try {
+      expect(shaderControlState.parseErrors.value).toEqual([]);
+      expect(shaderControlState.parseResult.value.source).toBe(fallbackCode);
+      expect(shaderControlState.builderState.value.builderValues).toEqual({});
+      expect(shaderControlState.builderState.value.propertyReferences).toEqual({
+        source: undefined,
+        references: [],
+      });
+      expect(shaderControlState.state.size).toBe(0);
+
+      dataContext.value = { segmentPropertyMap: makeSegmentPropertyMap() };
+      expect(shaderControlState.parseErrors.value).toEqual([]);
+      expect(shaderControlState.parseResult.value.source).toBe(code);
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("tracks annotation property invlerp controls as annotation properties", () => {
+    const code = `
+#uicontrol invlerp normalized(property="score")
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(code);
+    const dataContext = new WatchableValue<ShaderDataContext | null>({
+      properties: new Map([["score", DataType.UINT8]]),
+    });
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+    );
+    try {
+      expect(shaderControlState.builderState.value.propertyReferences).toEqual({
+        source: "annotation",
+        references: ["score"],
+      });
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("tracks segment property invlerp controls as segment properties", () => {
+    const code = `
+#uicontrol invlerp normalized(property="score")
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(code);
+    const segmentPropertyMap = makeSegmentPropertyMap();
+    const dataContext = new WatchableValue<ShaderDataContext | null>({
+      properties: new Map([["score", DataType.UINT8]]),
+      values: new Map([["score", new Uint8Array([1])]]),
+      propertySource: "segment",
+      segmentPropertyMap,
+    });
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+    );
+    try {
+      expect(shaderControlState.builderState.value.propertyReferences).toEqual({
+        source: "segment",
+        references: [{ type: "numerical", id: "score" }],
+      });
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("rejects mixed annotation and segment property references", () => {
+    const code = `
+#uicontrol invlerp normalized(property="score")
+#uicontrol property selected
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(code);
+    const dataContext = new WatchableValue<ShaderDataContext | null>({
+      properties: new Map([["score", DataType.UINT8]]),
+      segmentPropertyMap: makeSegmentPropertyMap(),
+    });
+    expect(() => new ShaderControlState(fragmentMain, dataContext)).toThrow(
+      "Shader controls cannot mix property sources",
+    );
+  });
+
+  it("defaults to first property when created", () => {
+    const unfilteredCode = `
+#uicontrol property selected
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(unfilteredCode);
+    const dataContext = new WatchableValue<ShaderDataContext | null>({
+      segmentPropertyMap: makeSegmentPropertyMap(),
+    });
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+    );
+    try {
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+      expect(shaderControlState.builderState.value.propertyReferences).toEqual({
+        source: "segment",
+        references: [{ type: "tag", id: "red" }],
+      });
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("defaults to first property allowed by type filter when created", () => {
+    const numericalFilteredCode = `
+#uicontrol property selected(type="number")
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(numericalFilteredCode);
+    const dataContext = new WatchableValue<ShaderDataContext | null>({
+      segmentPropertyMap: makeSegmentPropertyMap(),
+    });
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+    );
+    try {
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "numerical",
+        id: "score",
+      });
+      expect(shaderControlState.builderState.value.propertyReferences).toEqual({
+        source: "segment",
+        references: [{ type: "numerical", id: "score" }],
+      });
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("preserves selected tag when adding and removing property type filter", () => {
+    const unfilteredCode = `
+#uicontrol property selected
+void main() {
+}
+`;
+    const tagFilteredCode = `
+#uicontrol property selected(type="tag")
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(unfilteredCode);
+    const dataContext = new WatchableValue<ShaderDataContext | null>({
+      segmentPropertyMap: new PreprocessedSegmentPropertyMap(
+        new SegmentPropertyMap({
+          inlineProperties: {
+            ids: new BigUint64Array([1n]),
+            properties: [
+              {
+                id: "tags",
+                type: "tags",
+                tags: ["red", "blue"],
+                tagDescriptions: ["red", "blue"],
+                values: ["\u0000"],
+              },
+              {
+                id: "score",
+                type: "number",
+                dataType: DataType.UINT8,
+                values: new Uint8Array([1]),
+                description: "score",
+                bounds: [0, 1],
+              },
+            ],
+          },
+        }),
+      ),
+    });
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+    );
+    try {
+      shaderControlState.state.get("selected")!.trackable.value = {
+        type: "tag",
+        id: "red",
+      };
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+
+      fragmentMain.value = tagFilteredCode;
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+      const tagFilteredControl =
+        shaderControlState.state.get("selected")!.control;
+      expect(tagFilteredControl.type).toBe("property");
+      if (tagFilteredControl.type !== "property") return;
+      expect(tagFilteredControl.segmentProperties.tags).toEqual([
+        "red",
+        "blue",
+      ]);
+      expect(
+        tagFilteredControl.segmentProperties.numericalProperties.size,
+      ).toBe(0);
+      expect(shaderControlState.builderState.value.propertyReferences).toEqual({
+        source: "segment",
+        references: [{ type: "tag", id: "red" }],
+      });
+
+      fragmentMain.value = unfilteredCode;
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+      const unfilteredControl =
+        shaderControlState.state.get("selected")!.control;
+      expect(unfilteredControl.type).toBe("property");
+      if (unfilteredControl.type !== "property") return;
+      expect(
+        unfilteredControl.segmentProperties.numericalProperties.size,
+      ).toBeGreaterThan(0);
+      expect(shaderControlState.builderState.value.propertyReferences).toEqual({
+        source: "segment",
+        references: [{ type: "tag", id: "red" }],
+      });
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+
+  it("defaults to first valid property when preserved value is filtered out", () => {
+    const unfilteredCode = `
+#uicontrol property selected
+void main() {
+}
+`;
+    const tagFilteredCode = `
+#uicontrol property selected(type="tag")
+void main() {
+}
+`;
+    const fragmentMain = new WatchableValue(unfilteredCode);
+    const dataContext = new WatchableValue<ShaderDataContext | null>({
+      segmentPropertyMap: makeSegmentPropertyMap(),
+    });
+    const shaderControlState = new ShaderControlState(
+      fragmentMain,
+      dataContext,
+    );
+    try {
+      shaderControlState.state.get("selected")!.trackable.value = {
+        type: "numerical",
+        id: "score",
+      };
+
+      fragmentMain.value = tagFilteredCode;
+      expect(getSelectedPropertyValue(shaderControlState)).toEqual({
+        type: "tag",
+        id: "red",
+      });
+      expect(shaderControlState.builderState.value.propertyReferences).toEqual({
+        source: "segment",
+        references: [{ type: "tag", id: "red" }],
+      });
+    } finally {
+      shaderControlState.dispose();
+    }
+  });
+});
+
 describe("parseShaderUiControls select", () => {
   it("handles basic select control", () => {
     const code = `
@@ -1544,5 +1953,255 @@ uint getDataValue() {
         shaderControlState.dispose();
       }
     });
+  });
+});
+
+function makeShaderControlState(fragmentMain: string) {
+  return new ShaderControlState(
+    new TrackableValue(fragmentMain, (value) => value),
+    constantWatchableValue({
+      imageData: { dataType: DataType.FLOAT32, channelRank: 0 },
+    }),
+  );
+}
+
+function drawWithShader(
+  state: ShaderControlState,
+  attachment: RefCounted,
+  { volumeRendering = false }: { volumeRendering?: boolean } = {},
+) {
+  fragmentShaderTest({}, { outputValue: "float" }, (tester) => {
+    const parseResult = state.parseResult.value;
+    tester.builder.addFragmentCode(
+      `#define VOLUME_RENDERING ${volumeRendering}\n`,
+    );
+    tester.builder.addFragmentCode("float getDataValue() { return 0.5; }\n");
+    addControlsToBuilder(state.builderState.value, tester.builder);
+    tester.builder.setFragmentMainFunction(parseResult.code);
+    tester.build();
+    tester.shader.bind();
+    setControlsInShader(tester.gl, tester.shader, state, parseResult);
+    state.activeControls.trackShader(
+      {
+        shader: tester.shader,
+        parameters: state.builderState.value,
+        fallback: false,
+      },
+      attachment,
+    );
+  });
+}
+
+describe("ShaderControlState.activeControls", () => {
+  it("hides a control that the shader code never names", () => {
+    const state = makeShaderControlState(`
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float unused slider(min=0, max=1, default=0.5)
+void main() {
+  outputValue = pointSize;
+}
+`);
+    expect(state.activeControls.hint.value).toEqual(new Set(["pointSize"]));
+  });
+
+  it("shows a control as soon as an edit names it", () => {
+    const state = makeShaderControlState(`
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float opacity slider(min=0, max=1, default=0.5)
+void main() {
+  outputValue = pointSize;
+}
+`);
+    state.fragmentMain.value = `
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float opacity slider(min=0, max=1, default=0.5)
+void main() {
+  outputValue = pointSize * opacity;
+}
+`;
+    expect(state.activeControls.hint.value).toEqual(
+      new Set(["pointSize", "opacity"]),
+    );
+  });
+
+  it("hides a control as soon as an edit stops naming it", () => {
+    const state = makeShaderControlState(`
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float opacity slider(min=0, max=1, default=0.5)
+void main() {
+  outputValue = pointSize * opacity;
+}
+`);
+    state.fragmentMain.value = `
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float opacity slider(min=0, max=1, default=0.5)
+void main() {
+  outputValue = pointSize;
+}
+`;
+    expect(state.activeControls.hint.value).toEqual(new Set(["pointSize"]));
+  });
+
+  it("keeps the last valid controls visible while the code has a parse error", () => {
+    const state = makeShaderControlState(`
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float opacity slider(min=0, max=1, default=0.5)
+void main() {
+  outputValue = pointSize * opacity;
+}
+`);
+    state.fragmentMain.value = `
+#uicontrol float pointSize slider(min=1, max=40, default=16)
+#uicontrol float opacity slider(min=0, max=
+void main() {
+  outputValue = pointSize * opacity;
+}
+`;
+    expect(state.parseErrors.value).not.toEqual([]);
+    expect(state.activeControls.hint.value).toEqual(
+      new Set(["pointSize", "opacity"]),
+    );
+  });
+
+  it("shows only the controls a compiled shader reads", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol invlerp contrast
+#uicontrol transferFunction tf
+#uicontrol vec3 color color
+void main() {
+  outputValue = contrast() + tf().a;
+  if (false) {
+    outputValue = color.r;
+  }
+}
+`);
+    drawWithShader(state, attachment);
+    expect(state.activeControls.hint.value).toEqual(
+      new Set(["contrast", "tf"]),
+    );
+  });
+
+  it("stays unchanged while the slice view and volume rendering shaders draw in turn", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol invlerp contrast
+#uicontrol transferFunction tf
+#uicontrol vec3 color color
+void main() {
+  if (VOLUME_RENDERING) {
+    outputValue = tf().a;
+  } else {
+    outputValue = color.r * contrast();
+  }
+}
+`);
+    drawWithShader(state, attachment, { volumeRendering: false });
+    drawWithShader(state, attachment, { volumeRendering: true });
+    let changeCount = 0;
+    state.activeControls.hint.changed.add(() => ++changeCount);
+    for (let frame = 0; frame < 3; ++frame) {
+      drawWithShader(state, attachment, { volumeRendering: false });
+      drawWithShader(state, attachment, { volumeRendering: true });
+    }
+    expect(changeCount).toBe(0);
+  });
+
+  it("hides a control whose name begins another control's name", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol invlerp c
+#uicontrol invlerp ca
+void main() {
+  outputValue = ca();
+  if (false) {
+    outputValue = c();
+  }
+}
+`);
+    drawWithShader(state, attachment);
+    expect(state.activeControls.hint.value).toEqual(new Set(["ca"]));
+  });
+
+  it("forgets controls that only the previous shader text used", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol transferFunction tf
+void main() {
+  outputValue = tf().a;
+}
+`);
+    drawWithShader(state, attachment);
+    state.fragmentMain.value = `
+#uicontrol transferFunction tf
+#uicontrol vec3 color color
+void main() {
+  outputValue = color.r;
+  if (false) {
+    outputValue = tf().a;
+  }
+}
+`;
+    drawWithShader(state, attachment);
+    expect(state.activeControls.hint.value).toEqual(new Set(["color"]));
+  });
+
+  it("hides a control again when a checkbox turns off its branch", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol bool useColor checkbox(default=true)
+#uicontrol vec3 color color
+void main() {
+  outputValue = 0.0;
+  if (useColor) {
+    outputValue = color.r;
+  }
+}
+`);
+    drawWithShader(state, attachment);
+    expect(state.activeControls.hint.value).toEqual(
+      new Set(["useColor", "color"]),
+    );
+    state.state.get("useColor")!.trackable.value = false;
+    drawWithShader(state, attachment);
+    expect(state.activeControls.hint.value).toEqual(new Set(["useColor"]));
+  });
+
+  it("shows a control that a checkbox enables before the layer draws again", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol bool useColor checkbox(default=false)
+#uicontrol vec3 color color
+void main() {
+  outputValue = 0.0;
+  if (useColor) {
+    outputValue = color.r;
+  }
+}
+`);
+    drawWithShader(state, attachment);
+    state.state.get("useColor")!.trackable.value = true;
+    expect(state.activeControls.hint.value).toEqual(
+      new Set(["useColor", "color"]),
+    );
+  });
+
+  it("shows a control that an edit adds before the layer draws again", () => {
+    const attachment = new RefCounted();
+    const state = makeShaderControlState(`
+#uicontrol vec3 color color
+void main() {
+  outputValue = color.r;
+}
+`);
+    drawWithShader(state, attachment);
+    state.fragmentMain.value = `
+#uicontrol vec3 color color
+#uicontrol float gain slider(min=0, max=2, default=1)
+void main() {
+  outputValue = color.r * gain;
+}
+`;
+    expect(state.activeControls.hint.value).toEqual(new Set(["color", "gain"]));
   });
 });
