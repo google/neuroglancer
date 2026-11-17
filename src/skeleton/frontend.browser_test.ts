@@ -266,7 +266,13 @@ vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
               const shader = result.shader!;
               expect(shader).not.toBeNull();
               shader.bind();
-              renderHelper.beginLayer(gl, shader, renderContext, mat4.create());
+              renderHelper.beginLayer(
+                gl,
+                shader,
+                result.extraParameters,
+                renderContext,
+                mat4.create(),
+              );
               displayState.segmentationColorUserShader.enable(
                 gl,
                 shader,
@@ -277,6 +283,7 @@ vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
               renderHelper.setEdgeSizeUniforms(
                 gl,
                 shader,
+                result.extraParameters,
                 renderContext.projectionParameters,
                 /*lineWidth=*/ 3,
                 /*nodeDiameter=*/ 0,

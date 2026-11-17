@@ -215,7 +215,6 @@ class RenderHelper extends RefCounted {
     "vertexData",
   );
   private vertexIdHelper;
-  private readonly raycastEnabled: WatchableValueInterface<boolean>;
   get vertexAttributes(): VertexAttributeRenderInfo[] {
     return this.base.vertexAttributes;
   }
@@ -297,7 +296,7 @@ vec4 premultiplyAlpha(vec4 color) {
     };
 
     this.vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
-    this.raycastEnabled = this.registerDisposer(
+    const raycastEnabled = this.registerDisposer(
       makeCachedDerivedWatchableValue(
         (mode: SkeletonRenderMode) => !targetIsSliceView && isRaycastMode(mode),
         [renderOptions.mode],
@@ -308,7 +307,7 @@ vec4 premultiplyAlpha(vec4 color) {
       parameters,
       encodeParameters: (p: SkeletonShaderParameters) =>
         `${p.skeletonShaderBuilderState.key}/${p.segmentColorShaderBuilderState.key}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify(p.segmentColorProperties.map(encodeSegmentPropertyShaderDefinition))}`,
-      extraParameters: this.raycastEnabled,
+      extraParameters: raycastEnabled,
     };
     this.edgeShaderGetter = parameterizedEmitterDependentShaderGetter(
       this,
@@ -537,10 +536,11 @@ void emitDefault() {
   beginLayer(
     gl: GL,
     shader: ShaderProgram,
+    raycastEnabled: boolean,
     renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
     modelMatrix: mat4,
   ) {
-    if (this.raycastEnabled.value) {
+    if (raycastEnabled) {
       this.setRaycastUniforms(gl, shader, renderContext, modelMatrix);
     } else {
       gl.uniformMatrix4fv(
@@ -626,6 +626,7 @@ void emitDefault() {
   setEdgeSizeUniforms(
     gl: GL,
     shader: ShaderProgram,
+    raycastEnabled: boolean,
     projectionParameters: { width: number; height: number },
     lineWidth: number,
     nodeDiameter: number,
@@ -634,7 +635,7 @@ void emitDefault() {
       shader.uniform("uNodeClipPixelRadius"),
       nodeDiameter / 2 + this.featherWidthInPixels,
     );
-    if (this.raycastEnabled.value) {
+    if (raycastEnabled) {
       gl.uniform1f(shader.uniform("uEdgePixelRadius"), lineWidth / 2);
     } else {
       initializeLineShader(
@@ -649,10 +650,11 @@ void emitDefault() {
   setNodeSizeUniforms(
     gl: GL,
     shader: ShaderProgram,
+    raycastEnabled: boolean,
     projectionParameters: { width: number; height: number },
     nodeDiameter: number,
   ) {
-    if (this.raycastEnabled.value) {
+    if (raycastEnabled) {
       gl.uniform1f(shader.uniform("uNodePixelRadius"), nodeDiameter / 2);
     } else {
       initializeCircleShader(shader, projectionParameters, {
@@ -698,7 +700,12 @@ void emitDefault() {
     gl.vertexAttribDivisor(shader.attribute("aVertexIndex"), 1);
   }
 
-  drawEdges(gl: GL, shader: ShaderProgram, skeletonChunk: SkeletonChunk) {
+  drawEdges(
+    gl: GL,
+    shader: ShaderProgram,
+    raycastEnabled: boolean,
+    skeletonChunk: SkeletonChunk,
+  ) {
     this.bindVertexAttributeTextures(gl, shader, skeletonChunk);
     skeletonChunk.indexBuffer.bindToVertexAttribI(
       shader.attribute("aVertexIndex"),
@@ -706,7 +713,7 @@ void emitDefault() {
       WebGL2RenderingContext.UNSIGNED_INT,
     );
     const numEdges = skeletonChunk.numIndices / 2;
-    if (this.raycastEnabled.value) {
+    if (raycastEnabled) {
       drawQuads(gl, 1, numEdges);
     } else {
       drawLines(gl, 1, numEdges);
@@ -720,9 +727,14 @@ void emitDefault() {
   }
 
   // Every render mode draws nodes, so that no gap shows between edges.
-  drawNodes(gl: GL, shader: ShaderProgram, skeletonChunk: SkeletonChunk) {
+  drawNodes(
+    gl: GL,
+    shader: ShaderProgram,
+    raycastEnabled: boolean,
+    skeletonChunk: SkeletonChunk,
+  ) {
     this.bindVertexAttributeTextures(gl, shader, skeletonChunk);
-    if (this.raycastEnabled.value) {
+    if (raycastEnabled) {
       drawQuads(gl, 1, skeletonChunk.numVertices);
     } else {
       drawCircles(gl, 1, skeletonChunk.numVertices);
@@ -942,8 +954,10 @@ export class SkeletonLayer extends RefCounted {
     const nodeShaderResult = renderHelper.nodeShaderGetter(
       renderContext.emitter,
     );
-    const { shader: edgeShader } = edgeShaderResult;
-    const { shader: nodeShader } = nodeShaderResult;
+    const { shader: edgeShader, extraParameters: edgeRaycastEnabled } =
+      edgeShaderResult;
+    const { shader: nodeShader, extraParameters: nodeRaycastEnabled } =
+      nodeShaderResult;
     if (edgeShader === null && nodeShader === null) return;
 
     const { projectionParameters } = renderContext;
@@ -952,11 +966,18 @@ export class SkeletonLayer extends RefCounted {
 
     if (edgeShader !== null) {
       edgeShader.bind();
-      renderHelper.beginLayer(gl, edgeShader, renderContext, modelMatrix);
+      renderHelper.beginLayer(
+        gl,
+        edgeShader,
+        edgeRaycastEnabled,
+        renderContext,
+        modelMatrix,
+      );
       this.enableShaderControls(edgeShader, edgeShaderResult, attachment);
       renderHelper.setEdgeSizeUniforms(
         gl,
         edgeShader,
+        edgeRaycastEnabled,
         projectionParameters,
         lineWidth,
         nodeDiameter,
@@ -967,17 +988,25 @@ export class SkeletonLayer extends RefCounted {
         visibleSkeletons,
         renderHelper,
         edgeShader,
-        (skeleton) => renderHelper.drawEdges(gl, edgeShader, skeleton),
+        (skeleton) =>
+          renderHelper.drawEdges(gl, edgeShader, edgeRaycastEnabled, skeleton),
       );
       renderHelper.endEdges(gl, edgeShader);
     }
 
     if (nodeShader !== null) {
       nodeShader.bind();
-      renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
+      renderHelper.beginLayer(
+        gl,
+        nodeShader,
+        nodeRaycastEnabled,
+        renderContext,
+        modelMatrix,
+      );
       renderHelper.setNodeSizeUniforms(
         gl,
         nodeShader,
+        nodeRaycastEnabled,
         projectionParameters,
         nodeDiameter,
       );
@@ -987,7 +1016,8 @@ export class SkeletonLayer extends RefCounted {
         visibleSkeletons,
         renderHelper,
         nodeShader,
-        (skeleton) => renderHelper.drawNodes(gl, nodeShader, skeleton),
+        (skeleton) =>
+          renderHelper.drawNodes(gl, nodeShader, nodeRaycastEnabled, skeleton),
       );
     }
 
