@@ -22,9 +22,6 @@ import { NullarySignal } from "#src/util/signal.js";
 import "#src/widget/accordion.css";
 import { Tab } from "#src/widget/tab_view.js";
 
-declare let NEUROGLANCER_USE_ACCORDIONS: boolean | undefined;
-declare let NEUROGLANCER_ACCORDION_DEFAULT_EXPANDED: boolean | undefined;
-
 export interface AccordionOptions {
   sections: AccordionSectionOptions[];
 }
@@ -43,18 +40,6 @@ interface AccordionSection {
   header: HTMLElement;
   body: HTMLElement;
   chevron: HTMLElement;
-}
-
-function getGlobalAccordionDefaultExpanded(): boolean {
-  return typeof NEUROGLANCER_ACCORDION_DEFAULT_EXPANDED !== "undefined"
-    ? NEUROGLANCER_ACCORDION_DEFAULT_EXPANDED
-    : false;
-}
-
-function getGlobalUseAccordions(): boolean {
-  return typeof NEUROGLANCER_USE_ACCORDIONS !== "undefined"
-    ? NEUROGLANCER_USE_ACCORDIONS
-    : true;
 }
 
 export class AccordionSectionState extends RefCounted {
@@ -89,7 +74,7 @@ export class AccordionState extends RefCounted {
       sectionState = this.registerDisposer(
         new AccordionSectionState(
           jsonKey,
-          defaultExpanded ?? getGlobalAccordionDefaultExpanded(),
+          defaultExpanded ?? false,
           this.specificationChanged.dispatch,
         ),
       );
@@ -180,9 +165,6 @@ export class AccordionTab extends Tab {
       this.defaultKey = options.sections[0].jsonKey;
     }
     this.updateSectionsExpanded();
-    if (!getGlobalUseAccordions()) {
-      this.setAccordionHeadersHidden(true);
-    }
   }
 
   private setSectionExpanded(jsonKey: string, expand?: boolean): void {
@@ -190,12 +172,11 @@ export class AccordionTab extends Tab {
   }
 
   private updateSectionsExpanded() {
-    const accordionsDisabled = !getGlobalUseAccordions();
     this.accordionState.sectionStates.forEach((state) => {
       const section = this.getSectionByKey(state.jsonKey);
       if (section === undefined) return;
       const { container, header, chevron } = section;
-      const expand = accordionsDisabled || state.isExpanded.value;
+      const expand = state.isExpanded.value;
       container.dataset.expanded = String(expand);
       header.setAttribute("aria-expanded", String(expand));
       chevron.title = expand
@@ -245,14 +226,6 @@ export class AccordionTab extends Tab {
     this.registerEventListener(newSection.header, "click", () =>
       this.setSectionExpanded(option.jsonKey),
     );
-
-    const useAccordions =
-      typeof NEUROGLANCER_USE_ACCORDIONS !== "undefined"
-        ? NEUROGLANCER_USE_ACCORDIONS
-        : true;
-    if (!useAccordions) {
-      container.classList.add("neuroglancer-accordion-no-border");
-    }
 
     // Usually, the state is pre-propulated with all the relevant sections.
     // However, because appendChild is public and can be called with
@@ -322,11 +295,5 @@ export class AccordionTab extends Tab {
    */
   hideSection(jsonKey: string): void {
     this.setSectionHidden(jsonKey, true);
-  }
-
-  setAccordionHeadersHidden(hidden: boolean): void {
-    this.sections.forEach((section) => {
-      section.header.style.display = hidden ? "none" : "";
-    });
   }
 }

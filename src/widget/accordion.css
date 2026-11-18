@@ -90,12 +90,3 @@
   overflow-y: visible;
   flex-direction: column;
 }
-
-.neuroglancer-accordion-item.neuroglancer-accordion-no-border {
-  border-bottom: none;
-}
-
-.neuroglancer-accordion-item.neuroglancer-accordion-no-border
-  .neuroglancer-accordion-body {
-  padding: 0;
-}
