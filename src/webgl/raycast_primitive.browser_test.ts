@@ -134,6 +134,7 @@ function drawCone(
   camera: Camera,
   spec: ConeSpec,
   fragmentMain: string,
+  options: { readonly coverWholeViewport?: boolean } = {},
 ): Uint8Array {
   const { clipRadiusA = 0, clipRadiusB = 0 } = spec;
   return render(
@@ -142,7 +143,8 @@ function drawCone(
     defineRaycastConeShader,
     `emitRaycastCone(${glslPoint(spec.endpointA)}, ${glslPoint(spec.endpointB)},
                      ${glslRadius(spec.radiusA)}, ${glslRadius(spec.radiusB)},
-                     ${glslRadius(clipRadiusA)}, ${glslRadius(clipRadiusB)});`,
+                     ${glslRadius(clipRadiusA)}, ${glslRadius(clipRadiusB)});
+     ${options.coverWholeViewport ? "gl_Position = vec4(getQuadVertexPosition(vec2(-1.0), vec2(1.0)), 0.0, 1.0);" : ""}`,
     fragmentMain,
   );
 }
@@ -388,6 +390,61 @@ describe("raycast cone", () => {
         ),
       );
       expect(shaded).toBeGreaterThan(0.01);
+    });
+  });
+
+  it("draws a widening cone's forward entry when its other root is behind the ray", () => {
+    webglTest((gl) => {
+      const camera = makeCamera({
+        viewportPixels: 64,
+        fieldOfViewDegrees: 45,
+        far: 2000,
+      });
+      const pixels = drawCone(
+        gl,
+        camera,
+        {
+          endpointA: [-10, 0, -0.1],
+          endpointB: [10, 0, -1000],
+          radiusA: 0.00518,
+          radiusB: 51.7767,
+        },
+        SHADE_SURFACE,
+      );
+      const centerPixel = 32 * (64 + 1);
+      expect(pixels[centerPixel * 4]).toBe(255);
+    });
+  });
+
+  it("hides the exit wall when the near plane places the ray inside a narrowing cone", () => {
+    webglTest((gl) => {
+      const spec: ConeSpec = {
+        endpointA: [0, 0, -0.05],
+        endpointB: [0, 0, -1],
+        radiusA: 0.02,
+        radiusB: 0.003,
+      };
+      const renderWithNearPlane = (near: number) =>
+        drawCone(
+          gl,
+          {
+            viewportPixels: 64,
+            projection: mat4.ortho(
+              mat4.create(),
+              -0.032,
+              0.032,
+              -0.032,
+              0.032,
+              near,
+              2,
+            ),
+          },
+          spec,
+          SHADE_SURFACE,
+        );
+      const pixel = (64 * 32 + 32 + 9) * 4;
+      expect(renderWithNearPlane(0.01)[pixel]).toBe(255);
+      expect(renderWithNearPlane(0.1)[pixel]).toBe(0);
     });
   });
 

@@ -83,8 +83,8 @@ bool coneEndClipped(highp float axialDist, highp float radiusAtHit) {
 // Through an open end, the near hit can lie past that end while the far hit is
 // on the surface.
 //
-// With the ray origin within the axial interval, a near hit behind it is a miss,
-// so that the far root cannot fill the view from inside.
+// A ray that starts inside the finite cone misses, because each of its hits is
+// an exit.
 //
 // The axial interval test keeps the radius between the end radii, so no surface
 // past the apex draws.
@@ -151,7 +151,7 @@ RaycastResult intersectRaycastPrimitive() {
       originSplit.parallelDist <= axisLength &&
       dot(originSplit.perp, originSplit.perp) <
           radiusAtOrigin * radiusAtOrigin;
-  if (!(hitDist >= 0.0) && rayOriginInsideCone) return raycastMiss();
+  if (rayOriginInsideCone) return raycastMiss();
 
   highp float axialDist =
       originSplit.parallelDist + hitDist * dirSplit.parallelDist;
