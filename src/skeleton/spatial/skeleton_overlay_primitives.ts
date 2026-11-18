@@ -27,6 +27,7 @@ import {
 } from "#src/skeleton/edit/pending_edit_markers.js";
 import type { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type {
+  SkeletonCutEdge,
   SkeletonNodeRing,
   SkeletonPanelOverlayPrimitive,
 } from "#src/skeleton/spatial/skeleton_panel_overlay.js";
@@ -84,6 +85,7 @@ export interface SkeletonOverlayPrimitivesDisplayState {
 export type SkeletonOverlayPrimitivesEditSession = Pick<
   SpatialSkeletonEditSession,
   | "suppressSelectedNodeHighlight"
+  | "splitMode"
   | "spatialSkeletonDisplay"
   | "provisionalSegmentIds"
   | "getDisplayedNode"
@@ -106,6 +108,7 @@ export class SkeletonOverlayPrimitives extends RefCounted {
       nodeSelection.selected.changed,
       nodeSelection.hovered.changed,
       editSession.suppressSelectedNodeHighlight.changed,
+      editSession.splitMode.changed,
     ]) {
       this.registerDisposer(signal.add(this.changed.dispatch));
     }
@@ -131,14 +134,25 @@ export class SkeletonOverlayPrimitives extends RefCounted {
       );
     }
     if (hovered !== undefined) {
-      this.addMarker(primitives, hovered, ring, (segmentColor) =>
-        saturateColor(
-          segmentColor,
-          getSaturation(segmentColor) > HOVERED_SATURATION_THRESHOLD
-            ? 1 - HOVERED_SATURATION_CHANGE
-            : 1 + HOVERED_SATURATION_CHANGE,
-        ),
+      const hoveredPosition = this.addMarker(
+        primitives,
+        hovered,
+        ring,
+        (segmentColor) =>
+          saturateColor(
+            segmentColor,
+            getSaturation(segmentColor) > HOVERED_SATURATION_THRESHOLD
+              ? 1 - HOVERED_SATURATION_CHANGE
+              : 1 + HOVERED_SATURATION_CHANGE,
+          ),
       );
+      const cutEdge =
+        hoveredPosition !== undefined && editSession.splitMode.value
+          ? this.getCutEdge(hovered.nodeId, hoveredPosition, ring)
+          : undefined;
+      if (cutEdge !== undefined) {
+        primitives.splice(primitives.length - 1, 0, cutEdge);
+      }
     }
     const { pendingEdits } = editSession.spatialSkeletonDisplay.value;
     if (pendingEdits.length !== 0) {
@@ -156,12 +170,28 @@ export class SkeletonOverlayPrimitives extends RefCounted {
     return primitives;
   }
 
+  private getCutEdge(
+    nodeId: bigint,
+    position: Float32Array,
+    ring: SkeletonNodeRing,
+  ): SkeletonCutEdge | undefined {
+    const { nodeSelection, editSession } = this.options;
+    const parentNodeId = editSession.getDisplayedNode(nodeId)?.parentNodeId;
+    if (parentNodeId === undefined) return undefined;
+    const parentPosition = nodeSelection.toGlobalPosition(
+      editSession.getDisplayedNode(parentNodeId)?.position,
+    );
+    if (parentPosition === undefined) return undefined;
+    return { kind: "cutEdge", from: parentPosition, to: position, ring };
+  }
+
+  /** Returns the position of the drawn ring, in global spatial coordinates. */
   private addMarker(
     primitives: SkeletonPanelOverlayPrimitive[],
     node: HighlightedSkeletonNode,
     ring: SkeletonNodeRing,
     getRingColor: (segmentColor: vec3) => vec3,
-  ) {
+  ): Float32Array | undefined {
     const { displayState, nodeSelection, editSession } = this.options;
     const { segmentId } = node;
     if (segmentId !== undefined) {
@@ -194,6 +224,7 @@ export class SkeletonOverlayPrimitives extends RefCounted {
         : "rgba(0, 0, 0, 0.75)",
       ring,
     });
+    return position;
   }
 
   private getSegmentColor(segmentId: bigint | undefined) {

@@ -62,10 +62,19 @@ export interface SkeletonPendingEditConnector {
   readonly width: number;
 }
 
+/** The edge that a split at the hovered node removes. */
+export interface SkeletonCutEdge {
+  readonly kind: "cutEdge";
+  readonly from: Float32Array;
+  readonly to: Float32Array;
+  readonly ring: SkeletonNodeRing;
+}
+
 export type SkeletonPanelOverlayPrimitive =
   | SkeletonNodeHighlightMarker
   | SkeletonPendingEditMarker
-  | SkeletonPendingEditConnector;
+  | SkeletonPendingEditConnector
+  | SkeletonCutEdge;
 
 // Distance in front of the camera, from the depth row of `mat4.perspective` or `mat4.ortho`.
 function getEyeDepth(projectionMat: mat4, normalizedDeviceZ: number) {
@@ -231,6 +240,19 @@ export class SkeletonPanelOverlay extends RefCounted implements PanelOverlay {
   ): boolean {
     const { style } = element;
     element.dataset.kind = primitive.kind;
+    if (primitive.kind === "cutEdge") {
+      const from = project(primitive.from);
+      const to = project(primitive.to);
+      if (from === undefined || to === undefined) return false;
+      const { diameter, borderWidth } = primitive.ring;
+      const angle = Math.atan2(to.y - from.y, to.x - from.x);
+      style.setProperty("--cut-length", `${diameter}px`);
+      style.setProperty("--cut-width", `${borderWidth}px`);
+      style.opacity = `${Math.min(from.opacity, to.opacity)}`;
+      style.transform = `translate(${(from.x + to.x) / 2}px, ${(from.y + to.y) / 2}px) rotate(${angle}rad) translate(${-borderWidth / 2}px, ${-diameter / 2}px)`;
+      element.textContent = "";
+      return true;
+    }
     if (primitive.kind === "preparationConnector") {
       const from = project(primitive.from);
       const to = project(primitive.to);

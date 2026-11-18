@@ -20,7 +20,10 @@ import type { VisibleSegmentsState } from "#src/segmentation_display_state/base.
 import { SpatialSkeletonEditSession } from "#src/skeleton/edit/spatial_skeleton_edit_session.js";
 import type { HighlightedSkeletonNode } from "#src/skeleton/spatial/skeleton_overlay_primitives.js";
 import { SkeletonOverlayPrimitives } from "#src/skeleton/spatial/skeleton_overlay_primitives.js";
-import type { SkeletonNodeHighlightMarker } from "#src/skeleton/spatial/skeleton_panel_overlay.js";
+import type {
+  SkeletonCutEdge,
+  SkeletonNodeHighlightMarker,
+} from "#src/skeleton/spatial/skeleton_panel_overlay.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import { Uint64Set } from "#src/uint64_set.js";
 import { getContrastRatio, getSaturation } from "#src/util/color.js";
@@ -224,5 +227,100 @@ describe("SkeletonOverlayPrimitives", () => {
         position: new Float32Array([1, 0, 0]),
       }),
     ]);
+  });
+
+  describe("split mode", () => {
+    function makeSplitScene(options: { visible?: readonly bigint[] } = {}) {
+      const scene = makeOverlayPrimitives({
+        visible: options.visible ?? [7n],
+        hiddenObjectAlpha: 0,
+      });
+      scene.state.replaceCachedSegmentSnapshots([
+        [7n, [makeNode(1n, 7n), { ...makeNode(2n, 7n), parentNodeId: 1n }]],
+      ]);
+      scene.state.splitMode.value = true;
+      return scene;
+    }
+
+    function getCutEdges(overlayPrimitives: SkeletonOverlayPrimitives) {
+      return overlayPrimitives
+        .computePrimitives(ring)
+        .filter(
+          (primitive): primitive is SkeletonCutEdge =>
+            primitive.kind === "cutEdge",
+        )
+        .map((cutEdge) => [[...cutEdge.from], [...cutEdge.to]]);
+    }
+
+    it("marks the edge from the hovered node to its parent as the edge the split removes", () => {
+      const { overlayPrimitives, hovered } = makeSplitScene();
+      hovered.value = makeNode(2n, 7n);
+
+      expect(getCutEdges(overlayPrimitives)).toEqual([
+        [
+          [1, 0, 0],
+          [2, 0, 0],
+        ],
+      ]);
+    });
+
+    it("marks no edge to remove when the hovered node is a root", () => {
+      const { overlayPrimitives, hovered } = makeSplitScene();
+      hovered.value = makeNode(1n, 7n);
+
+      expect(getCutEdges(overlayPrimitives)).toEqual([]);
+    });
+
+    it("marks no edge to remove on a skeleton that is not drawn", () => {
+      const { overlayPrimitives, hovered } = makeSplitScene({ visible: [] });
+      hovered.value = makeNode(2n, 7n);
+
+      expect(getCutEdges(overlayPrimitives)).toEqual([]);
+    });
+
+    it("marks no edge to remove on a skeleton that is not inspected", () => {
+      const { overlayPrimitives, hovered } = makeSplitScene({
+        visible: [7n, 8n],
+      });
+      hovered.value = makeNode(5n, 8n);
+
+      expect(getCutEdges(overlayPrimitives)).toEqual([]);
+    });
+
+    it("moves the edge to remove with a pending move of the parent", () => {
+      const { overlayPrimitives, state, hovered } = makeSplitScene();
+      hovered.value = makeNode(2n, 7n);
+
+      state.setPendingNodePosition(1n, [40, 5, 0]);
+
+      expect(getCutEdges(overlayPrimitives)).toEqual([
+        [
+          [40, 5, 0],
+          [2, 0, 0],
+        ],
+      ]);
+    });
+
+    it("shows the edge to remove as soon as split mode starts over a hovered node", () => {
+      const { overlayPrimitives, state, hovered } = makeSplitScene();
+      state.splitMode.value = false;
+      hovered.value = makeNode(2n, 7n);
+      let redraws = 0;
+      overlayPrimitives.changed.add(() => ++redraws);
+
+      state.splitMode.value = true;
+
+      expect(redraws).toBe(1);
+      expect(getCutEdges(overlayPrimitives)).toHaveLength(1);
+    });
+
+    it("marks no edge to remove outside split mode", () => {
+      const { overlayPrimitives, state, hovered } = makeSplitScene();
+      hovered.value = makeNode(2n, 7n);
+
+      state.splitMode.value = false;
+
+      expect(getCutEdges(overlayPrimitives)).toEqual([]);
+    });
   });
 });

@@ -51,3 +51,11 @@
   border-top: var(--connector-width) dashed #ffcc33;
   transform-origin: 0 50%;
 }
+
+.neuroglancer-skeleton-panel-overlay-primitive[data-kind="cutEdge"] {
+  width: var(--cut-width);
+  height: var(--cut-length);
+  background: #ff3b30;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.8);
+  transform-origin: 0 0;
+}

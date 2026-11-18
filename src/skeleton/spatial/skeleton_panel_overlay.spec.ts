@@ -292,6 +292,27 @@ describe("SkeletonPanelOverlay", () => {
     );
   });
 
+  it("crosses the middle of the edge to remove with a bar at right angles to it", () => {
+    const [bar] = getDrawnElements(
+      drawOverlay([
+        {
+          kind: "cutEdge",
+          from: Float32Array.of(0, 0, 0),
+          to: Float32Array.of(0, 1, 0),
+          ring: { diameter: 10, borderWidth: 3 },
+        },
+      ]),
+    );
+
+    expect(bar.dataset.kind).toBe("cutEdge");
+    expect(bar.style.getPropertyValue("--cut-length")).toBe("10px");
+    expect(bar.style.getPropertyValue("--cut-width")).toBe("3px");
+    // The edge runs 50 pixels up from the panel centre (100, 50).
+    expect(bar.style.transform).toBe(
+      `translate(100px, 25px) rotate(${-Math.PI / 2}rad) translate(-1.5px, -5px)`,
+    );
+  });
+
   it("hides the overlay while there is nothing to draw", () => {
     const primitives = [makeMarker([0, 0, 0])];
     const overlay = drawOverlay(primitives);
