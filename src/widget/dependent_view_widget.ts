@@ -26,10 +26,16 @@ export class DependentViewContext extends RefCounted {
   }
 }
 
+export interface DependentViewWidgetOptions {
+  // A rebuild would remove the element being edited or pressed, losing its value, caret, undo history or click.
+  readonly deferRebuildWhileInteracting?: boolean;
+}
+
 export class DependentViewWidget<T> extends RefCounted {
   element = document.createElement("div");
 
   private generation = -1;
+  private pointerPressed = false;
   private currentViewDisposer: RefCounted | undefined = undefined;
   private debouncedUpdateView = this.registerCancellable(
     animationFrameDebounce(() => this.updateView()),
@@ -49,9 +55,35 @@ export class DependentViewWidget<T> extends RefCounted {
     public visibility = new WatchableVisibilityPriority(
       WatchableVisibilityPriority.VISIBLE,
     ),
+    private readonly options: DependentViewWidgetOptions = {},
   ) {
     super();
     this.element.style.display = "contents";
+    if (options.deferRebuildWhileInteracting) {
+      const releasePointer = () => {
+        if (!this.pointerPressed) return;
+        this.pointerPressed = false;
+        this.debouncedUpdateView();
+      };
+      this.registerEventListener(
+        this.element,
+        "pointerdown",
+        () => {
+          this.pointerPressed = true;
+        },
+        { capture: true },
+      );
+      this.registerEventListener(window, "pointerup", releasePointer, {
+        capture: true,
+      });
+      this.registerEventListener(window, "pointercancel", releasePointer, {
+        capture: true,
+      });
+      this.registerEventListener(window, "blur", releasePointer);
+      this.registerEventListener(this.element, "focusout", () =>
+        this.debouncedUpdateView(),
+      );
+    }
     this.registerDisposer(model.changed.add(this.debouncedUpdateView));
     this.registerDisposer(
       visibility.changed.add(() => {
@@ -70,11 +102,25 @@ export class DependentViewWidget<T> extends RefCounted {
     const { model } = this;
     const generation = model.changed.count;
     if (generation === this.generation) return;
+    if (this.options.deferRebuildWhileInteracting && this.isInteracting()) {
+      return;
+    }
     this.disposeCurrentView();
     const currentViewDisposer = (this.currentViewDisposer =
       new DependentViewContext(this.debouncedForceUpdateView));
     this.render(model.value, this.element, currentViewDisposer);
     this.generation = generation;
+  }
+
+  private isInteracting() {
+    if (this.pointerPressed) return true;
+    const { activeElement } = document;
+    return (
+      activeElement instanceof HTMLElement &&
+      this.element.contains(activeElement) &&
+      (activeElement.isContentEditable ||
+        activeElement.matches("input, select, textarea"))
+    );
   }
 
   private disposeCurrentView() {

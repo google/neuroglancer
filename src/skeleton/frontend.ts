@@ -17,6 +17,12 @@
 import { ChunkState, LayerChunkProgressInfo } from "#src/chunk_manager/base.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { Chunk, ChunkSource } from "#src/chunk_manager/frontend.js";
+import { HashMapUint64, type HashSetUint64 } from "#src/gpu_hash/hash_table.js";
+import {
+  GPUHashTable,
+  HashMapShaderManager,
+  HashSetShaderManager,
+} from "#src/gpu_hash/shader.js";
 import type { LayerView, VisibleLayerInfo } from "#src/layer/index.js";
 import type { PerspectivePanel } from "#src/perspective_view/panel.js";
 import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
@@ -29,6 +35,8 @@ import { update3dRenderLayerAttachment } from "#src/renderlayer.js";
 import {
   DEFAULT_USER_MAIN_SEGMENT_COLOR,
   encodeSegmentPropertyShaderDefinition,
+  type SegmentationColorUserShaderManagerParameters,
+  type SegmentPropertyShaderDefinition,
 } from "#src/segment_color.js";
 import {
   forEachVisibleSegment,
@@ -40,11 +48,20 @@ import {
   registerRedrawWhenSegmentationDisplayState3DChanged,
   SegmentationLayerSharedObject,
 } from "#src/segmentation_display_state/frontend.js";
-import type { VertexAttributeInfo } from "#src/skeleton/base.js";
-import { SKELETON_LAYER_RPC_ID } from "#src/skeleton/base.js";
+import { type SkeletonEdge, type SkeletonNode } from "#src/skeleton/api.js";
+import {
+  SKELETON_LAYER_RPC_ID,
+  type VertexAttributeInfo,
+} from "#src/skeleton/base.js";
+import type { SkeletonNodeAccess } from "#src/skeleton/navigation.js";
+import {
+  getSkeletonChunkNodes,
+  type SkeletonChunkNodes,
+} from "#src/skeleton/topology.js";
 import type { SliceViewPanel } from "#src/sliceview/panel.js";
 import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js";
 import { SliceViewPanelRenderLayer } from "#src/sliceview/renderlayer.js";
+import type { TrackableAlphaValue } from "#src/trackable_alpha.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import {
   AggregateWatchableValue,
@@ -83,7 +100,9 @@ import type {
   ShaderProgram,
   ShaderSamplerType,
 } from "#src/webgl/shader.js";
+import type { ViewBinding } from "#src/webgl/shader_control_reachability.js";
 import { glsl_string } from "#src/webgl/shader_lib.js";
+import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 import {
   addControlsToBuilder,
   getFallbackBuilderState,
@@ -101,20 +120,20 @@ import {
 } from "#src/webgl/texture_access.js";
 import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
-const tempMat2 = mat4.create();
-
-const DEFAULT_FRAGMENT_MAIN = `void main() {
+export const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitDefault();
 }
 `;
+const tempMat4 = mat4.create();
 
-interface VertexAttributeRenderInfo extends VertexAttributeInfo {
+export interface VertexAttributeRenderInfo extends VertexAttributeInfo {
   name: string;
   webglDataType: number;
   glslDataType: string;
 }
 
 const vertexAttributeSamplerSymbols: symbol[] = [];
+const segmentIdSamplerSymbol = Symbol("SkeletonShader.segmentIdTextureUnit");
 
 const vertexPositionTextureFormat = computeTextureFormat(
   new TextureFormat(),
@@ -122,64 +141,349 @@ const vertexPositionTextureFormat = computeTextureFormat(
   3,
 );
 
-class RenderHelper extends RefCounted {
+export enum SkeletonGeometryKind {
+  // Each draw holds one segment, named by the draw.
+  SINGLE_SEGMENT,
+  // Each vertex names its segment.
+  SEGMENT_PER_VERTEX,
+  // Each vertex names its segment, and each draw is culled to its chunk bounds.
+  // Segments flagged EXCLUDED_FROM_CHUNKS are hidden.
+  SPATIAL_INDEX_CHUNK,
+}
+
+// Bit flags, combined per segment.
+export enum SkeletonSegmentState {
+  // Another pass draws the whole skeleton.
+  EXCLUDED_FROM_CHUNKS = 1,
+  PROVISIONAL = 2,
+}
+
+export interface SkeletonShaderContext {
+  readonly vertexAttributes: VertexAttributeRenderInfo[];
+  readonly gl: GL;
+  readonly displayState: SkeletonLayerDisplayState;
+  readonly geometryKind: SkeletonGeometryKind;
+  readonly segmentStatesHashMap?: HashMapUint64;
+}
+
+export interface SkeletonGPUGeometry {
+  vertexAttributeTextures: (WebGLTexture | null)[];
+  segmentIdTexture?: WebGLTexture | null;
+  indexBuffer: GLBuffer;
+  numIndices: number;
+  numVertices: number;
+}
+
+export interface PackedSkeletonGeometry {
+  vertexAttributes: Uint8Array;
+  indices: Uint32Array;
+  numVertices: number;
+  vertexAttributeOffsets: Uint32Array;
+}
+
+interface SkeletonGeometry {
+  vertexMain: string;
+  fragmentSetup: string;
+}
+
+export interface SkeletonDrawOptions {
+  readonly modelMatrix: mat4;
+  readonly renderOptions: ViewSpecificSkeletonRenderingOptions;
+  // Holds the shader controls that the draw uses.
+  readonly binding: ViewBinding;
+}
+
+// A number picks the whole skeleton. Otherwise IDs count up per edge and per node.
+type SkeletonPickIds =
+  | number
+  | { readonly firstEdgePickId: number; readonly firstNodePickId: number };
+
+function resolveSkeletonPickIds(pickIds: SkeletonPickIds | undefined) {
+  if (pickIds === undefined) return undefined;
+  if (typeof pickIds === "number") {
+    return { edgePickId: pickIds, nodePickId: pickIds, stride: 0 };
+  }
+  return {
+    edgePickId: pickIds.firstEdgePickId,
+    nodePickId: pickIds.firstNodePickId,
+    stride: 1,
+  };
+}
+
+interface SkeletonDrawParameters {
+  readonly colorSegmentId?: bigint;
+  readonly pickIds?: SkeletonPickIds;
+  readonly chunkBounds?: {
+    readonly origin: Float32Array;
+    readonly upperBound: Float32Array;
+  };
+  readonly nodePositionOverride?: {
+    readonly vertexIndex: number;
+    readonly position: ArrayLike<number>;
+  };
+}
+
+interface SkeletonShaderParameters {
+  readonly segmentColorParameters: SegmentationColorUserShaderManagerParameters;
+  readonly segmentColorProperties: readonly SegmentPropertyShaderDefinition[];
+  readonly segmentColorShaderBuilderState: ShaderControlsBuilderState;
+  readonly skeletonShaderBuilderState: ShaderControlsBuilderState;
+}
+
+function encodeSkeletonShaderParameters(parameters: SkeletonShaderParameters) {
+  return `${parameters.skeletonShaderBuilderState.key}/${parameters.segmentColorShaderBuilderState.key}/${JSON.stringify(parameters.segmentColorParameters)}/${JSON.stringify(parameters.segmentColorProperties.map(encodeSegmentPropertyShaderDefinition))}`;
+}
+
+// Colours stay straight-alpha until `premultiplyAlpha` at emission.
+const glsl_edgeEmitters = `
+void emitRGBA(vec4 color) {
+  color.a *= getSegmentAlpha() * getLineAlpha() * getCrossSectionFade();
+  if (color.a <= 0.0) discard;
+  emit(premultiplyAlpha(color), vPickID);
+}
+void emitRGB(vec3 color) {
+  emitRGBA(vec4(color, 1.0));
+}
+void emitDefault() {
+  emitRGBA(segmentColor());
+}
+`;
+
+const glsl_nodeEmitters = `
+void emitRGBA(vec4 color) {
+  color.a *= getSegmentAlpha();
+  if (color.a <= 0.0) discard;
+  emit(premultiplyAlpha(getCircleColor(color, color)), vPickID);
+}
+void emitRGB(vec3 color) {
+  emitRGBA(vec4(color, 1.0));
+}
+void emitDefault() {
+  emitRGBA(segmentColor());
+}
+`;
+
+export class RenderHelper extends RefCounted {
   private textureAccessHelper = new OneDimensionalTextureAccessHelper(
     "vertexData",
   );
   private vertexIdHelper;
+  private visibleSegmentsShaderManager = new HashSetShaderManager(
+    "visibleSegments",
+  );
+  private segmentStatesShaderManager = new HashMapShaderManager(
+    "segmentStates",
+  );
+  private readonly clearedTextureUnits = new Set<number>();
+  private emptySegmentStates = new HashMapUint64();
+  private gpuVisibleSegmentsHashTable: GPUHashTable<HashSetUint64>;
+  private gpuTemporaryVisibleSegmentsHashTable: GPUHashTable<HashSetUint64>;
+  private gpuSegmentStatesHashTable: GPUHashTable<HashMapUint64>;
   get vertexAttributes(): VertexAttributeRenderInfo[] {
     return this.base.vertexAttributes;
   }
 
-  defineCommonShader(builder: ShaderBuilder) {
+  private get hasSegmentIdPerVertex() {
+    return this.base.geometryKind !== SkeletonGeometryKind.SINGLE_SEGMENT;
+  }
+
+  private defineCommonShader(
+    builder: ShaderBuilder,
+    {
+      segmentColorParameters,
+      segmentColorShaderBuilderState,
+      skeletonShaderBuilderState,
+    }: SkeletonShaderParameters,
+  ): void {
+    if (skeletonShaderBuilderState.parseResult.errors.length !== 0) {
+      throw new Error("Invalid UI control specification");
+    }
+    this.base.displayState.segmentationColorUserShader.defineShader(
+      builder,
+      /*fragment=*/ true,
+      segmentColorShaderBuilderState,
+      segmentColorParameters,
+    );
     defineVertexId(builder);
-    // Skeleton shaders use straight-alpha colors until the final emission.
     builder.addUniform("highp float", "uAlpha");
     builder.addUniform("highp mat4", "uProjection");
     builder.addUniform("highp uint", "uPickID");
-    builder.addUniform("highp uvec2", "uID");
-    builder.addFragmentCode(`
-// Layer opacity is applied by emitRGBA.
-vec4 segmentColor() {
-  return segmentColorUserShader(uint64_t(uID));
+    builder.addVarying("highp uint", "vPickID", "flat");
+    builder.addUniform("highp uint", "uPickInstanceStride");
+    this.defineAttributeAccess(builder);
+    // Moves one dragged vertex without a new upload of the position texture.
+    builder.addUniform("highp int", "uOverrideVertexIndex");
+    builder.addUniform("highp vec3", "uOverridePosition");
+    builder.addVertexCode(`
+highp vec3 applyNodePositionOverride(highp uint vertexIndex, highp vec3 position) {
+  return (int(vertexIndex) == uOverrideVertexIndex) ? uOverridePosition : position;
 }
+`);
+    // The slice view composites straight-alpha colours.
+    builder.addFragmentCode(`
 vec4 premultiplyAlpha(vec4 color) {
   return ${this.targetIsSliceView ? "color" : "vec4(color.rgb * color.a, color.a)"};
 }
+float getCrossSectionFade() {
+  return ${this.getCrossSectionFadeFactor()};
+}
 `);
+    if (this.hasSegmentIdPerVertex) {
+      this.definePerVertexSegments(builder);
+    } else {
+      builder.addUniform("highp uvec2", "uSegmentId");
+      builder.addFragmentCode(`
+vec4 segmentColor() {
+  return segmentColorUserShader(uint64_t(uSegmentId));
+}
+highp float getSegmentAlpha() {
+  return uAlpha;
+}
+`);
+    }
+    if (this.base.geometryKind === SkeletonGeometryKind.SPATIAL_INDEX_CHUNK) {
+      builder.addUniform("highp vec3", "uChunkOrigin");
+      builder.addUniform("highp vec3", "uChunkBound");
+      builder.addVarying("highp vec3", "vCullPos");
+      builder.addFragmentCode(`
+void spatialChunkCull() {
+  if (any(lessThan(vCullPos, uChunkOrigin)) ||
+      any(greaterThanEqual(vCullPos, uChunkBound))) discard;
+}
+`);
+    }
   }
 
-  edgeShaderGetter;
-  nodeShaderGetter;
+  private finalizeShaderBuilder(
+    builder: ShaderBuilder,
+    shaderBuilderState: ShaderControlsBuilderState,
+    vertexMain: string,
+    fragmentSetup = "",
+  ): void {
+    builder.addFragmentCode(glsl_COLORMAPS);
+    const { vertexAttributes } = this;
+    const numAttributes = vertexAttributes.length;
+    for (let i = 1; i < numAttributes; ++i) {
+      const info = vertexAttributes[i];
+      builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
+      vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
+      builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
+      builder.addFragmentCode(`#define prop_${info.name}() vCustom${i}\n`);
+    }
+    builder.setVertexMain(vertexMain);
+    builder.addFragmentCode(glsl_string);
+    addControlsToBuilder(shaderBuilderState, builder);
+    builder.addFragmentCode(`void userMain();\n`);
+    builder.addFragmentCode(
+      "#define main userMain\n" +
+        shaderCodeWithLineDirective(shaderBuilderState.parseResult.code) +
+        "\n#undef main\n",
+    );
+    builder.setFragmentMain(fragmentSetup + "userMain();");
+  }
+
+  readonly edgeShaderGetter;
+  readonly nodeShaderGetter;
 
   get gl(): GL {
     return this.base.gl;
   }
 
+  private definePerVertexSegments(builder: ShaderBuilder) {
+    this.visibleSegmentsShaderManager.defineShader(builder);
+    this.segmentStatesShaderManager.defineShader(builder);
+    builder.addUniform("highp float", "uHiddenAlpha");
+    builder.addTextureSampler(
+      "usampler2D",
+      "uSegmentIdSampler",
+      segmentIdSamplerSymbol,
+    );
+    builder.addVertexCode(
+      this.textureAccessHelper.getAccessor(
+        "readSegmentId",
+        "uSegmentIdSampler",
+        DataType.UINT64,
+        1,
+      ),
+    );
+    builder.addVarying("highp uvec2", "vSegmentId", "flat");
+    const excludedAlphaFragment =
+      this.base.geometryKind === SkeletonGeometryKind.SPATIAL_INDEX_CHUNK
+        ? `
+  if ((states & ${SkeletonSegmentState.EXCLUDED_FROM_CHUNKS}u) != 0u) {
+    return 0.0;
+  }`
+        : "";
+    builder.addFragmentCode(`
+uint getSegmentStates(uint64_t segmentId) {
+  uint64_t states;
+  return ${this.segmentStatesShaderManager.getFunctionName}(segmentId, states) ? states.value[0] : 0u;
+}
+vec4 segmentColor() {
+  uint64_t segmentId = uint64_t(vSegmentId);
+  if ((getSegmentStates(segmentId) & ${SkeletonSegmentState.PROVISIONAL}u) != 0u) {
+    return vec4(1.0, 0.0, 0.0, 1.0);
+  }
+  return segmentColorUserShader(segmentId);
+}
+highp float getSegmentAlpha() {
+  uint64_t segmentId = uint64_t(vSegmentId);
+  uint states = getSegmentStates(segmentId);
+${excludedAlphaFragment}
+  bool isVisible = ${this.visibleSegmentsShaderManager.hasFunctionName}(segmentId);
+  return isVisible ? uAlpha : uHiddenAlpha;
+}
+`);
+  }
+
+  private enablePerVertexSegments(shader: ShaderProgram) {
+    const { gl } = this;
+    const { displayState } = this.base;
+    const segmentationGroupState = displayState.segmentationGroupState.value;
+    this.visibleSegmentsShaderManager.enable(
+      gl,
+      shader,
+      segmentationGroupState.useTemporaryVisibleSegments.value
+        ? this.gpuTemporaryVisibleSegmentsHashTable
+        : this.gpuVisibleSegmentsHashTable,
+    );
+    this.segmentStatesShaderManager.enable(
+      gl,
+      shader,
+      this.gpuSegmentStatesHashTable,
+    );
+    gl.uniform1f(
+      shader.uniform("uHiddenAlpha"),
+      displayState.hiddenObjectAlpha.value,
+    );
+  }
+
+  private disablePerVertexSegments(shader: ShaderProgram) {
+    const { gl } = this;
+    this.visibleSegmentsShaderManager.disable(gl, shader);
+    this.segmentStatesShaderManager.disable(gl, shader);
+  }
+
   constructor(
-    public base: SkeletonLayer,
+    public base: SkeletonShaderContext,
     public targetIsSliceView: boolean,
   ) {
     super();
-
-    const layer = base;
-
-    const parameters = layer.registerDisposer(
+    const { displayState } = base;
+    const { segmentationColorUserShader } = displayState;
+    const parameters = this.registerDisposer(
       new AggregateWatchableValue(() => ({
-        segmentColorParameters:
-          layer.displayState.segmentationColorUserShader.shaderParameters,
-        segmentColorProperties:
-          layer.displayState.segmentationColorUserShader.usedProperties,
+        segmentColorParameters: segmentationColorUserShader.shaderParameters,
+        segmentColorProperties: segmentationColorUserShader.usedProperties,
         segmentColorShaderBuilderState:
-          layer.displayState.segmentColorShaderControlState.builderState,
+          displayState.segmentColorShaderControlState.builderState,
         skeletonShaderBuilderState:
-          this.base.displayState.skeletonRenderingOptions.shaderControlState
-            .builderState,
+          displayState.skeletonRenderingOptions.shaderControlState.builderState,
       })),
     );
-    const initialFallbackParameters = {
+    const fallbackParameters: SkeletonShaderParameters = {
       segmentColorParameters:
-        layer.displayState.segmentationColorUserShader.shaderParameters.value,
+        segmentationColorUserShader.shaderParameters.value,
       segmentColorProperties: [],
       segmentColorShaderBuilderState: getFallbackBuilderState(
         parseShaderUiControls(DEFAULT_USER_MAIN_SEGMENT_COLOR),
@@ -188,177 +492,352 @@ vec4 premultiplyAlpha(vec4 color) {
         parseShaderUiControls(DEFAULT_FRAGMENT_MAIN),
       ),
     };
-    const edgeFallbackParameters = new WatchableValue(
-      initialFallbackParameters,
-    );
-    const nodeFallbackParameters = new WatchableValue({
-      ...initialFallbackParameters,
-    });
 
     this.vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
+
+    const segmentationGroupState = displayState.segmentationGroupState.value;
+    this.gpuVisibleSegmentsHashTable = this.registerDisposer(
+      GPUHashTable.get(
+        this.gl,
+        segmentationGroupState.visibleSegments.hashTable,
+      ),
+    );
+    this.gpuTemporaryVisibleSegmentsHashTable = this.registerDisposer(
+      GPUHashTable.get(
+        this.gl,
+        segmentationGroupState.temporaryVisibleSegments.hashTable,
+      ),
+    );
+    this.gpuSegmentStatesHashTable = this.registerDisposer(
+      GPUHashTable.get(
+        this.gl,
+        base.segmentStatesHashMap ?? this.emptySegmentStates,
+      ),
+    );
+
+    const memoizeKey = {
+      vertexAttributes: this.vertexAttributes,
+      geometryKind: base.geometryKind,
+    };
+    const { shaderError } = displayState.skeletonRenderingOptions;
     this.edgeShaderGetter = parameterizedEmitterDependentShaderGetter(
       this,
       this.gl,
       {
         memoizeKey: {
+          ...memoizeKey,
           type: "skeleton/SkeletonShaderManager/edge",
-          vertexAttributes: this.vertexAttributes,
         },
-        fallbackParameters: edgeFallbackParameters,
+        fallbackParameters: new WatchableValue(fallbackParameters),
         parameters,
-        encodeParameters: (p) => {
-          return `${p.skeletonShaderBuilderState.key}/${p.segmentColorShaderBuilderState.key}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify(p.segmentColorProperties.map(encodeSegmentPropertyShaderDefinition))}}`;
-        },
-        shaderError:
-          this.base.displayState.skeletonRenderingOptions.shaderError,
-        defineShader: (
-          builder: ShaderBuilder,
-          {
-            segmentColorParameters,
-            segmentColorShaderBuilderState,
-            skeletonShaderBuilderState,
-          },
-        ) => {
-          if (skeletonShaderBuilderState.parseResult.errors.length !== 0) {
-            throw new Error("Invalid UI control specification");
-          }
-          layer.displayState.segmentationColorUserShader.defineShader(
-            builder,
-            /*fragment=*/ true,
-            segmentColorShaderBuilderState,
-            segmentColorParameters,
-          );
-          this.defineCommonShader(builder);
-          this.defineAttributeAccess(builder);
-          defineLineShader(builder);
-          builder.addAttribute("highp uvec2", "aVertexIndex");
-          builder.addUniform("highp float", "uLineWidth");
-          let vertexMain = `
-highp vec3 vertexA = readAttribute0(aVertexIndex.x);
-highp vec3 vertexB = readAttribute0(aVertexIndex.y);
-emitLine(uProjection, vertexA, vertexB, uLineWidth);
-highp uint lineEndpointIndex = getLineEndpointIndex();
-highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexIndex.y * lineEndpointIndex;
-`;
-
-          builder.addFragmentCode(`
-void emitRGBA(vec4 color) {
-  color.a *= uAlpha * getLineAlpha() * ${this.getCrossSectionFadeFactor()};
-  emit(premultiplyAlpha(color), uPickID);
-}
-void emitRGB(vec3 color) {
-  emitRGBA(vec4(color, 1.0));
-}
-void emitDefault() {
-  emitRGBA(segmentColor());
-}
-`);
-          builder.addFragmentCode(glsl_COLORMAPS);
-          const { vertexAttributes } = this;
-          const numAttributes = vertexAttributes.length;
-          for (let i = 1; i < numAttributes; ++i) {
-            const info = vertexAttributes[i];
-            builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
-            vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
-            builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
-            builder.addFragmentCode(
-              `#define prop_${info.name}() vCustom${i}\n`,
-            );
-          }
-          builder.setVertexMain(vertexMain);
-          builder.addFragmentCode(glsl_string);
-          addControlsToBuilder(skeletonShaderBuilderState, builder);
-          builder.setFragmentMainFunction(
-            shaderCodeWithLineDirective(
-              skeletonShaderBuilderState.parseResult.code,
-            ),
-          );
-        },
+        encodeParameters: encodeSkeletonShaderParameters,
+        shaderError,
+        defineShader: (builder, shaderParameters) =>
+          this.defineEdgeShader(builder, shaderParameters),
       },
     );
-
     this.nodeShaderGetter = parameterizedEmitterDependentShaderGetter(
       this,
       this.gl,
       {
         memoizeKey: {
+          ...memoizeKey,
           type: "skeleton/SkeletonShaderManager/node",
-          vertexAttributes: this.vertexAttributes,
         },
-        fallbackParameters: nodeFallbackParameters,
+        fallbackParameters: new WatchableValue(fallbackParameters),
         parameters,
-        encodeParameters: (p) => {
-          return `${p.skeletonShaderBuilderState.key}/${p.segmentColorShaderBuilderState.key}/${JSON.stringify(p.segmentColorParameters)}/${JSON.stringify(p.segmentColorProperties.map(encodeSegmentPropertyShaderDefinition))}}`;
-        },
-        shaderError:
-          this.base.displayState.skeletonRenderingOptions.shaderError,
-        defineShader: (
-          builder: ShaderBuilder,
-          {
-            segmentColorParameters,
-            segmentColorShaderBuilderState,
-            skeletonShaderBuilderState,
-          },
-        ) => {
-          if (skeletonShaderBuilderState.parseResult.errors.length !== 0) {
-            throw new Error("Invalid UI control specification");
-          }
-          layer.displayState.segmentationColorUserShader.defineShader(
-            builder,
-            /*fragment=*/ true,
-            segmentColorShaderBuilderState,
-            segmentColorParameters,
-          );
-          this.defineCommonShader(builder);
-          this.defineAttributeAccess(builder);
-          defineCircleShader(
-            builder,
-            /*crossSectionFade=*/ this.targetIsSliceView,
-          );
-          builder.addUniform("highp float", "uNodeDiameter");
-          let vertexMain = `
-highp uint vertexIndex = uint(gl_InstanceID);
-highp vec3 vertexPosition = readAttribute0(vertexIndex);
-emitCircle(uProjection * vec4(vertexPosition, 1.0), uNodeDiameter, 0.0);
-`;
-
-          builder.addFragmentCode(`
-void emitRGBA(vec4 color) {
-  color.a *= uAlpha;
-  vec4 borderColor = color;
-  vec4 circleColor = getCircleColor(color, borderColor);
-  emit(premultiplyAlpha(circleColor), uPickID);
-}
-void emitRGB(vec3 color) {
-  emitRGBA(vec4(color, 1.0));
-}
-void emitDefault() {
-  emitRGBA(segmentColor());
-}
-`);
-          builder.addFragmentCode(glsl_COLORMAPS);
-          const { vertexAttributes } = this;
-          const numAttributes = vertexAttributes.length;
-          for (let i = 1; i < numAttributes; ++i) {
-            const info = vertexAttributes[i];
-            builder.addVarying(`highp ${info.glslDataType}`, `vCustom${i}`);
-            vertexMain += `vCustom${i} = readAttribute${i}(vertexIndex);\n`;
-            builder.addFragmentCode(`#define ${info.name} vCustom${i}\n`);
-            builder.addFragmentCode(
-              `#define prop_${info.name}() vCustom${i}\n`,
-            );
-          }
-          builder.setVertexMain(vertexMain);
-          builder.addFragmentCode(glsl_string);
-          addControlsToBuilder(skeletonShaderBuilderState, builder);
-          builder.setFragmentMainFunction(
-            shaderCodeWithLineDirective(
-              skeletonShaderBuilderState.parseResult.code,
-            ),
-          );
-        },
+        encodeParameters: encodeSkeletonShaderParameters,
+        shaderError,
+        defineShader: (builder, shaderParameters) =>
+          this.defineNodeShader(builder, shaderParameters),
       },
     );
+  }
+
+  draw(
+    renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
+    { modelMatrix, renderOptions, binding }: SkeletonDrawOptions,
+    callback: (
+      drawSkeleton: (
+        geometry: SkeletonGPUGeometry,
+        parameters: SkeletonDrawParameters,
+      ) => void,
+    ) => void,
+  ): void {
+    const edgeShaderResult = this.edgeShaderGetter(renderContext.emitter);
+    const nodeShaderResult = this.nodeShaderGetter(renderContext.emitter);
+    const edgeShader = edgeShaderResult.shader;
+    const nodeShader = nodeShaderResult.shader;
+    if (edgeShader === null || nodeShader === null) return;
+    const { gl } = this;
+    const { displayState, geometryKind } = this.base;
+    const { segmentationColorUserShader } = displayState;
+    const { shaderControlState } = displayState.skeletonRenderingOptions;
+    const lineWidth = renderOptions.lineWidth.value;
+    const projection = mat4.multiply(
+      tempMat4,
+      renderContext.projectionParameters.viewProjectionMat,
+      modelMatrix,
+    );
+    const shaders = [
+      [edgeShader, edgeShaderResult],
+      [nodeShader, nodeShaderResult],
+    ] as const;
+    for (const [shader, shaderResult] of shaders) {
+      const { parameters, fallback } = shaderResult;
+      shader.bind();
+      gl.uniformMatrix4fv(shader.uniform("uProjection"), false, projection);
+      gl.uniform1f(shader.uniform("uAlpha"), displayState.objectAlpha.value);
+      gl.uniform1ui(shader.uniform("uPickInstanceStride"), 0);
+      shaderControlState.activeControls.trackShader(
+        { ...shaderResult, parameters: parameters.skeletonShaderBuilderState },
+        binding,
+      );
+      setControlsInShader(
+        gl,
+        shader,
+        shaderControlState,
+        parameters.skeletonShaderBuilderState.parseResult,
+      );
+      segmentationColorUserShader.enable(
+        gl,
+        shader,
+        parameters.segmentColorShaderBuilderState,
+        { fallback, binding },
+        parameters.segmentColorParameters,
+      );
+      if (this.hasSegmentIdPerVertex) {
+        this.enablePerVertexSegments(shader);
+      }
+    }
+    edgeShader.bind();
+    gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth);
+    nodeShader.bind();
+    gl.uniform1f(
+      nodeShader.uniform("uNodeDiameter"),
+      getSkeletonNodeDiameter(renderOptions.mode.value, lineWidth),
+    );
+    this.vertexIdHelper.enable();
+    callback((geometry, parameters) => {
+      if (
+        geometryKind === SkeletonGeometryKind.SPATIAL_INDEX_CHUNK &&
+        parameters.chunkBounds === undefined
+      ) {
+        throw new Error("A spatial index chunk is drawn without its bounds.");
+      }
+      if (
+        geometryKind === SkeletonGeometryKind.SINGLE_SEGMENT &&
+        parameters.colorSegmentId === undefined
+      ) {
+        throw new Error("A single-segment skeleton is drawn without its ID.");
+      }
+      this.drawSkeleton(
+        edgeShader,
+        nodeShader,
+        renderContext.projectionParameters,
+        geometry,
+        parameters,
+      );
+    });
+    for (const [shader, { parameters }] of shaders) {
+      if (this.hasSegmentIdPerVertex) {
+        this.disablePerVertexSegments(shader);
+      }
+      segmentationColorUserShader.disable(
+        gl,
+        shader,
+        parameters.segmentColorParameters,
+      );
+    }
+    this.unbindTextures(edgeShader, nodeShader);
+    this.vertexIdHelper.disable();
+  }
+
+  private drawSkeleton(
+    edgeShader: ShaderProgram,
+    nodeShader: ShaderProgram,
+    projectionParameters: { readonly width: number; readonly height: number },
+    geometry: SkeletonGPUGeometry,
+    parameters: SkeletonDrawParameters,
+  ) {
+    const { gl } = this;
+    const featherWidthInPixels = this.targetIsSliceView ? 1.0 : 0.0;
+    // Both shaders declare their samplers in the same order, so they share texture units.
+    const { vertexAttributeTextures } = geometry;
+    for (let i = 0; i < this.vertexAttributes.length; ++i) {
+      gl.activeTexture(
+        WebGL2RenderingContext.TEXTURE0 +
+          edgeShader.textureUnit(vertexAttributeSamplerSymbols[i])!,
+      );
+      gl.bindTexture(
+        WebGL2RenderingContext.TEXTURE_2D,
+        vertexAttributeTextures[i],
+      );
+    }
+    if (edgeShader.textureUnits.has(segmentIdSamplerSymbol)) {
+      gl.activeTexture(
+        WebGL2RenderingContext.TEXTURE0 +
+          edgeShader.textureUnit(segmentIdSamplerSymbol)!,
+      );
+      gl.bindTexture(
+        WebGL2RenderingContext.TEXTURE_2D,
+        geometry.segmentIdTexture ?? null,
+      );
+    }
+    const pickIds = resolveSkeletonPickIds(parameters.pickIds);
+
+    edgeShader.bind();
+    this.setDrawUniforms(edgeShader, parameters);
+    if (pickIds !== undefined) {
+      this.setPickUniforms(edgeShader, pickIds.edgePickId, pickIds.stride);
+    }
+    const aVertexIndex = edgeShader.attribute("aVertexIndex");
+    geometry.indexBuffer.bindToVertexAttribI(
+      aVertexIndex,
+      2,
+      WebGL2RenderingContext.UNSIGNED_INT,
+    );
+    gl.vertexAttribDivisor(aVertexIndex, 1);
+    initializeLineShader(
+      edgeShader,
+      projectionParameters,
+      featherWidthInPixels,
+    );
+    drawLines(gl, 1, geometry.numIndices / 2);
+    gl.vertexAttribDivisor(aVertexIndex, 0);
+    gl.disableVertexAttribArray(aVertexIndex);
+
+    // Nodes are drawn in line mode too, so that edges meet without gaps.
+    nodeShader.bind();
+    this.setDrawUniforms(nodeShader, parameters);
+    if (pickIds !== undefined) {
+      this.setPickUniforms(nodeShader, pickIds.nodePickId, pickIds.stride);
+    }
+    initializeCircleShader(nodeShader, projectionParameters, {
+      featherWidthInPixels,
+    });
+    drawCircles(gl, 1, geometry.numVertices);
+  }
+
+  private setPickUniforms(
+    shader: ShaderProgram,
+    pickId: number,
+    stride: number,
+  ) {
+    this.gl.uniform1ui(shader.uniform("uPickID"), pickId);
+    this.gl.uniform1ui(shader.uniform("uPickInstanceStride"), stride);
+  }
+
+  private setDrawUniforms(
+    shader: ShaderProgram,
+    {
+      colorSegmentId,
+      chunkBounds,
+      nodePositionOverride,
+    }: SkeletonDrawParameters,
+  ) {
+    const { gl } = this;
+    if (colorSegmentId !== undefined) {
+      gl.uniform2ui(
+        shader.uniform("uSegmentId"),
+        Number(colorSegmentId & 0xffff_ffffn),
+        Number(colorSegmentId >> 32n),
+      );
+    }
+    if (chunkBounds !== undefined) {
+      gl.uniform3fv(shader.uniform("uChunkOrigin"), chunkBounds.origin);
+      gl.uniform3fv(shader.uniform("uChunkBound"), chunkBounds.upperBound);
+    }
+    // A uniform left at 0 would move vertex 0.
+    gl.uniform1i(
+      shader.uniform("uOverrideVertexIndex"),
+      nodePositionOverride?.vertexIndex ?? -1,
+    );
+    if (nodePositionOverride !== undefined) {
+      const { position } = nodePositionOverride;
+      gl.uniform3f(
+        shader.uniform("uOverridePosition"),
+        position[0],
+        position[1],
+        position[2],
+      );
+    }
+  }
+
+  private readSegmentIdGlsl(indexExpression: string): string {
+    if (!this.hasSegmentIdPerVertex) return "";
+    return `vSegmentId = readSegmentId(${indexExpression}).value;\n`;
+  }
+
+  private defineEdgeShader(
+    builder: ShaderBuilder,
+    shaderParameters: SkeletonShaderParameters,
+  ) {
+    this.defineCommonShader(builder, shaderParameters);
+    const geometry = this.defineEdgeGeometry(builder);
+    builder.addFragmentCode(glsl_edgeEmitters);
+    this.finalizeShaderBuilder(
+      builder,
+      shaderParameters.skeletonShaderBuilderState,
+      geometry.vertexMain,
+      geometry.fragmentSetup,
+    );
+  }
+
+  private defineNodeShader(
+    builder: ShaderBuilder,
+    shaderParameters: SkeletonShaderParameters,
+  ) {
+    this.defineCommonShader(builder, shaderParameters);
+    const geometry = this.defineNodeGeometry(builder);
+    builder.addFragmentCode(glsl_nodeEmitters);
+    this.finalizeShaderBuilder(
+      builder,
+      shaderParameters.skeletonShaderBuilderState,
+      geometry.vertexMain,
+      geometry.fragmentSetup,
+    );
+  }
+
+  private defineEdgeGeometry(builder: ShaderBuilder): SkeletonGeometry {
+    defineLineShader(builder);
+    builder.addAttribute("highp uvec2", "aVertexIndex");
+    builder.addUniform("highp float", "uLineWidth");
+    let vertexMain = `
+highp uint pickOffset = uint(gl_InstanceID) * uPickInstanceStride;
+vPickID = uPickID + pickOffset;
+highp vec3 vertexA = applyNodePositionOverride(aVertexIndex.x, readAttribute0(aVertexIndex.x));
+highp vec3 vertexB = applyNodePositionOverride(aVertexIndex.y, readAttribute0(aVertexIndex.y));
+emitLine(uProjection, vertexA, vertexB, uLineWidth);
+highp uint lineEndpointIndex = getLineEndpointIndex();
+highp uint vertexIndex = aVertexIndex.x * (1u - lineEndpointIndex) + aVertexIndex.y * lineEndpointIndex;
+`;
+    let fragmentSetup = "";
+    if (this.base.geometryKind === SkeletonGeometryKind.SPATIAL_INDEX_CHUNK) {
+      vertexMain += `vCullPos = mix(vertexA, vertexB, float(lineEndpointIndex));\n`;
+      fragmentSetup = `spatialChunkCull();\n`;
+    }
+    vertexMain += this.readSegmentIdGlsl("aVertexIndex.x");
+    return { vertexMain, fragmentSetup };
+  }
+
+  private defineNodeGeometry(builder: ShaderBuilder): SkeletonGeometry {
+    defineCircleShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
+    builder.addUniform("highp float", "uNodeDiameter");
+    let vertexMain = `
+highp uint vertexIndex = uint(gl_InstanceID);
+highp uint pickOffset = vertexIndex * uPickInstanceStride;
+vPickID = uPickID + pickOffset;
+highp vec3 vertexPosition = applyNodePositionOverride(vertexIndex, readAttribute0(vertexIndex));
+`;
+    let fragmentSetup = "";
+    if (this.base.geometryKind === SkeletonGeometryKind.SPATIAL_INDEX_CHUNK) {
+      vertexMain += `vCullPos = vertexPosition;\n`;
+      fragmentSetup = `spatialChunkCull();\n`;
+    }
+    vertexMain += this.readSegmentIdGlsl("vertexIndex");
+    vertexMain += `emitCircle(uProjection * vec4(vertexPosition, 1.0), uNodeDiameter, 0.0);\n`;
+    return { vertexMain, fragmentSetup };
   }
 
   defineAttributeAccess(builder: ShaderBuilder) {
@@ -396,103 +875,25 @@ void emitDefault() {
     return "(1.0)";
   }
 
-  beginLayer(
-    gl: GL,
-    shader: ShaderProgram,
-    renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
-    modelMatrix: mat4,
-  ) {
-    const { viewProjectionMat } = renderContext.projectionParameters;
-    const mat = mat4.multiply(tempMat2, viewProjectionMat, modelMatrix);
-    gl.uniformMatrix4fv(shader.uniform("uProjection"), false, mat);
-    gl.uniform1f(
-      shader.uniform("uAlpha"),
-      this.base.displayState.objectAlpha.value,
-    );
-    this.vertexIdHelper.enable();
-  }
-
-  setPickID(gl: GL, shader: ShaderProgram, pickID: number) {
-    gl.uniform1ui(shader.uniform("uPickID"), pickID);
-  }
-
-  setID(gl: GL, shader: ShaderProgram, id: bigint) {
-    gl.uniform2ui(
-      shader.uniform(`uID`),
-      Number(id & 0xffffffffn),
-      Number(id >> 32n),
-    );
-  }
-
-  drawSkeleton(
-    gl: GL,
-    edgeShader: ShaderProgram,
-    nodeShader: ShaderProgram,
-    skeletonChunk: SkeletonChunk,
-    projectionParameters: { width: number; height: number },
-  ) {
-    const { vertexAttributes } = this;
-    const numAttributes = vertexAttributes.length;
-    const { vertexAttributeTextures } = skeletonChunk;
-    for (let i = 0; i < numAttributes; ++i) {
-      const textureUnit =
-        WebGL2RenderingContext.TEXTURE0 +
-        edgeShader.textureUnit(vertexAttributeSamplerSymbols[i])!;
-      gl.activeTexture(textureUnit);
-      gl.bindTexture(
-        WebGL2RenderingContext.TEXTURE_2D,
-        vertexAttributeTextures[i],
-      );
+  private unbindTextures(edgeShader: ShaderProgram, nodeShader: ShaderProgram) {
+    const { gl, clearedTextureUnits } = this;
+    const numAttributes = this.vertexAttributes.length;
+    clearedTextureUnits.clear();
+    for (const shader of [edgeShader, nodeShader]) {
+      const textureUnits = vertexAttributeSamplerSymbols
+        .slice(0, numAttributes)
+        .map((symbol) => shader.textureUnit(symbol)!);
+      if (shader.textureUnits.has(segmentIdSamplerSymbol)) {
+        textureUnits.push(shader.textureUnit(segmentIdSamplerSymbol)!);
+      }
+      for (const textureUnit of textureUnits) {
+        const glTextureUnit = textureUnit + WebGL2RenderingContext.TEXTURE0;
+        if (clearedTextureUnits.has(glTextureUnit)) continue;
+        clearedTextureUnits.add(glTextureUnit);
+        gl.activeTexture(glTextureUnit);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+      }
     }
-
-    // Draw edges
-    {
-      edgeShader.bind();
-      const aVertexIndex = edgeShader.attribute("aVertexIndex");
-      skeletonChunk.indexBuffer.bindToVertexAttribI(
-        aVertexIndex,
-        2,
-        WebGL2RenderingContext.UNSIGNED_INT,
-      );
-      gl.vertexAttribDivisor(aVertexIndex, 1);
-      initializeLineShader(
-        edgeShader,
-        projectionParameters,
-        this.targetIsSliceView ? 1.0 : 0.0,
-      );
-      drawLines(gl, 1, skeletonChunk.numIndices / 2);
-      gl.vertexAttribDivisor(aVertexIndex, 0);
-      gl.disableVertexAttribArray(aVertexIndex);
-    }
-
-    // Draw nodes - this is performed also in line render mode
-    // so that there are no visible gaps between the edges
-    // as the point size is set to the line width
-    {
-      nodeShader.bind();
-      initializeCircleShader(nodeShader, projectionParameters, {
-        featherWidthInPixels: this.targetIsSliceView ? 1.0 : 0.0,
-      });
-      drawCircles(nodeShader.gl, 1, skeletonChunk.numVertices);
-    }
-  }
-
-  endLayer(
-    gl: GL,
-    shader: ShaderProgram,
-    displayState: SkeletonLayerDisplayState,
-  ) {
-    const { vertexAttributes } = this;
-    const numAttributes = vertexAttributes.length;
-    for (let i = 0; i < numAttributes; ++i) {
-      const curTextureUnit =
-        shader.textureUnit(vertexAttributeSamplerSymbols[i])! +
-        WebGL2RenderingContext.TEXTURE0;
-      gl.activeTexture(curTextureUnit);
-      gl.bindTexture(gl.TEXTURE_2D, null);
-    }
-    this.vertexIdHelper.disable();
-    displayState.segmentationColorUserShader.disable(gl, shader);
   }
 }
 
@@ -500,7 +901,6 @@ export enum SkeletonRenderMode {
   LINES = 0,
   LINES_AND_POINTS = 1,
 }
-
 export class TrackableSkeletonRenderMode extends TrackableEnum<SkeletonRenderMode> {
   constructor(
     value: SkeletonRenderMode,
@@ -514,6 +914,16 @@ export class TrackableSkeletonLineWidth extends TrackableValue<number> {
   constructor(value: number, defaultValue: number = value) {
     super(value, verifyFinitePositiveFloat, defaultValue);
   }
+}
+
+export function getSkeletonNodeDiameter(
+  renderMode: SkeletonRenderMode,
+  lineWidth: number,
+) {
+  if (renderMode === SkeletonRenderMode.LINES_AND_POINTS) {
+    return Math.max(5, lineWidth * 2);
+  }
+  return lineWidth;
 }
 
 export interface ViewSpecificSkeletonRenderingOptions {
@@ -572,14 +982,23 @@ export class SkeletonRenderingOptions implements Trackable {
 }
 
 export interface SkeletonLayerDisplayState extends SegmentationDisplayState3D {
+  hiddenObjectAlpha: TrackableAlphaValue;
   skeletonRenderingOptions: SkeletonRenderingOptions;
 }
 
-export class SkeletonLayer extends RefCounted {
+export class SkeletonLayer
+  extends RefCounted
+  implements SkeletonShaderContext, SkeletonNodeAccess
+{
   layerChunkProgressInfo = new LayerChunkProgressInfo();
   redrawNeeded = new NullarySignal();
   private sharedObject: SegmentationLayerSharedObject;
+  private readonly chunkNodes = new WeakMap<
+    SkeletonChunk,
+    SkeletonChunkNodes
+  >();
   vertexAttributes: VertexAttributeRenderInfo[];
+  readonly geometryKind = SkeletonGeometryKind.SINGLE_SEGMENT;
 
   get visibility() {
     return this.sharedObject.visibility;
@@ -634,6 +1053,35 @@ export class SkeletonLayer extends RefCounted {
     return this.chunkManager.chunkQueueManager.gl;
   }
 
+  readonly hasPickableNodes = false;
+
+  get nodesChanged() {
+    return this.source.chunksChanged;
+  }
+
+  private getSegmentChunkNodes(
+    segmentId: bigint,
+  ): SkeletonChunkNodes | undefined {
+    const chunk = this.source.chunks.get(getObjectKey(segmentId));
+    if (chunk === undefined) return undefined;
+    let chunkNodes = this.chunkNodes.get(chunk);
+    if (chunkNodes === undefined) {
+      chunkNodes = getSkeletonChunkNodes(segmentId, chunk);
+      this.chunkNodes.set(chunk, chunkNodes);
+    }
+    return chunkNodes;
+  }
+
+  getSegmentNodes(segmentId: bigint): readonly SkeletonNode[] | undefined {
+    return this.getSegmentChunkNodes(segmentId)?.nodes;
+  }
+
+  getSegmentLoopEdges(segmentId: bigint): readonly SkeletonEdge[] | undefined {
+    return this.getSegmentChunkNodes(segmentId)?.loopEdges;
+  }
+
+  readonly parentsInferred = true;
+
   draw(
     renderContext: SliceViewPanelRenderContext | PerspectiveViewRenderContext,
     layer: RenderLayer,
@@ -644,8 +1092,7 @@ export class SkeletonLayer extends RefCounted {
       ThreeDimensionalRenderLayerAttachmentState
     >,
   ) {
-    const lineWidth = renderOptions.lineWidth.value;
-    const { gl, source, displayState } = this;
+    const { displayState, source } = this;
     if (displayState.objectAlpha.value <= 0.0) {
       // Skip drawing.
       return;
@@ -656,111 +1103,28 @@ export class SkeletonLayer extends RefCounted {
       attachment,
     );
     if (modelMatrix === undefined) return;
-    let pointDiameter: number;
-    if (renderOptions.mode.value === SkeletonRenderMode.LINES_AND_POINTS) {
-      pointDiameter = Math.max(5, lineWidth * 2);
-    } else {
-      pointDiameter = lineWidth;
-    }
-
-    const edgeShaderResult = renderHelper.edgeShaderGetter(
-      renderContext.emitter,
-    );
-    const nodeShaderResult = renderHelper.nodeShaderGetter(
-      renderContext.emitter,
-    );
-    const { shader: edgeShader, parameters: edgeShaderParameters } =
-      edgeShaderResult;
-    const { shader: nodeShader, parameters: nodeShaderParameters } =
-      nodeShaderResult;
-    if (edgeShader === null || nodeShader === null) {
-      // Shader error, skip drawing.
-      return;
-    }
-
-    const { shaderControlState } = this.displayState.skeletonRenderingOptions;
-
-    edgeShader.bind();
-    renderHelper.beginLayer(gl, edgeShader, renderContext, modelMatrix);
-    shaderControlState.activeControls.trackShader(
-      {
-        ...edgeShaderResult,
-        parameters: edgeShaderParameters.skeletonShaderBuilderState,
-      },
-      attachment,
-    );
-    setControlsInShader(
-      gl,
-      edgeShader,
-      shaderControlState,
-      edgeShaderParameters.skeletonShaderBuilderState.parseResult,
-    );
-    displayState.segmentationColorUserShader.enable(
-      gl,
-      edgeShader,
-      edgeShaderParameters.segmentColorShaderBuilderState,
-      { fallback: edgeShaderResult.fallback, binding: attachment },
-    );
-    gl.uniform1f(edgeShader.uniform("uLineWidth"), lineWidth!);
-
-    nodeShader.bind();
-    renderHelper.beginLayer(gl, nodeShader, renderContext, modelMatrix);
-    gl.uniform1f(nodeShader.uniform("uNodeDiameter"), pointDiameter);
-    shaderControlState.activeControls.trackShader(
-      {
-        ...nodeShaderResult,
-        parameters: nodeShaderParameters.skeletonShaderBuilderState,
-      },
-      attachment,
-    );
-    setControlsInShader(
-      gl,
-      nodeShader,
-      shaderControlState,
-      nodeShaderParameters.skeletonShaderBuilderState.parseResult,
-    );
-    displayState.segmentationColorUserShader.enable(
-      gl,
-      nodeShader,
-      nodeShaderParameters.segmentColorShaderBuilderState,
-      { fallback: nodeShaderResult.fallback, binding: attachment },
-    );
-
     const skeletons = source.chunks;
-
-    forEachVisibleSegmentToDraw(
-      displayState,
-      layer,
-      renderContext.emitPickID ? renderContext.pickIDs : undefined,
-      (objectId, pickIndex, colorObjectId) => {
-        const key = getObjectKey(objectId);
-        const skeleton = skeletons.get(key);
-        if (
-          skeleton === undefined ||
-          skeleton.state !== ChunkState.GPU_MEMORY
-        ) {
-          return;
-        }
-        if (pickIndex !== undefined) {
-          edgeShader.bind();
-          renderHelper.setPickID(gl, edgeShader, pickIndex);
-          nodeShader.bind();
-          renderHelper.setPickID(gl, nodeShader, pickIndex);
-        }
-        edgeShader.bind();
-        renderHelper.setID(gl, edgeShader, colorObjectId);
-        nodeShader.bind();
-        renderHelper.setID(gl, nodeShader, colorObjectId);
-        renderHelper.drawSkeleton(
-          gl,
-          edgeShader,
-          nodeShader,
-          skeleton,
-          renderContext.projectionParameters,
+    renderHelper.draw(
+      renderContext,
+      { modelMatrix, renderOptions, binding: attachment },
+      (drawSkeleton) => {
+        forEachVisibleSegmentToDraw(
+          displayState,
+          layer,
+          renderContext.emitPickID ? renderContext.pickIDs : undefined,
+          (objectId, pickIndex, colorSegmentId) => {
+            const skeleton = skeletons.get(getObjectKey(objectId));
+            if (
+              skeleton === undefined ||
+              skeleton.state !== ChunkState.GPU_MEMORY
+            ) {
+              return;
+            }
+            drawSkeleton(skeleton, { colorSegmentId, pickIds: pickIndex });
+          },
         );
       },
     );
-    renderHelper.endLayer(gl, edgeShader, displayState);
   }
 
   isReady() {
@@ -792,6 +1156,14 @@ export class SkeletonLayer extends RefCounted {
   }
 }
 
+export function skeletonEmitsAlpha(displayState: SkeletonLayerDisplayState) {
+  return (
+    stripComments(displayState.skeletonRenderingOptions.shader.value).includes(
+      "emitRGBA",
+    ) || displayState.segmentationColorUserShader.mayReturnAlpha
+  );
+}
+
 export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   private renderHelper: RenderHelper;
   private renderOptions: ViewSpecificSkeletonRenderingOptions;
@@ -819,11 +1191,7 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   get isTransparent() {
     const { displayState } = this.base;
     return (
-      displayState.objectAlpha.value < 1.0 ||
-      stripComments(
-        displayState.skeletonRenderingOptions.shader.value,
-      ).includes("emitRGBA") ||
-      displayState.segmentationColorUserShader.mayReturnAlpha
+      displayState.objectAlpha.value < 1.0 || skeletonEmitsAlpha(displayState)
     );
   }
 
@@ -907,7 +1275,7 @@ function getWebglDataType(dataType: DataType) {
   }
 }
 
-const vertexPositionAttribute: VertexAttributeRenderInfo = {
+export const vertexPositionAttribute: VertexAttributeRenderInfo = {
   dataType: DataType.FLOAT32,
   numComponents: 3,
   name: "",
@@ -915,17 +1283,67 @@ const vertexPositionAttribute: VertexAttributeRenderInfo = {
   glslDataType: "vec3",
 };
 
-export class SkeletonChunk extends Chunk {
+export interface SkeletonChunkBase extends SkeletonGPUGeometry {
+  vertexAttributes: Uint8Array;
+  vertexAttributeOffsets: Uint32Array;
+  indices: Uint32Array;
+  source: { attributeTextureFormats: TextureFormat[] };
+}
+
+// Used by both SkeletonChunk and SpatiallyIndexedSkeletonChunk.
+export function uploadSkeletonChunkToGPU(gl: GL, chunk: SkeletonChunkBase) {
+  const { attributeTextureFormats } = chunk.source;
+  const { vertexAttributes, vertexAttributeOffsets } = chunk;
+  const vertexAttributeTextures: (WebGLTexture | null)[] =
+    (chunk.vertexAttributeTextures = []);
+  for (
+    let i = 0, numAttributes = vertexAttributeOffsets.length;
+    i < numAttributes;
+    ++i
+  ) {
+    const texture = gl.createTexture();
+    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
+    setOneDimensionalTextureData(
+      gl,
+      attributeTextureFormats[i],
+      vertexAttributes.subarray(
+        vertexAttributeOffsets[i],
+        i + 1 !== numAttributes
+          ? vertexAttributeOffsets[i + 1]
+          : vertexAttributes.length,
+      ),
+    );
+    vertexAttributeTextures[i] = texture;
+  }
+  gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
+  chunk.indexBuffer = GLBuffer.fromData(
+    gl,
+    chunk.indices,
+    WebGL2RenderingContext.ARRAY_BUFFER,
+    WebGL2RenderingContext.STATIC_DRAW,
+  );
+}
+
+export function freeSkeletonChunkGPUMemory(gl: GL, chunk: SkeletonChunkBase) {
+  chunk.indexBuffer.dispose();
+  const { vertexAttributeTextures } = chunk;
+  for (let i = 0, length = vertexAttributeTextures.length; i < length; ++i) {
+    gl.deleteTexture(vertexAttributeTextures[i]);
+  }
+  vertexAttributeTextures.length = 0;
+}
+
+export class SkeletonChunk extends Chunk implements SkeletonChunkBase {
   declare source: SkeletonSource;
   vertexAttributes: Uint8Array;
   indices: Uint32Array;
-  indexBuffer: GLBuffer;
+  indexBuffer!: GLBuffer;
   numIndices: number;
   numVertices: number;
   vertexAttributeOffsets: Uint32Array;
-  vertexAttributeTextures: (WebGLTexture | null)[];
+  vertexAttributeTextures: (WebGLTexture | null)[] = [];
 
-  constructor(source: SkeletonSource, x: any) {
+  constructor(source: SkeletonSource, x: PackedSkeletonGeometry) {
     super(source);
     this.vertexAttributes = x.vertexAttributes;
     const indices = (this.indices = x.indices);
@@ -936,46 +1354,12 @@ export class SkeletonChunk extends Chunk {
 
   copyToGPU(gl: GL) {
     super.copyToGPU(gl);
-    const { attributeTextureFormats } = this.source;
-    const { vertexAttributes, vertexAttributeOffsets } = this;
-    const vertexAttributeTextures: (WebGLTexture | null)[] =
-      (this.vertexAttributeTextures = []);
-    for (
-      let i = 0, numAttributes = vertexAttributeOffsets.length;
-      i < numAttributes;
-      ++i
-    ) {
-      const texture = gl.createTexture();
-      gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
-      setOneDimensionalTextureData(
-        gl,
-        attributeTextureFormats[i],
-        vertexAttributes.subarray(
-          vertexAttributeOffsets[i],
-          i + 1 !== numAttributes
-            ? vertexAttributeOffsets[i + 1]
-            : vertexAttributes.length,
-        ),
-      );
-      vertexAttributeTextures[i] = texture;
-    }
-    gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, null);
-    this.indexBuffer = GLBuffer.fromData(
-      gl,
-      this.indices,
-      WebGL2RenderingContext.ARRAY_BUFFER,
-      WebGL2RenderingContext.STATIC_DRAW,
-    );
+    uploadSkeletonChunkToGPU(gl, this);
   }
 
   freeGPUMemory(gl: GL) {
     super.freeGPUMemory(gl);
-    const { vertexAttributeTextures } = this;
-    for (const texture of vertexAttributeTextures) {
-      gl.deleteTexture(texture);
-    }
-    vertexAttributeTextures.length = 0;
-    this.indexBuffer.dispose();
+    freeSkeletonChunkGPUMemory(gl, this);
   }
 }
 
@@ -999,8 +1383,6 @@ function getAttributeTextureFormats(
   return attributeTextureFormats;
 }
 
-export type SkeletonSourceOptions = object;
-
 export class SkeletonSource extends ChunkSource {
   private attributeTextureFormats_?: TextureFormat[];
 
@@ -1014,8 +1396,20 @@ export class SkeletonSource extends ChunkSource {
   }
 
   declare chunks: Map<string, SkeletonChunk>;
-  getChunk(x: any) {
+  readonly chunksChanged = new NullarySignal();
+
+  getChunk(x: PackedSkeletonGeometry) {
     return new SkeletonChunk(this, x);
+  }
+
+  addChunk(key: string, chunk: SkeletonChunk) {
+    super.addChunk(key, chunk);
+    this.chunksChanged.dispatch();
+  }
+
+  deleteChunk(key: string) {
+    super.deleteChunk(key);
+    this.chunksChanged.dispatch();
   }
 
   get vertexAttributes(): Map<string, VertexAttributeInfo> {

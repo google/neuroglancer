@@ -561,6 +561,35 @@ ${declaration}(vec3 color, bool hasProperties, bool isStated) {
     );
   });
 
+  it("returns the colour of the requested segment while a panel is drawing", () => {
+    const segmentationUserLayer = setupSegmentationLayer();
+    const { displayState } = segmentationUserLayer;
+    displayState.segmentStatedColors.value.set(
+      1n,
+      BigInt(packColor(vec3.fromValues(1.0, 0.0, 0.0))),
+    );
+    displayState.segmentStatedColors.value.set(
+      2n,
+      BigInt(packColor(vec3.fromValues(0.0, 0.0, 1.0))),
+    );
+    const gl = segmentationUserLayer.manager.chunkManager.chunkQueueManager.gl;
+    displayState.getShaderBaseSegmentColor(1n);
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(10, 10, 20, 20);
+    gl.enable(gl.BLEND);
+    try {
+      expectColor(
+        displayState.getShaderBaseSegmentColor(2n)! as vec4,
+        [0.0, 0.0, 1.0, 1.0],
+      );
+      expect(gl.isEnabled(gl.SCISSOR_TEST)).toBe(true);
+      expect(gl.isEnabled(gl.BLEND)).toBe(true);
+    } finally {
+      gl.disable(gl.SCISSOR_TEST);
+      gl.disable(gl.BLEND);
+    }
+  });
+
   it("cleans up WebGL state owned by a framebuffer lookup", () => {
     const segmentationUserLayer = setupSegmentationLayer();
     const { displayState } = segmentationUserLayer;

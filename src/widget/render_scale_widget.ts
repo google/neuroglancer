@@ -83,6 +83,14 @@ export class RenderScaleWidget extends RefCounted {
     debounce(() => this.updateView(), 0),
   );
 
+  protected formatSpatialScale(spatialScale: number) {
+    if (!Number.isFinite(spatialScale)) return "unknown";
+    return formatScaleWithUnitAsString(spatialScale, "m", {
+      precision: 2,
+      elide1: false,
+    });
+  }
+
   adjustViaWheel(event: WheelEvent) {
     const deltaY = this.getWheelMoveValue(event);
     if (deltaY === 0) {
@@ -215,20 +223,19 @@ export class RenderScaleWidget extends RefCounted {
     ctx.clearRect(0, 0, width, height);
 
     const { histogram } = this;
-    // histogram.begin(this.frameNumberCounter.frameNumber);
     const { value: histogramData, spatialScales } = histogram;
-
-    if (!histogram.visibility.visible) {
-      histogramData.fill(0);
-    }
-
-    const sortedSpatialScales = Array.from(spatialScales.keys());
+    // An inactive view has no displayed chunks. Do not clear shared bins while
+    // retaining their indicator count, which would produce a negative total.
+    const histogramVisible = histogram.visibility.visible;
+    const sortedSpatialScales = histogramVisible
+      ? Array.from(spatialScales.keys())
+      : [];
     sortedSpatialScales.sort();
 
     const tempColor = vec3.create();
 
     let maxCount = 1;
-    const numRows = spatialScales.size;
+    const numRows = sortedSpatialScales.length;
     let totalPresent = 0;
     let totalNotPresent = 0;
     for (let bin = 0; bin < numBins; ++bin) {
@@ -243,7 +250,7 @@ export class RenderScaleWidget extends RefCounted {
       }
       maxCount = Math.max(count, maxCount);
     }
-    totalNotPresent -= histogram.fakeChunkCount;
+    if (histogramVisible) totalNotPresent -= histogram.fakeChunkCount;
 
     const maxBarHeight = height;
 
@@ -295,15 +302,8 @@ export class RenderScaleWidget extends RefCounted {
         totalPresent += histogramData[index];
         totalNotPresent += histogramData[index + numBins];
       }
-      if (Number.isFinite(hoverSpatialScale)) {
-        this.legendSpatialScale.textContent = formatScaleWithUnitAsString(
-          hoverSpatialScale,
-          "m",
-          { precision: 2, elide1: false },
-        );
-      } else {
-        this.legendSpatialScale.textContent = "unknown";
-      }
+      this.legendSpatialScale.textContent =
+        this.formatSpatialScale(hoverSpatialScale);
     } else {
       this.legendSpatialScale.textContent = "";
     }
@@ -315,7 +315,7 @@ export class RenderScaleWidget extends RefCounted {
     const spatialScaleColors = sortedSpatialScales.map((spatialScale) => {
       const saturation = spatialScale === hoverSpatialScale ? 0.5 : 1;
       let hue;
-      if (Number.isFinite(spatialScale)) {
+      if (Number.isFinite(spatialScale) && spatialScale > 0) {
         hue = (((Math.log2(spatialScale) * 0.1) % 1) + 1) % 1;
       } else {
         hue = 0;

@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgis/postgis:16-3.5@sha256:94146ac37bc61e2322f88016056c5920729cb8c64c8542ed590af8fc2abdac07
+    platform: linux/amd64
+    environment:
+      POSTGRES_DB: catmaid
+      POSTGRES_USER: catmaid
+      POSTGRES_PASSWORD: disposable-test-password
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U catmaid -d catmaid]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  catmaid:
+    # CATMAID 2026.05.06-12-g24ed227e31; includes the spatial editing API.
+    image: neuroglancer-catmaid-test:2026-05-06-12
+    build: .
+    platform: linux/amd64
+    entrypoint: [/home/env/bin/python, /test-support/start_catmaid.py]
+    volumes:
+      - ./:/test-support:ro
+    ports:
+      - "127.0.0.1::8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          CMD,
+          /home/env/bin/python,
+          -c,
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/version', timeout=5)",
+        ]
+      interval: 3s
+      timeout: 10s
+      retries: 60
+      start_period: 120s

@@ -116,6 +116,28 @@ export default tseslint.config(
     },
   },
   {
+    files: ["src/skeleton/edit_queue/**/*.ts"],
+
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["./", "../"],
+              message: "Relative imports are not allowed.",
+            },
+            {
+              regex: "^(?:#src/|src/)datasource(?:/|$)",
+              message:
+                "Generic optimistic edit modules must not depend on datasource implementations.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["build_tools/**/*.cjs"],
     languageOptions: {
       sourceType: "commonjs",

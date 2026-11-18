@@ -363,41 +363,6 @@ input.neuroglancer-segment-list-entry-id {
   width: 100%;
 }
 
-/* Each option is a "pill" on a dark panel background (like the rest of the UI)
-   so the cyan key and light label read clearly, rather than floating on the
-   mid-gray status bar. Colors follow app conventions: cyan #0ff for the key
-   (as everywhere keys are shown), and the annotation-list "selected" purple
-   (#939) to fill the option currently set on the annotation. */
-.neuroglancer-annotation-entry-tool-chip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  padding: 1px 6px;
-  background-color: #333;
-  border: 1px solid #555;
-  border-radius: 3px;
-  white-space: nowrap;
-}
-
-.neuroglancer-annotation-entry-tool-chip-active {
-  background-color: #939;
-  border-color: #969;
-}
-
-.neuroglancer-annotation-entry-tool-chip-key {
-  color: #0ff;
-  font: 9pt monospace;
-}
-
-.neuroglancer-annotation-entry-tool-chip-label {
-  color: #ccc;
-}
-
-.neuroglancer-annotation-entry-tool-chip-active
-  .neuroglancer-annotation-entry-tool-chip-label {
-  color: #fff;
-}
-
 /* Numeric entry box. Not a real <input> — only number keys are routed to the
    tool's buffer (leaving other keybinds live) and the typed value is shown
    here, styled like a compact dark field (white text on #222). It turns red

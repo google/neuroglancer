@@ -12,6 +12,8 @@ Topics
   to segmentation layers.
 - :doc:`annotation_shaders` — writing custom GLSL shader code to drive
   the visual appearance of annotations from their properties.
+- :doc:`skeleton_editing` — tracing, navigation, visual previews, saving,
+  Undo/Redo, failure recovery, and source setup.
 - :doc:`voxel_annotation` — painting, erasing and flood filling voxels of
   image and segmentation layers.
 - :doc:`segmentation_shaders` — writing custom GLSL shader code to color
@@ -23,5 +25,6 @@ Topics
    navigation
    annotations
    annotation_shaders
+   skeleton_editing
    voxel_annotation
    segmentation_shaders

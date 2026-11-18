@@ -67,6 +67,10 @@ ignore = [
   "E501", # Line length regulated by ruff format
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# These scripts run inside the CATMAID container and import Django after configuring it.
+"tests/skeleton_edit/harness/docker/*.py" = ["E402"]
+
 [tool.mypy]
 show_error_codes = true
 pretty = true
@@ -95,6 +99,11 @@ module = [
   "scipy.*",
   "cloudvolume",
   "trio",
+  "django",
+  "django.*",
+  "rest_framework.*",
+  "guardian.*",
+  "catmaid.*",
 ]
 ignore_missing_imports = true
 
