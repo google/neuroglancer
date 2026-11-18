@@ -1,0 +1,92 @@
+/**
+ * @license
+ * Copyright 2026 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.neuroglancer-accordion-item {
+  border-bottom: 1px solid #ddd;
+}
+
+.neuroglancer-accordion-item[data-expanded="true"]
+  .neuroglancer-accordion-body {
+  display: flex; /* Show when expanded */
+}
+
+.neuroglancer-accordion-item[data-expanded="false"]
+  .neuroglancer-accordion-body {
+  display: none; /* Hide when collapsed */
+}
+
+.neuroglancer-accordion-item[data-hidden="true"] {
+  display: none;
+}
+
+.neuroglancer-accordion-item[data-expanded="true"]
+  .neuroglancer-accordion-header
+  .neuroglancer-accordion-chevron
+  svg {
+  transform: rotate(0deg);
+}
+
+.neuroglancer-accordion-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+}
+
+.neuroglancer-accordion-chevron svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+  transform: rotate(-90deg);
+}
+
+.neuroglancer-accordion-header {
+  box-sizing: border-box;
+  min-height: 24px;
+  padding: 8px 2px;
+  cursor: pointer;
+  gap: 4px;
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 16px;
+  user-select: none;
+}
+
+.neuroglancer-accordion-header:hover {
+  background-color: #222;
+  color: white;
+}
+
+.neuroglancer-accordion-header-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.neuroglancer-accordion-body {
+  padding: 0 4px 2px;
+  overflow-x: visible;
+  overflow-y: visible;
+  flex-direction: column;
+}

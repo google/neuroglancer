@@ -71,3 +71,27 @@ def test_layer_subsources(webdriver):
     assert sorted(state.layers[0].source[0].subsources.keys()) == ["bounds", "meshes"]
     assert state.layers[0].source[0].subsources["bounds"].enabled is False
     assert state.layers[0].source[0].subsources["meshes"].enabled is False
+
+
+def test_layer_accordions_keep_their_expanded_sections(webdriver):
+    with webdriver.viewer.txn() as s:
+        s.dimensions = neuroglancer.CoordinateSpace(
+            names=["x", "y", "z"], units="nm", scales=[1, 1, 1]
+        )
+        s.layers.append(
+            name="a",
+            layer=neuroglancer.ImageLayer(
+                source=neuroglancer.LocalVolume(
+                    data=np.zeros((10, 10, 10), dtype=np.float32),
+                    dimensions=s.dimensions,
+                ),
+            ),
+        )
+        s.layers["a"].accordions.annotations.annotations_expanded = False
+        s.layers["a"].accordions.rendering.slice_expanded = True
+
+    state = webdriver.sync()
+    assert state.layers["a"].accordions.to_json() == {
+        "annotations": {"annotationsExpanded": False},
+        "rendering": {"sliceExpanded": True},
+    }
