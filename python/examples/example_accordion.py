@@ -27,10 +27,10 @@ if __name__ == "__main__":
     viewer = neuroglancer.Viewer()
     with viewer.txn() as s:
         add_example_layers(s)
-        s.layers[0].annotations_accordion.annotations_expanded = False
-        s.layers[0].annotations_accordion.related_segments_expanded = True
-        s.layers[0].rendering_accordion.slice_expanded = True
-        s.layers[0].rendering_accordion.shader_expanded = False
+        s.layers[0].accordions.annotations.annotations_expanded = False
+        s.layers[0].accordions.annotations.related_segments_expanded = True
+        s.layers[0].accordions.rendering.slice_expanded = True
+        s.layers[0].accordions.rendering.shader_expanded = False
         s.selected_layer.layer = "example_layer"
         s.selected_layer.visible = True
 

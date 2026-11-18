@@ -18,6 +18,7 @@ import { describe, expect, it } from "vitest";
 import {
   AccordionState,
   AccordionTab,
+  LayerAccordionStates,
   type AccordionOptions,
 } from "#src/widget/accordion.js";
 import { VirtualList } from "#src/widget/virtual_list.js";
@@ -26,7 +27,6 @@ import "#src/widget/icon.css";
 
 function makeAccordionOptions(): AccordionOptions {
   return {
-    accordionJsonKey: "test",
     sections: [
       {
         jsonKey: "first",
@@ -42,6 +42,43 @@ function makeAccordionOptions(): AccordionOptions {
     ],
   };
 }
+
+describe("layer accordions", () => {
+  it("reopens each tab's sections as they were saved", () => {
+    const saved = new LayerAccordionStates();
+    saved.add("annotations", makeAccordionOptions());
+    const savedRendering = saved.add("rendering", makeAccordionOptions());
+    savedRendering.setSectionExpanded("first", true);
+    savedRendering.setSectionExpanded("second", false);
+
+    const restored = new LayerAccordionStates();
+    const restoredAnnotations = restored.add("annotations", {
+      sections: [
+        { jsonKey: "second", displayName: "Second", defaultExpanded: true },
+      ],
+    });
+    const restoredRendering = restored.add("rendering", makeAccordionOptions());
+    restored.restoreState(JSON.parse(JSON.stringify(saved.toJSON())));
+
+    expect(restoredRendering.getSectionState("first")?.isExpanded.value).toBe(
+      true,
+    );
+    expect(restoredRendering.getSectionState("second")?.isExpanded.value).toBe(
+      false,
+    );
+    expect(
+      restoredAnnotations.getSectionState("second")?.isExpanded.value,
+    ).toBe(true);
+  });
+
+  it("leaves accordions out of the layer state when no section has been toggled", () => {
+    const accordions = new LayerAccordionStates();
+    accordions.add("annotations", makeAccordionOptions());
+    accordions.add("rendering", makeAccordionOptions());
+
+    expect(accordions.toJSON()).toBeUndefined();
+  });
+});
 
 describe("accordion", () => {
   it("restores and serializes state", () => {

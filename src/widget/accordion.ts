@@ -16,8 +16,8 @@
 
 import svg_chevron_down from "ikonate/icons/chevron-down.svg?raw";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
-import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { RefCounted } from "#src/util/disposable.js";
+import { emptyToUndefined } from "#src/util/json.js";
 import { NullarySignal } from "#src/util/signal.js";
 import "#src/widget/accordion.css";
 import { Tab } from "#src/widget/tab_view.js";
@@ -26,7 +26,6 @@ declare let NEUROGLANCER_USE_ACCORDIONS: boolean | undefined;
 declare let NEUROGLANCER_ACCORDION_DEFAULT_EXPANDED: boolean | undefined;
 
 export interface AccordionOptions {
-  accordionJsonKey: string;
   sections: AccordionSectionOptions[];
 }
 
@@ -59,21 +58,16 @@ function getGlobalUseAccordions(): boolean {
 }
 
 export class AccordionSectionState extends RefCounted {
-  isExpanded: WatchableValueInterface<boolean>;
+  isExpanded: TrackableBoolean;
 
   constructor(
     public jsonKey: string,
-    private defaultExpanded: boolean,
+    defaultExpanded: boolean,
     onChangeCallback: () => void,
   ) {
     super();
     this.isExpanded = new TrackableBoolean(defaultExpanded, defaultExpanded);
     this.registerDisposer(this.isExpanded.changed.add(onChangeCallback));
-  }
-
-  toJSON() {
-    if (this.isExpanded.value === this.defaultExpanded) return undefined;
-    return { [this.jsonKey]: this.isExpanded.value };
   }
 }
 
@@ -125,14 +119,44 @@ export class AccordionState extends RefCounted {
     }
   }
 
-  toJSON() {
-    const sectionsData = this.sectionStates
-      .map((section) => section.toJSON())
-      .filter((data) => data !== undefined);
+  toJSON(): Record<string, boolean> | undefined {
+    const json: Record<string, boolean> = {};
+    for (const section of this.sectionStates) {
+      const isExpanded = section.isExpanded.toJSON();
+      if (isExpanded !== undefined) json[section.jsonKey] = isExpanded;
+    }
+    return emptyToUndefined(json);
+  }
+}
 
-    return sectionsData.length === 0
-      ? undefined
-      : Object.assign({}, ...sectionsData);
+export class LayerAccordionStates extends RefCounted {
+  readonly changed = new NullarySignal();
+  private readonly states = new Map<string, AccordionState>();
+
+  add(tabId: string, options: AccordionOptions): AccordionState {
+    if (this.states.has(tabId)) {
+      throw new Error(`Accordion for tab "${tabId}" is already defined.`);
+    }
+    const state = this.registerDisposer(new AccordionState(options));
+    state.specificationChanged.add(this.changed.dispatch);
+    this.states.set(tabId, state);
+    return state;
+  }
+
+  restoreState(json: unknown): void {
+    if (json === null || typeof json !== "object") return;
+    for (const [tabId, sections] of Object.entries(json)) {
+      this.states.get(tabId)?.restoreState(sections);
+    }
+  }
+
+  toJSON(): Record<string, unknown> | undefined {
+    const json: Record<string, unknown> = {};
+    for (const [tabId, state] of this.states) {
+      const sections = state.toJSON();
+      if (sections !== undefined) json[tabId] = sections;
+    }
+    return emptyToUndefined(json);
   }
 }
 

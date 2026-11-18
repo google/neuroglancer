@@ -34,14 +34,7 @@ import {
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { layerDataSourceSpecificationFromJson } from "#src/layer/layer_data_source.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
-import {
-  APPEARANCE_SECTION_JSON_KEY,
-  MESH_SECTION_JSON_KEY,
-  registerLayerControls,
-  SKELETON_SECTION_JSON_KEY,
-  SLICE_SECTION_JSON_KEY,
-  VISIBILITY_SECTION_JSON_KEY,
-} from "#src/layer/segmentation/layer_controls.js";
+import { registerLayerControls } from "#src/layer/segmentation/layer_controls.js";
 import { registerVoxelEditingLayerControls } from "#src/layer/voxel_editing/controls.js";
 import { UserLayerWithVoxelEditingMixin } from "#src/layer/voxel_editing/index.js";
 import {
@@ -151,7 +144,6 @@ import {
   verifyString,
 } from "#src/util/json.js";
 import { Signal } from "#src/util/signal.js";
-import { AccordionState } from "#src/widget/accordion.js";
 import {
   SEGMENTATION_ERASE_SENTINEL,
   EMPTY_VOXEL_VALUE,
@@ -179,8 +171,6 @@ import {
 } from "#src/webgl/shader_ui_controls.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
 import { registerLayerShaderControlsTool } from "#src/widget/shader_controls.js";
-
-export const SEGMENTATION_RENDERING_ACCORDION_JSON_KEY = "renderingAccordion";
 
 const MAX_LAYER_BAR_UI_INDICATOR_COLORS = 6;
 const MAX_LAYER_BAR_SEGMENTS_TO_CHECK = 10_000;
@@ -941,35 +931,32 @@ export class SegmentationUserLayer extends Base {
     x === undefined ? undefined : parseUint64(x),
   );
 
-  renderingAccordionState = this.registerDisposer(
-    new AccordionState({
-      accordionJsonKey: SEGMENTATION_RENDERING_ACCORDION_JSON_KEY,
-      sections: [
-        {
-          jsonKey: VISIBILITY_SECTION_JSON_KEY,
-          displayName: "Visibility",
-        },
-        {
-          jsonKey: APPEARANCE_SECTION_JSON_KEY,
-          displayName: "Appearance",
-          defaultExpanded: true,
-          isDefaultKey: true,
-        },
-        {
-          jsonKey: SLICE_SECTION_JSON_KEY,
-          displayName: "Slice 2D",
-        },
-        {
-          jsonKey: MESH_SECTION_JSON_KEY,
-          displayName: "Mesh 3D",
-        },
-        {
-          jsonKey: SKELETON_SECTION_JSON_KEY,
-          displayName: "Skeletons",
-        },
-      ],
-    }),
-  );
+  renderingAccordionState = this.accordions.add("rendering", {
+    sections: [
+      {
+        jsonKey: json_keys.VISIBILITY_SECTION_JSON_KEY,
+        displayName: "Visibility",
+      },
+      {
+        jsonKey: json_keys.APPEARANCE_SECTION_JSON_KEY,
+        displayName: "Appearance",
+        defaultExpanded: true,
+        isDefaultKey: true,
+      },
+      {
+        jsonKey: json_keys.SLICE_SECTION_JSON_KEY,
+        displayName: "Slice 2D",
+      },
+      {
+        jsonKey: json_keys.MESH_SECTION_JSON_KEY,
+        displayName: "Mesh 3D",
+      },
+      {
+        jsonKey: json_keys.SKELETON_SECTION_JSON_KEY,
+        displayName: "Skeletons",
+      },
+    ],
+  });
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
@@ -1033,9 +1020,6 @@ export class SegmentationUserLayer extends Base {
     );
     this.displayState.linkedSegmentationGroup.changed.add(() =>
       this.updateDataSubsourceActivations(),
-    );
-    this.renderingAccordionState.specificationChanged.add(
-      this.specificationChanged.dispatch,
     );
     this.displayState.fragmentSegmentColor.changed.add(
       this.specificationChanged.dispatch,
@@ -1408,9 +1392,6 @@ export class SegmentationUserLayer extends Base {
     this.displayState.segmentationColorGroupState.value.restoreState(
       specification,
     );
-    this.renderingAccordionState.restoreState(
-      specification[SEGMENTATION_RENDERING_ACCORDION_JSON_KEY],
-    );
     this.displayState.segmentColorShaderControlState.restoreState(
       specification[json_keys.SHADER_CONTROLS_JSON_KEY],
     );
@@ -1467,8 +1448,6 @@ export class SegmentationUserLayer extends Base {
         this.displayState.segmentationColorGroupState.value.toJSON(),
       );
     }
-    x[SEGMENTATION_RENDERING_ACCORDION_JSON_KEY] =
-      this.renderingAccordionState.toJSON();
     x[json_keys.SHADER_CONTROLS_JSON_KEY] =
       this.displayState.segmentColorShaderControlState.toJSON();
     return x;

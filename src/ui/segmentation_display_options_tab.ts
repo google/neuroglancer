@@ -16,13 +16,13 @@
 
 import { buildShaderPropertyList } from "#src/layer/annotation/shader_ui_property_list.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import { SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID } from "#src/layer/segmentation/json_keys.js";
 import {
   APPEARANCE_SECTION_JSON_KEY,
-  LAYER_CONTROLS,
-  VISIBILITY_SECTION_JSON_KEY,
+  SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID,
   SKELETON_SECTION_JSON_KEY,
-} from "#src/layer/segmentation/layer_controls.js";
+  VISIBILITY_SECTION_JSON_KEY,
+} from "#src/layer/segmentation/json_keys.js";
+import { LAYER_CONTROLS } from "#src/layer/segmentation/layer_controls.js";
 import { Overlay } from "#src/overlay.js";
 import { AccordionTab } from "#src/widget/accordion.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";

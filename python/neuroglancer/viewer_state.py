@@ -538,6 +538,29 @@ class SegmentationRenderingAccordion(JsonObjectWrapper):
 
 
 @export
+class LayerAccordions(JsonObjectWrapper):
+    """Keyed by layer tab id."""
+
+    __slots__ = ()
+
+    annotations = wrapped_property("annotations", AnnotationsAccordion)
+
+
+@export
+class ImageLayerAccordions(LayerAccordions):
+    __slots__ = ()
+
+    rendering = wrapped_property("rendering", ImageRenderingAccordion)
+
+
+@export
+class SegmentationLayerAccordions(LayerAccordions):
+    __slots__ = ()
+
+    rendering = wrapped_property("rendering", SegmentationRenderingAccordion)
+
+
+@export
 class Layer(JsonObjectWrapper):
     __slots__ = ()
     type = wrapped_property("type", optional(str))
@@ -558,10 +581,6 @@ class Layer(JsonObjectWrapper):
         "toolBindings", typed_map(key_type=str, value_type=Tool)
     )
     tool = wrapped_property("tool", optional(Tool))
-
-    annotations_accordion = annotationsAccordion = wrapped_property(
-        "annotationsAccordion", AnnotationsAccordion
-    )
 
     @staticmethod
     def interpolate(a, b, t):
@@ -666,6 +685,7 @@ class LayerDataSources(_LayerDataSourcesBase):
 
 class _AnnotationLayerOptions:
     __slots__ = ()
+    accordions = wrapped_property("accordions", LayerAccordions)
     annotation_color = annotationColor = wrapped_property(
         "annotationColor", optional(str)
     )
@@ -779,9 +799,7 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
     cross_section_render_scale = crossSectionRenderScale = wrapped_property(
         "crossSectionRenderScale", optional(float, 1)
     )
-    rendering_accordion = renderingAccordion = wrapped_property(
-        "renderingAccordion", ImageRenderingAccordion
-    )
+    accordions = wrapped_property("accordions", ImageLayerAccordions)
     voxel_editing = voxelEditing = wrapped_property("voxelEditing", VoxelEditingOptions)
 
     @staticmethod
@@ -1121,9 +1139,7 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     skeleton_rendering = skeletonRendering = wrapped_property(
         "skeletonRendering", SkeletonRenderingOptions
     )
-    rendering_accordion = renderingAccordion = wrapped_property(
-        "renderingAccordion", SegmentationRenderingAccordion
-    )
+    accordions = wrapped_property("accordions", SegmentationLayerAccordions)
 
     @property
     def skeleton_shader(self):

@@ -123,7 +123,8 @@ import { numberToStringFixed } from "#src/util/number_to_string.js";
 import { formatScaleWithUnitAsString } from "#src/util/si_units.js";
 import { NullarySignal, Signal } from "#src/util/signal.js";
 import * as vector from "#src/util/vector.js";
-import { AccordionState, AccordionTab } from "#src/widget/accordion.js";
+import type { AccordionState } from "#src/widget/accordion.js";
+import { AccordionTab } from "#src/widget/accordion.js";
 import { makeAddButton } from "#src/widget/add_button.js";
 import { ColorWidget } from "#src/widget/color.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
@@ -1981,7 +1982,6 @@ function makeRelatedSegmentList(
 }
 
 const ANNOTATION_COLOR_JSON_KEY = "annotationColor";
-const ANNOTATION_ACCORDION_JSON_KEY = "annotationsAccordion";
 export const ANNOTATION_SECTION_JSON_KEY = "annotationsExpanded";
 export const RELATED_SEGMENT_SECTION_JSON_KEY = "relatedSegmentsExpanded";
 export const SPACING_SECTION_JSON_KEY = "spacingExpanded";
@@ -1991,8 +1991,7 @@ export function UserLayerWithAnnotationsMixin<
   abstract class C extends Base implements UserLayerWithAnnotations {
     annotationStates = this.registerDisposer(new MergedAnnotationStates());
     annotationDisplayState = new AnnotationDisplayState();
-    annotationAccordionState = new AccordionState({
-      accordionJsonKey: ANNOTATION_ACCORDION_JSON_KEY,
+    annotationAccordionState = this.accordions.add("annotations", {
       sections: [
         {
           jsonKey: SPACING_SECTION_JSON_KEY,
@@ -2026,9 +2025,6 @@ export function UserLayerWithAnnotationsMixin<
         this.specificationChanged.dispatch,
       );
       this.annotationDisplayState.shaderControls.changed.add(
-        this.specificationChanged.dispatch,
-      );
-      this.annotationAccordionState.specificationChanged.add(
         this.specificationChanged.dispatch,
       );
       this.tabs.add("annotations", {
@@ -2144,9 +2140,6 @@ export function UserLayerWithAnnotationsMixin<
       super.restoreState(specification);
       this.annotationDisplayState.color.restoreState(
         specification[ANNOTATION_COLOR_JSON_KEY],
-      );
-      this.annotationAccordionState.restoreState(
-        specification[ANNOTATION_ACCORDION_JSON_KEY],
       );
     }
 
@@ -2838,7 +2831,6 @@ export function UserLayerWithAnnotationsMixin<
     toJSON() {
       const x = super.toJSON();
       x[ANNOTATION_COLOR_JSON_KEY] = this.annotationDisplayState.color.toJSON();
-      x[ANNOTATION_ACCORDION_JSON_KEY] = this.annotationAccordionState.toJSON();
       return x;
     }
   }
