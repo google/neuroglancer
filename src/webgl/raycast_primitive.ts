@@ -36,7 +36,6 @@ import {
   glsl_splitAlongDir,
 } from "#src/webgl/raycast_shader_lib.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
-import { glsl_clipLineToDepthRange } from "#src/webgl/shader_lib.js";
 
 export function projectionMatrixShaderModule(builder: ShaderBuilder) {
   builder.addUniform("highp mat4", "uProjection");
@@ -124,11 +123,11 @@ const highp float RAYCAST_MIN_AXIS_W_MARGIN = 1.25;
 
 // A screen space quad along the projected axis, around the box with radial
 // half-extents radiusVectorA and radiusVectorB.
-// Clipping to the depth range, then trimming by the radial depth, keeps every
-// corner in front of the eye, where the projected corners bound the quad.
+// Clip the axis against depth planes expanded by the box's radial reach. An
+// axis point outside the original planes can still have visible surface.
+// Then trim by the radial w extent to keep every projected corner in front of
+// the eye.
 // The trimmed part surrounds the eye, where no bounded quad could cover it.
-// `clipLineToDepthRange` changes clipA and clipB in place.
-// Its result is tested in positive form, so a non-finite value culls.
 // With equal w at both ends nothing is trimmed, and the corner test rejects a
 // segment that is too near.
 const glsl_raycastAxialObbQuad = `
@@ -143,15 +142,31 @@ void emitRaycastAxialObbQuad(highp vec3 endpointA, highp vec3 endpointB,
   highp vec4 clipVectorB = uProjection * vec4(radiusVectorB, 0.0);
   highp vec2 quadCoefficient = getQuadVertexPosition(vec2(-1.0), vec2(1.0));
 
-  if (raycastOutsideDepthRange(
-          max(raycastDepthPlaneDistances(clipA), raycastDepthPlaneDistances(clipB))
-          + abs(raycastDepthPlaneDistances(clipVectorA))
-          + abs(raycastDepthPlaneDistances(clipVectorB)))) {
+  highp vec2 radialDepth = abs(raycastDepthPlaneDistances(clipVectorA))
+                         + abs(raycastDepthPlaneDistances(clipVectorB));
+  highp vec2 depthA = raycastDepthPlaneDistances(clipA) + radialDepth;
+  highp vec2 depthB = raycastDepthPlaneDistances(clipB) + radialDepth;
+  if (raycastOutsideDepthRange(max(depthA, depthB))) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
 
-  bool clipped = clipLineToDepthRange(clipA, clipB);
+  highp float depthStartT = 0.0;
+  highp float depthEndT = 1.0;
+  for (int plane = 0; plane < 2; ++plane) {
+    highp float planeDistA = depthA[plane];
+    highp float planeDistB = depthB[plane];
+    if (planeDistA < 0.0) {
+      depthStartT = max(depthStartT, planeDistA / (planeDistA - planeDistB));
+    } else if (planeDistB < 0.0) {
+      depthEndT = min(depthEndT, planeDistA / (planeDistA - planeDistB));
+    }
+  }
+  if (depthStartT > 0.0 || depthEndT < 1.0) {
+    highp vec4 originalA = clipA;
+    clipA = mix(originalA, clipB, depthStartT);
+    clipB = mix(originalA, clipB, depthEndT);
+  }
 
   // w runs linearly along the axis, so one crossing bounds the near end.
   highp float radialW = abs(clipVectorA.w) + abs(clipVectorB.w);
@@ -168,7 +183,7 @@ void emitRaycastAxialObbQuad(highp vec3 endpointA, highp vec3 endpointB,
   highp vec4 axisA = mix(clipA, clipB, startT);
   highp vec4 axisB = mix(clipA, clipB, endT);
 
-  if (!(clipped && startT < endT && min(axisA.w, axisB.w) >= radialW)) {
+  if (!(depthStartT <= depthEndT && startT < endT && min(axisA.w, axisB.w) >= radialW)) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
@@ -255,7 +270,6 @@ export function raycastPrimitiveCoreModule(builder: ShaderBuilder) {
 
 export function defineRaycastAxialObbQuad(builder: ShaderBuilder) {
   builder.require(raycastPrimitiveCoreModule);
-  builder.addVertexCode(glsl_clipLineToDepthRange);
   builder.addVertexCode(glsl_raycastAxialObbQuad);
 }
 

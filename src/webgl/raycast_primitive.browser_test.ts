@@ -219,6 +219,41 @@ function axialFractionByRow(pixels: Uint8Array): number[] {
 }
 
 describe("raycast cone", () => {
+  it.each([
+    [-1.95, -2.05],
+    [-2.01, -2.05],
+    [-1.95, -2.35],
+  ])(
+    "keeps visible surface when the cone axis at z=%s to %s extends past the far plane",
+    (zA, zB) => {
+      webglTest((gl) => {
+        const spec: ConeSpec = {
+          endpointA: [-0.5, 0, zA],
+          endpointB: [0.5, 0, zB],
+          radiusA: 0.2,
+          radiusB: 0.2,
+        };
+        const camera: Camera = {
+          viewportPixels: 64,
+          projection: mat4.ortho(mat4.create(), -1, 1, -1, 1, 0.1, 2),
+        };
+        const reference = drawCone(gl, camera, spec, SHADE_SURFACE, {
+          coverWholeViewport: true,
+        });
+        expect(coveredFraction(reference)).toBeGreaterThan(0);
+        expect(drawCone(gl, camera, spec, SHADE_SURFACE)).toEqual(reference);
+        expect(
+          drawCone(
+            gl,
+            camera,
+            { ...spec, endpointA: spec.endpointB, endpointB: spec.endpointA },
+            SHADE_SURFACE,
+          ),
+        ).toEqual(reference);
+      });
+    },
+  );
+
   it("lets a function outside main read its depth, lighting and axial fraction", () => {
     webglTest((gl) => {
       expect(() =>
