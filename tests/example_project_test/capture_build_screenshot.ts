@@ -14,24 +14,28 @@
  * limitations under the License.
  */
 
-import path from "node:path";
+import { once } from "node:events";
+import type { AddressInfo } from "node:net";
+import express from "express";
 import { captureNeuroglancerScreenshot } from "#tests/example_project_test/capture_screenshot.js";
 import { test } from "#tests/example_project_test/client_test_options.js";
-
-test.use({ baseURL: "http://localhost:1/" });
 
 test("capture screenshot from built client", async ({
   page,
   clientDir,
 }, testInfo) => {
-  await page.route("/**", (route, request) => {
-    let { pathname } = new URL(request.url());
-    if (pathname === "/") {
-      pathname = "/index.html";
-    }
-    return route.fulfill({
-      path: path.join(clientDir, pathname),
-    });
-  });
-  await captureNeuroglancerScreenshot(page, "/", testInfo);
+  const app = express();
+  app.use(express.static(clientDir));
+  const server = app.listen(0, "localhost");
+  try {
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    await captureNeuroglancerScreenshot(
+      page,
+      `http://localhost:${port}/`,
+      testInfo,
+    );
+  } finally {
+    await server[Symbol.asyncDispose]();
+  }
 });

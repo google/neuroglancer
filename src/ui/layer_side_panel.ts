@@ -43,6 +43,7 @@ import { LAYER_SIDE_PANEL_DEFAULT_LOCATION } from "#src/ui/layer_side_panel_stat
 import type { DragSource, SidePanelManager } from "#src/ui/side_panel.js";
 import { DRAG_OVER_CLASSNAME, SidePanel } from "#src/ui/side_panel.js";
 import { RefCounted } from "#src/util/disposable.js";
+import { declareAllowedDropEffects } from "#src/util/drag_and_drop.js";
 import {
   KeyboardEventBinder,
   registerActionListener,
@@ -250,6 +251,7 @@ class LayerSidePanel extends SidePanel {
         handleTabElement: (id: string, element: HTMLElement) => {
           element.draggable = true;
           element.addEventListener("dragstart", (event: DragEvent) => {
+            declareAllowedDropEffects(event, "move");
             let message =
               "Drag tab to dock as new panel to the left/right/top/bottom of another panel";
             const hasOtherPanel = panelState.panels.panels.find(

@@ -83,6 +83,34 @@ describe("http:// path-style URL", () => {
   testKvStore(constantFixture(`https://s3.amazonaws.com/${BUCKET}/`));
 });
 
+describe("dot segment key components", () => {
+  test.for(["..", "../b", "a/../b", "a/./b"])(
+    "read rejects %s",
+    async (key) => {
+      const context = await sharedKvStoreContext();
+      await expect(
+        context.kvStoreContext.read(`s3://${BUCKET}/${key}`, {
+          throwIfMissing: true,
+        }),
+      ).rejects.toThrow(/path components are not supported/);
+    },
+  );
+  test("write rejects a/../b", async () => {
+    const context = await sharedKvStoreContext();
+    const { store } = context.kvStoreContext.getKvStore(`s3://${BUCKET}/`);
+    await expect(store.write!("a/../b", new ArrayBuffer(0))).rejects.toThrow(
+      /path components are not supported/,
+    );
+  });
+  test("delete rejects a/../b", async () => {
+    const context = await sharedKvStoreContext();
+    const { store } = context.kvStoreContext.getKvStore(`s3://${BUCKET}/`);
+    await expect(store.delete!("a/../b")).rejects.toThrow(
+      /path components are not supported/,
+    );
+  });
+});
+
 describe("special characters", () => {
   test.for(SPECIAL_CHAR_CODES)("charCode=%s", async (charCode) => {
     const context = await sharedKvStoreContext();

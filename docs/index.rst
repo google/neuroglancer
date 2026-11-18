@@ -6,12 +6,13 @@ Neuroglancer
    :hidden:
    :caption: User Guide
 
-   user-guide/navigation
+   user-guide/index
 
 .. toctree::
    :hidden:
    :caption: Concepts
 
+   concepts/commands
    concepts/coordinate_spaces
    concepts/data_views
    concepts/layers
@@ -32,6 +33,12 @@ Neuroglancer
    :caption: Python API
 
    python/api/index
+
+.. toctree::
+   :hidden:
+   :caption: Gallery
+
+   gallery/index
 
 .. toctree::
    :hidden:

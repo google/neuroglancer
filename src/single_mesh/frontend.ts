@@ -78,7 +78,7 @@ import type {
   ShaderProgram,
   ShaderSamplerType,
 } from "#src/webgl/shader.js";
-import { getShaderType } from "#src/webgl/shader_lib.js";
+import { getShaderType, glsl_string } from "#src/webgl/shader_lib.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
 import {
   addControlsToBuilder,
@@ -312,7 +312,7 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
     const bindTexture = (texture: WebGLTexture | null) => {
       const textureUnit =
         WebGL2RenderingContext.TEXTURE0 +
-        shader.textureUnit(vertexAttributeSamplerSymbols[index]);
+        shader.textureUnit(vertexAttributeSamplerSymbols[index])!;
       gl.activeTexture(textureUnit);
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
       ++index;
@@ -338,7 +338,7 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
     }
     for (let i = 0; i < numTextures; ++i) {
       const curTextureUnit =
-        shader.textureUnit(vertexAttributeSamplerSymbols[i]) +
+        shader.textureUnit(vertexAttributeSamplerSymbols[i])! +
         WebGL2RenderingContext.TEXTURE0;
       gl.activeTexture(curTextureUnit);
       gl.bindTexture(gl.TEXTURE_2D, null);
@@ -504,6 +504,7 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensional
           }
           addControlsToBuilder(shaderBuilderState, builder);
           this.shaderManager.defineShader(builder);
+          builder.addFragmentCode(glsl_string);
           builder.setFragmentMainFunction(
             shaderCodeWithLineDirective(shaderBuilderState.parseResult.code),
           );
@@ -600,11 +601,15 @@ export class SingleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensional
     const shaderManager = this.shaderManager!;
     shader.bind();
     shaderManager.beginLayer(gl, shader, renderContext);
+    this.displayState.shaderControlState.activeControls.trackShader(
+      shaderResult,
+      attachment,
+    );
     setControlsInShader(
       gl,
       shader,
       this.displayState.shaderControlState,
-      parameters.parseResult.controls,
+      parameters.parseResult,
     );
 
     const { pickIDs } = renderContext;

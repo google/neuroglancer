@@ -12,28 +12,15 @@ Refer to the documentation website at https://neuroglancer-docs.web.app for more
 
 This is not an official Google product.
 
-# Examples
+# Getting started
 
 A live demo is hosted at <https://neuroglancer-demo.appspot.com>. (The prior link opens the viewer without any preloaded dataset.) Use the viewer links below to open the viewer preloaded with an example dataset.
 
 The four-pane view consists of 3 orthogonal cross-sectional views as well as a 3-D view (with independent orientation) that displays 3-D models (if available) for the selected objects. All four views maintain the same center position. The orientation of the 3 cross-sectional views can also be adjusted, although they maintain a fixed orientation relative to each other. (Try holding the shift key and either dragging with the left mouse button or pressing an arrow key.)
 
-- [FlyEM Hemibrain](https://www.janelia.org/project-team/flyem/hemibrain) (8x8x8 cubic nanometer resolution). <a href="https://hemibrain-dot-neuroglancer-demo.appspot.com/#!gs://neuroglancer-janelia-flyem-hemibrain/v1.0/neuroglancer_demo_states/base.json" target="_blank">Open viewer</a>
+# Examples
 
-- [FAFB-FFN1 Full Adult Fly Brain Automated Segmentation](https://fafb-ffn1.storage.googleapis.com/landing.html) (4x4x40 cubic nanometer resolution). <a href="https://neuroglancer-demo.appspot.com/fafb.html#!gs://fafb-ffn1/main_ng.json" target="_blank">Open viewer</a>
-
-- Kasthuri et al., 2014. Mouse somatosensory cortex (6x6x30 cubic nanometer resolution). <a href="https://neuroglancer-demo.appspot.com/#!{'layers':{'original-image':{'type':'image'_'source':'precomputed://gs://neuroglancer-public-data/kasthuri2011/image'_'visible':false}_'corrected-image':{'type':'image'_'source':'precomputed://gs://neuroglancer-public-data/kasthuri2011/image_color_corrected'}_'ground_truth':{'type':'segmentation'_'source':'precomputed://gs://neuroglancer-public-data/kasthuri2011/ground_truth'_'selectedAlpha':0.63_'notSelectedAlpha':0.14_'segments':['3208'_'4901'_'13'_'4965'_'4651'_'2282'_'3189'_'3758'_'15'_'4027'_'3228'_'444'_'3207'_'3224'_'3710']}}_'navigation':{'pose':{'position':{'voxelSize':[6_6_30]_'voxelCoordinates':[5523.99072265625_8538.9384765625_1198.0423583984375]}}_'zoomFactor':22.573112129999547}_'perspectiveOrientation':[-0.004047565162181854_-0.9566211104393005_-0.2268827110528946_-0.1827099621295929]_'perspectiveZoom':340.35867907175077}" target="_blank">Open viewer.</a>
-
-  This dataset was copied from <https://neurodata.io/data/kasthuri15/> and is made available under the [Open Data Common Attribution License](http://opendatacommons.org/licenses/by/1.0/). Paper: <a href="http://dx.doi.org/10.1016/j.cell.2015.06.054" target="_blank">Kasthuri, Narayanan, et al. "Saturated reconstruction of a volume of neocortex." Cell 162.3 (2015): 648-661.</a>
-
-- Janelia FlyEM FIB-25. 7-column Drosophila medulla (8x8x8 cubic nanometer resolution). <a href="https://neuroglancer-demo.appspot.com/#!{'layers':{'image':{'type':'image'_'source':'precomputed://gs://neuroglancer-public-data/flyem_fib-25/image'}_'ground-truth':{'type':'segmentation'_'source':'precomputed://gs://neuroglancer-public-data/flyem_fib-25/ground_truth'_'segments':['21894'_'22060'_'158571'_'24436'_'2515']}}_'navigation':{'pose':{'position':{'voxelSize':[8_8_8]_'voxelCoordinates':[2914.500732421875_3088.243408203125_4045]}}_'zoomFactor':30.09748283999932}_'perspectiveOrientation':[0.3143535554409027_0.8142156600952148_0.4843369424343109_-0.06040262430906296]_'perspectiveZoom':443.63404517712684_'showSlices':false}" target="_blank">Open viewer.</a>
-
-  This dataset was copied from <https://www.janelia.org/project-team/flyem/data-and-software-release>, and is made available under the [Open Data Common Attribution License](http://opendatacommons.org/licenses/by/1.0/). Paper: <a href="http://dx.doi.org/10.1073/pnas.1509820112" target="_blank">Takemura, Shin-ya et al. "Synaptic Circuits and Their Variations within Different Columns in the Visual System of Drosophila." Proceedings of the National Academy of Sciences of the United States of America 112.44 (2015): 13711-13716.</a>
-
-- Example of viewing 2D microscopy (coronal section of rat brain at 325 nanometer resolution). <a href="https://neuroglancer-demo.appspot.com/#!%7B%22dimensions%22:%7B%22x%22:%5B1e-9%2C%22m%22%5D%2C%22y%22:%5B1e-9%2C%22m%22%5D%7D%2C%22position%22:%5B10387071%2C5347131%5D%2C%22crossSectionScale%22:263.74955563693914%2C%22projectionScale%22:65536%2C%22layers%22:%5B%7B%22type%22:%22image%22%2C%22source%22:%7B%22url%22:%22deepzoom://https://data-proxy.ebrains.eu/api/v1/buckets/localizoom/14122_mPPC_BDA_s186.tif/14122_mPPC_BDA_s186.dzi%22%2C%22transform%22:%7B%22outputDimensions%22:%7B%22x%22:%5B1e-9%2C%22m%22%5D%2C%22y%22:%5B1e-9%2C%22m%22%5D%2C%22c%5E%22:%5B1%2C%22%22%5D%7D%2C%22inputDimensions%22:%7B%22x%22:%5B3.25e-7%2C%22m%22%5D%2C%22y%22:%5B3.25e-7%2C%22m%22%5D%2C%22c%5E%22:%5B1%2C%22%22%5D%7D%7D%7D%2C%22tab%22:%22rendering%22%2C%22shader%22:%22void%20main%28%29%7BemitRGB%28vec3%28toNormalized%28getDataValue%280%29%29%2CtoNormalized%28getDataValue%281%29%29%2CtoNormalized%28getDataValue%282%29%29%29%29%3B%7D%22%2C%22channelDimensions%22:%7B%22c%5E%22:%5B1%2C%22%22%5D%7D%2C%22name%22:%2214122_mPPC_BDA_s186.dzi%22%7D%5D%2C%22selectedLayer%22:%7B%22layer%22:%2214122_mPPC_BDA_s186.dzi%22%7D%2C%22layout%22:%22xy%22%7D"
-  target="_blank">Open viewer.</a> (Use <kbd>Ctrl</kbd>+<kbd>MouseWheel</kbd> to zoom out)
-
-  This image is part of: Olsen et al., 2020. Anterogradely labeled axonal projections from the posterior parietal cortex in rat [Data set]. EBRAINS. <https://doi.org/10.25493/FKM4-ZCC>
+See the [Neuroglancer Gallery](https://neuroglancer-docs.web.app/gallery/index.html) for example data visualized in Neuroglancer.
 
 # Supported data sources
 
@@ -157,7 +144,7 @@ There is a Google Group/mailing list for discussion related to Neuroglancer:
 
 # Related Projects
 
-- [Panel-Neuroglancer](https://github.com/panel-extensions/panel-neuroglancer) - Integrate Neuroglancer into Jupyter notebook workflows and Python web apps with this HoloViz Panel extension.
+- [Panel-Neuroglancer](https://github.com/panel-extensions/panel-neuroglancer) - Integrate Neuroglancer into Jupyter notebook workflows and Python web apps with this HoloViz Panel extension. For an example, see the [Volumetric Imaging notebook](https://examples.holoviz.org/gallery/volumetric_imaging/volumetric_imaging.html).
 - [TensorStore](https://github.com/google/tensorstore) - C++ and Python library for efficiently
   reading and writing multi-dimensional arrays in formats supported by Neuroglancer.
 - [4Quant/neuroglancer-docker](https://github.com/4Quant/neuroglancer-docker) - Example setup for

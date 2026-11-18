@@ -212,9 +212,9 @@ function setupLayerPostCreation(
   const shaderControlValue = shaderControlState.value;
 
   const determineColor = (): Float32Array | undefined => {
-    if (totalLocalChannels === 1) return new Float32Array([1, 1, 1]);
     if (channel?.color !== undefined && !ignoreInputMetadata)
       return channel.color;
+    if (totalLocalChannels === 1) return new Float32Array([1, 1, 1]);
     return DEFAULT_ARRAY_COLORS.get(channelIndex % DEFAULT_ARRAY_COLORS.size);
   };
 

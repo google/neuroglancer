@@ -94,6 +94,7 @@ export function createBoundedNumberInputElement(
   input.value = numberToStringFixed(inputValue, config.numDecimals || 4);
   input.autocomplete = "off";
   input.spellcheck = false;
+  input.addEventListener("focus", () => input.select());
   if (config.className) input.classList.add(config.className);
   return input;
 }

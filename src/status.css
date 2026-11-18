@@ -27,6 +27,12 @@
 
 #neuroglancer-status-container li {
   width: 100vw;
+  /* Keep content clear of the window's rounded bottom-left corner (e.g. the
+     Chrome/macOS window frame), which would otherwise clip the first status /
+     tool message. */
+  box-sizing: border-box;
+  padding-left: 10px;
+  padding-bottom: 5px;
   max-height: 25vh;
   overflow-y: auto;
 }

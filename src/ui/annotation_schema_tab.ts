@@ -39,10 +39,16 @@ import {
   annotationPropertySpecsToJson,
   canConvertTypes,
   compareAnnotationSpecProperties,
+  isAnnotationNumericPropertySpec,
   isAnnotationTypeNumeric,
   parseAnnotationPropertySpecs,
   propertyTypeDataType,
 } from "#src/annotation/index.js";
+import {
+  annotateEnumPropertyToolJson,
+  annotateNumberPropertyToolJson,
+  toggleBoolPropertyToolJson,
+} from "#src/layer/annotation/tool_state.js";
 import { FramedDialog } from "#src/overlay.js";
 import { StatusMessage } from "#src/status.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
@@ -63,6 +69,7 @@ import {
 import type { UserLayerWithAnnotations } from "#src/ui/annotations.js";
 import type { NumberDisplayConfig } from "#src/ui/bounded_number_input.js";
 import { createBoundedNumberInputElement } from "#src/ui/bounded_number_input.js";
+import { makeToolButton } from "#src/ui/tool.js";
 import { arraysEqual } from "#src/util/array.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import {
@@ -84,6 +91,19 @@ import { makeAddButton } from "#src/widget/add_button.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { Tab } from "#src/widget/tab_view.js";
+
+function getPropertyToolJson(
+  property: AnnotationPropertySpec,
+  identifier = property.identifier,
+) {
+  if (property.type === "bool") {
+    return toggleBoolPropertyToolJson(identifier);
+  }
+  if (!isAnnotationNumericPropertySpec(property)) return undefined;
+  return property.enumValues !== undefined
+    ? annotateEnumPropertyToolJson(identifier)
+    : annotateNumberPropertyToolJson(identifier);
+}
 
 interface InputConfig extends NumberDisplayConfig {
   type: "number" | "text" | "checkbox";
@@ -139,7 +159,6 @@ class AnnotationUIProperty extends RefCounted {
     private parentView: AnnotationSchemaView,
   ) {
     super();
-    this.spec = spec;
     this.element.classList.add("neuroglancer-annotation-schema-row");
     this.makeUI();
   }
@@ -163,7 +182,25 @@ class AnnotationUIProperty extends RefCounted {
       console.warn(`Property with name ${oldIdentifier} not found.`);
       return;
     }
+    const oldToolJson = getPropertyToolJson(oldProperty);
+    const boundKey =
+      oldToolJson === undefined
+        ? undefined
+        : this.parentView.layer.toolBinder.jsonToKey.get(
+            JSON.stringify(oldToolJson),
+          );
+    const { globalBinder } = this.parentView.layer.toolBinder;
+    const wasToolActive =
+      boundKey !== undefined &&
+      globalBinder.isActive(this.parentView.layer.toolBinder.get(boundKey));
     this.updateProperty(oldProperty, { identifier: newIdentifier });
+    if (boundKey !== undefined) {
+      const newToolJson = getPropertyToolJson(oldProperty, newIdentifier);
+      if (newToolJson !== undefined) {
+        this.parentView.layer.toolBinder.setJson(boundKey, newToolJson);
+        if (wasToolActive) globalBinder.activate(boundKey);
+      }
+    }
   }
 
   private getPropertyByIdentifier(
@@ -220,14 +257,6 @@ class AnnotationUIProperty extends RefCounted {
       }
     }
     this.spec.default = defaultValue;
-  }
-  public updateEnumValues(enumValues: number[]) {
-    const inputs = this.defaultValueElements;
-    for (let i = 0; i < enumValues.length; i++) {
-      // Always comes in pairs: [name, value], so 2*i + 1 is always the value input
-      const input = inputs[2 * i + 1];
-      input.value = numberToStringFixed(enumValues[i], 4);
-    }
   }
   public updateEnumLabels(
     enumProperty: AnnotationNumericPropertySpec,
@@ -332,7 +361,7 @@ class AnnotationUIProperty extends RefCounted {
       const rawValue = (event.target as HTMLInputElement).value;
       // Replace dash and spaces with underscores
       let sanitizedValue = rawValue.replace(/-/g, "_");
-      sanitizedValue = rawValue.replace(/\s+/g, "_");
+      sanitizedValue = sanitizedValue.replace(/\s+/g, "_");
       sanitizedValue = sanitizedValue.toLowerCase();
       // Remove any non-alphanumeric characters except underscores
       sanitizedValue = sanitizedValue.replace(/[^a-z0-9_]/g, "");
@@ -546,6 +575,16 @@ class AnnotationUIProperty extends RefCounted {
     container.appendChild(checkbox);
     if (!this.readonly) {
       this.registerEventListener(checkbox, "change", changeFunction);
+      const toolButton = makeToolButton(
+        this,
+        this.parentView.layer.toolBinder,
+        {
+          toolJson: toggleBoolPropertyToolJson(oldProperty.identifier),
+          title: `Bind a key to toggle the selected annotation's ${oldProperty.identifier}`,
+        },
+      );
+      toolButton.classList.add("neuroglancer-annotation-schema-keybind");
+      container.appendChild(toolButton);
     }
 
     return [checkbox];
@@ -629,6 +668,16 @@ class AnnotationUIProperty extends RefCounted {
 
     selectorContainer.appendChild(select);
 
+    // Keybind affordance for the whole enum: bind a key to enter "classify"
+    // mode, where the number keys set the selected annotation's value to each
+    // option. One button per property (not per value).
+    const toolButton = makeToolButton(this, this.parentView.layer.toolBinder, {
+      toolJson: annotateEnumPropertyToolJson(enumProperty.identifier),
+      title: `Bind a key to classify the selected annotation's ${enumProperty.identifier} using the number keys`,
+    });
+    toolButton.classList.add("neuroglancer-annotation-schema-enum-keybind");
+    selectorContainer.appendChild(toolButton);
+
     return {
       container: selectorContainer,
       select: select,
@@ -660,6 +709,19 @@ class AnnotationUIProperty extends RefCounted {
     container.appendChild(numberInput);
     if (!this.readonly) {
       this.registerEventListener(numberInput, "change", changeFunction);
+      // Keybind affordance: bind a key to enter a mode where the selected
+      // annotation's value for this property is typed with the number keys and
+      // committed with Enter.
+      const toolButton = makeToolButton(
+        this,
+        this.parentView.layer.toolBinder,
+        {
+          toolJson: annotateNumberPropertyToolJson(oldProperty.identifier),
+          title: `Bind a key to type values for the selected annotation's ${oldProperty.identifier}`,
+        },
+      );
+      toolButton.classList.add("neuroglancer-annotation-schema-keybind");
+      container.appendChild(toolButton);
     }
 
     return [numberInput as HTMLInputElement];
@@ -916,9 +978,11 @@ class AnnotationUIProperty extends RefCounted {
       input = this.createNumberInput(inputValue as number, config, readonly);
     } else if (config.type === "text") {
       input = createTextAreaElement(inputValue as string, readonly);
+      input.addEventListener("focus", () => input!.select());
     } else {
       input = document.createElement("input");
       input.type = config.type;
+      input.addEventListener("focus", () => input!.select());
     }
 
     this.setCommonInputAttributes(inputValue, input!, config, readonly);
@@ -1344,15 +1408,17 @@ export class AnnotationSchemaView extends Tab {
           if (checkKeysTrue(sameValues, ["default"])) {
             // The properties are all the same except for the default value
             annotationUIProperty.updateDefaultValue(propertySchema.default);
-          } else if (checkKeysTrue(sameValues, ["enumValues"], ["default"])) {
-            annotationUIProperty.updateEnumValues(
-              (propertySchema as AnnotationNumericPropertySpec).enumValues!,
-            );
           } else if (checkKeysTrue(sameValues, ["enumLabels"], ["default"])) {
             annotationUIProperty.updateEnumLabels(
               propertySchema as AnnotationNumericPropertySpec,
             );
           } else {
+            // Any other change requires rebuilding the row. In particular, the
+            // enum value is embedded in each keybind tool's id, so when a value
+            // changes the row must be recreated to rebuild its keybind buttons
+            // with the currently-registered tool ids; updating the value input
+            // in place would leave the button pointing at a stale, unregistered
+            // tool that can no longer be bound.
             this.annotationUIProperties.set(
               propertySchema.identifier,
               new AnnotationUIProperty(propertySchema, this),
@@ -1613,7 +1679,7 @@ export class AnnotationSchemaView extends Tab {
 
   private defaultValuePerType(uiType: AnnotationPropertyType): number {
     if (uiType === "bool") {
-      return 1;
+      return 0;
     }
     if (uiType === "rgb") {
       return packColor(vec3.fromValues(1, 1, 1));

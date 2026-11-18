@@ -1042,6 +1042,7 @@ export class MultiscaleAnnotationSource
   childUpdated: Signal<(annotation: Annotation) => void>;
   childCommitted: Signal<(annotationId: string) => void>;
   childDeleted: Signal<(annotationId: string) => void>;
+  childrenReordered = new NullarySignal();
 }
 
 registerRPC(ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, function (x) {

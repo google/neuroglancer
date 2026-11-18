@@ -16,6 +16,11 @@
 
 import type { DataType } from "#src/util/data_type.js";
 
+export interface Codec {
+  name: string;
+  kind: CodecKind;
+}
+
 export enum CodecKind {
   arrayToArray = 0,
   arrayToBytes = 1,
@@ -42,6 +47,19 @@ export interface ShardingInfo {
   subChunkShape: number[];
   subChunkGridShape: number[];
   subChunkCodecs: CodecChainSpec;
+}
+
+// bytes -> bytes codecs with an encoder registered in codec/*/encode.ts.
+const WRITABLE_BYTES_TO_BYTES_CODECS = new Set(["blosc", "gzip", "zlib"]);
+
+export function codecChainSupportsWriting(codecs: CodecChainSpec): boolean {
+  return (
+    codecs.shardingInfo === undefined &&
+    codecs[CodecKind.arrayToArray].length === 0 &&
+    codecs[CodecKind.bytesToBytes].every((codec) =>
+      WRITABLE_BYTES_TO_BYTES_CODECS.has(codec.name),
+    )
+  );
 }
 
 export interface CodecArrayInfo {
