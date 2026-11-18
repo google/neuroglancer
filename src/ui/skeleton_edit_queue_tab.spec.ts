@@ -422,6 +422,29 @@ describe("skeleton edit Queue tab", () => {
     tab.dispose();
   });
 
+  it("a failed edit that was alone in the queue does not say that later edits were canceled", () => {
+    const { layer } = makeQueueTabLayer(
+      () => [],
+      () => [
+        {
+          kind: "splitSkeleton",
+          status: "not-saved",
+          commandLabel: "Split skeleton",
+          reason: "The selected node is no longer part of this skeleton.",
+          canceledLaterIntentCount: 0,
+        },
+      ],
+    );
+
+    const tab = new SpatialSkeletonEditQueueTab(layer);
+
+    expect(tab.element.textContent).toContain(
+      "The selected node is no longer part of this skeleton.",
+    );
+    expect(tab.element.textContent).not.toContain("canceled");
+    tab.dispose();
+  });
+
   it("an Undo row reads 'Undo <edit>' with its status", () => {
     const entries: readonly SpatialSkeletonEditQueueEntry[] = [
       {

@@ -61,6 +61,11 @@ function getAuthorityFailureCause(
     : reason;
 }
 
+function describeCanceledLaterIntents(count: number | undefined) {
+  if (count === undefined || count === 0) return undefined;
+  return `${count} later queued ${count === 1 ? "edit was" : "edits were"} also canceled.`;
+}
+
 function getAuthorityFailureMessage(entry: SpatialSkeletonEditQueueEntry) {
   const presentation = entry.authorityLabels;
   const { authorityReason } = entry.lifecycle;
@@ -75,10 +80,8 @@ function getAuthorityFailureMessage(entry: SpatialSkeletonEditQueueEntry) {
     authorityReason === "not-started"
       ? `Unable to submit ${presentation.operationNoun}; no ${presentation.authorityLabel} edit request was started. The invalid preview was removed. ${cause}`
       : `${presentation.authorityLabel} rejected ${presentation.operationNoun}. The optimistic preview was removed. ${cause}`;
-  const canceled = entry.canceledLaterIntentCount ?? 0;
-  return canceled === 0
-    ? failure
-    : `${failure} ${canceled} later queued ${canceled === 1 ? "edit was" : "edits were"} also canceled.`;
+  const canceled = describeCanceledLaterIntents(entry.canceledLaterIntentCount);
+  return canceled === undefined ? failure : `${failure} ${canceled}`;
 }
 
 /**
@@ -454,9 +457,7 @@ export class SpatialSkeletonEditQueueTab extends Tab {
     actionContainer.appendChild(action);
     const details = [
       entry.reason,
-      entry.canceledLaterIntentCount === undefined
-        ? undefined
-        : `${entry.canceledLaterIntentCount} later queued ${entry.canceledLaterIntentCount === 1 ? "edit was" : "edits were"} also canceled.`,
+      describeCanceledLaterIntents(entry.canceledLaterIntentCount),
     ].filter((value): value is string => value !== undefined && value !== "");
     if (details.length !== 0) {
       const reason = document.createElement("div");
