@@ -18,12 +18,14 @@ import { buildShaderPropertyList } from "#src/layer/annotation/shader_ui_propert
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import {
   APPEARANCE_SECTION_JSON_KEY,
+  MESH_SECTION_JSON_KEY,
   SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID,
   SKELETON_SECTION_JSON_KEY,
   VISIBILITY_SECTION_JSON_KEY,
 } from "#src/layer/segmentation/json_keys.js";
 import { LAYER_CONTROLS } from "#src/layer/segmentation/layer_controls.js";
 import { Overlay } from "#src/overlay.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { AccordionTab } from "#src/widget/accordion.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { addLayerControlToOptionsTab } from "#src/widget/layer_control.js";
@@ -168,23 +170,18 @@ export class DisplayOptionsTab extends AccordionTab {
         this.visibility,
       ),
     );
-    this.appendChild(
-      skeletonControls.element,
-      SKELETON_SECTION_JSON_KEY,
-      !this.layer.hasSkeletonsLayer.value,
-    );
-    this.setSectionHidden(
-      SKELETON_SECTION_JSON_KEY,
-      !this.layer.hasSkeletonsLayer.value,
-    );
-    this.registerDisposer(
-      this.layer.hasSkeletonsLayer.changed.add(() => {
-        this.setSectionHidden(
-          SKELETON_SECTION_JSON_KEY,
-          !this.layer.hasSkeletonsLayer.value,
-        );
-      }),
-    );
+    this.appendChild(skeletonControls.element, SKELETON_SECTION_JSON_KEY);
+    this.hideSectionUnless(SKELETON_SECTION_JSON_KEY, layer.hasSkeletonsLayer);
+    this.hideSectionUnless(MESH_SECTION_JSON_KEY, layer.hasMeshLayer);
+  }
+
+  private hideSectionUnless(
+    jsonKey: string,
+    hasContent: WatchableValueInterface<boolean>,
+  ) {
+    const update = () => this.setSectionHidden(jsonKey, !hasContent.value);
+    update();
+    this.registerDisposer(hasContent.changed.add(update));
   }
 }
 

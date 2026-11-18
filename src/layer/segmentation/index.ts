@@ -1077,6 +1077,16 @@ export class SegmentationUserLayer extends Base {
     ),
   );
 
+  readonly hasMeshLayer = this.registerDisposer(
+    makeCachedLazyDerivedWatchableValue(
+      (layers) =>
+        layers.some(
+          (x) => x instanceof MeshLayer || x instanceof MultiscaleMeshLayer,
+        ),
+      { changed: this.layersChanged, value: this.renderLayers },
+    ),
+  );
+
   readonly hasSkeletonsLayer = this.registerDisposer(
     makeCachedLazyDerivedWatchableValue(
       (layers) => layers.some((x) => x instanceof PerspectiveViewSkeletonLayer),

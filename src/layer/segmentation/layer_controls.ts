@@ -35,6 +35,16 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     ...rangeLayerControl((layer) => ({ value: layer.displayState.saturation })),
   },
   {
+    label: "Opacity (3d)",
+    toolJson: json_keys.OBJECT_ALPHA_JSON_KEY,
+    isValid: (layer) => layer.has3dLayer,
+    title: "Opacity of meshes and skeletons",
+    sectionKey: json_keys.APPEARANCE_SECTION_JSON_KEY,
+    ...rangeLayerControl((layer) => ({
+      value: layer.displayState.objectAlpha,
+    })),
+  },
+  {
     label: "Opacity (on)",
     toolJson: json_keys.SELECTED_ALPHA_JSON_KEY,
     isValid: (layer) => layer.has2dLayer,
@@ -72,16 +82,6 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     ...renderScaleLayerControl((layer) => ({
       histogram: layer.displayState.renderScaleHistogram,
       target: layer.displayState.renderScaleTarget,
-    })),
-  },
-  {
-    label: "Opacity (3d)",
-    toolJson: json_keys.OBJECT_ALPHA_JSON_KEY,
-    isValid: (layer) => layer.has3dLayer,
-    title: "Opacity of meshes and skeletons",
-    sectionKey: json_keys.MESH_SECTION_JSON_KEY,
-    ...rangeLayerControl((layer) => ({
-      value: layer.displayState.objectAlpha,
     })),
   },
   {
