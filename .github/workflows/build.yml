@@ -181,10 +181,10 @@ jobs:
           - os: "windows-2025-vs2026"
             cibw_build: "*"
             wheel_identifier: "windows"
-          - os: "macos-14"
+          - os: "macos-15"
             cibw_build: "*_x86_64"
             wheel_identifier: "macos_x86_64"
-          - os: "macos-14"
+          - os: "macos-15"
             cibw_build: "*_arm64"
             wheel_identifier: "macos_arm64"
     runs-on: ${{ matrix.os }}

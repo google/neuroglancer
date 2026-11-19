@@ -73,3 +73,22 @@ export function setupDefaultViewer(options?: Partial<MinimalViewerOptions>) {
 
   return viewer;
 }
+
+/**
+ * Sets up a neuroglancer viewer with no chrome, for a host that supplies its
+ * own UI.
+ *
+ * The viewer keeps the bindings, the commands and the dialogs of
+ * `setupDefaultViewer`. The layout fills the viewer element. The layer bar,
+ * the panel controls and the add-layer dialog are off unless the options turn
+ * them on.
+ */
+export function setupEngine(options?: Partial<MinimalViewerOptions>) {
+  return setupDefaultViewer({
+    showLayerDialog: false,
+    showLayerPanel: false,
+    showPanelControls: false,
+    ...options,
+    chrome: false,
+  });
+}

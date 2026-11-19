@@ -25,3 +25,7 @@
 .neuroglancer-shader-code-widget {
   border: 1px solid transparent;
 }
+
+.neuroglancer-shader-code-widget.cm-s-material-darker .cm-comment {
+  color: #d9a066;
+}
