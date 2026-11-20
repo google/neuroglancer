@@ -566,8 +566,8 @@ export class AnnotationLayerView extends AccordionTab {
       }),
     );
     toolbox.appendChild(navRow);
-    this.element.appendChild(toolbox);
 
+    this.appendChild(toolbox);
     this.appendChild(this.headerRow);
     const { virtualList } = this;
     virtualList.element.classList.add("neuroglancer-annotation-list");
