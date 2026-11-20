@@ -17,6 +17,7 @@
 import "#src/datasource/zarr/codec/blosc/decode.js";
 import "#src/datasource/zarr/codec/zstd/decode.js";
 import "#src/datasource/zarr/codec/bytes/decode.js";
+import "#src/datasource/zarr/codec/cast_value/decode.js";
 import "#src/datasource/zarr/codec/crc32c/decode.js";
 
 import "#src/datasource/zarr/codec/bytes/encode.js";
@@ -30,6 +31,9 @@ import {
   decodeArray,
 } from "#src/datasource/zarr/codec/decode.js";
 import "#src/datasource/zarr/codec/gzip/decode.js";
+import "#src/datasource/zarr/codec/jpeg/decode.js";
+import "#src/datasource/zarr/codec/reshape/decode.js";
+import "#src/datasource/zarr/codec/scale_offset/decode.js";
 import "#src/datasource/zarr/codec/sharding_indexed/decode.js";
 import "#src/datasource/zarr/codec/transpose/decode.js";
 import { encodeArray } from "#src/datasource/zarr/codec/encode.js";
