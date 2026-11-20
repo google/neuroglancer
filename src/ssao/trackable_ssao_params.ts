@@ -19,10 +19,14 @@ import { TrackableValue } from "#src/trackable_value.js";
 import { verifyFiniteFloat } from "#src/util/json.js";
 import { CompoundTrackable } from "#src/util/trackable.js";
 
-// Slider / clamp range for the SSAO sampling radius.
+// Slider / clamp range for the SSAO sampling radius. max should not exceed
+// MAX_KERNEL_FRACTION in shaders.ts.
 export const SSAO_RADIUS_RANGE = { min: 0.01, max: 0.6, step: 0.01 };
 // Slider / clamp range for the AO power exponent at composite time.
 export const SSAO_INTENSITY_RANGE = { min: 0.5, max: 5.0, step: 0.1 };
+// Blend between ground-truth GTAO (0) and concavity-driven horizon AO (1),
+// which is a stronger depth cue. See glsl_gtao's uDepthCue.
+export const SSAO_DEPTH_CUE_RANGE = { min: 0.0, max: 1.0, step: 0.01 };
 
 // Clamps the parsed value to the given range; out-of-range URL state lands
 // in-range rather than falling back to the default.
@@ -43,12 +47,18 @@ export class TrackableSSAO extends CompoundTrackable {
     clampToRange(SSAO_RADIUS_RANGE),
     0.2,
   );
+  depthCue = new TrackableValue<number>(
+    0.0,
+    clampToRange(SSAO_DEPTH_CUE_RANGE),
+    0.0,
+  );
 
   constructor() {
     super();
     this.add("enabled", this.enabled);
     this.add("intensity", this.intensity);
     this.add("radius", this.radius);
+    this.add("depthCue", this.depthCue);
   }
 
   toJSON(): any {

@@ -26,6 +26,8 @@ const glsl_gtao = `
 #define HALF_PI 1.57079633
 // Cap the per-pixel kernel at this fraction of viewport height; avoids
 // runaway sampling at extreme zoom-in. Sized for scenes of thin arbors.
+// Should be >= SSAO_RADIUS_RANGE.max (trackable_ssao_params.ts), or the slider's
+// top range widens falloff without widening the kernel.
 #define MAX_KERNEL_FRACTION 0.6
 // Squared length below which a packed normal is treated as the no-AO
 // sentinel (zero-RGB plus rounding tolerance). Real packed unit normals
@@ -89,6 +91,9 @@ vec4 gtao() {
 
   float totalVisibility = 0.0;
   float totalUnoccludedVisibility = 0.0;
+  // HBAO occlusion from the same samples, for the uDepthCue blend.
+  float occlusionHBAO = 0.0;
+  // uProjection[2][3] is -1 for perspective, 0 for orthographic.
   vec3 viewDirection = abs(uProjection[2][3]) > 0.5
     ? normalize(-P)
     : vec3(0.0, 0.0, 1.0);
@@ -126,6 +131,9 @@ vec4 gtao() {
     totalUnoccludedVisibility += projectedNormalLength * 0.25 *
       (integrateArc(horizonPosLimit, normalAngle) +
        integrateArc(-horizonNegLimit, -normalAngle));
+    // HBAO: max horizon sine relative to N on each side.
+    float maxSinHPos = 0.0;
+    float maxSinHNeg = 0.0;
 
     for (int s = 1; s <= NUM_STEPS; s++) {
       float t = float(s) + stepNoise * 0.5;
@@ -141,6 +149,7 @@ vec4 gtao() {
             float falloff = clamp(1.0 - dist * dist / (falloffRadius * falloffRadius), 0.0, 1.0);
             float sampleAngle = acos(clamp(dot(delta / dist, viewDirection), -1.0, 1.0));
             horizonPos = min(horizonPos, mix(horizonPosLimit, sampleAngle, falloff));
+            maxSinHPos = max(maxSinHPos, dot(delta / dist, N) * falloff);
           }
         }
       }
@@ -156,6 +165,7 @@ vec4 gtao() {
             float falloff = clamp(1.0 - dist * dist / (falloffRadius * falloffRadius), 0.0, 1.0);
             float sampleAngle = -acos(clamp(dot(delta / dist, viewDirection), -1.0, 1.0));
             horizonNeg = max(horizonNeg, mix(horizonNegLimit, sampleAngle, falloff));
+            maxSinHNeg = max(maxSinHNeg, dot(delta / dist, N) * falloff);
           }
         }
       }
@@ -166,13 +176,18 @@ vec4 gtao() {
     totalVisibility += projectedNormalLength * 0.25 *
       (integrateArc(horizonPos, normalAngle) +
        integrateArc(-horizonNeg, -normalAngle));
+    occlusionHBAO += (maxSinHPos + maxSinHNeg) * 0.5;
   }
 
   // Normalize by the same finite set of slices with unobstructed horizons.
   // Without this, sparse angular quadrature darkens unoccluded off-axis
   // surfaces because its projected-normal weights do not sum to exactly one.
-  float ao = totalVisibility / max(totalUnoccludedVisibility, 0.0001);
-  ao = clamp(ao, 0.0, 1.0);
+  float aoGTAO = clamp(
+    totalVisibility / max(totalUnoccludedVisibility, 0.0001), 0.0, 1.0);
+  // Concavity-driven; a stronger depth cue.
+  float aoHBAO = clamp(1.0 - occlusionHBAO / float(NUM_DIRECTIONS), 0.0, 1.0);
+  // 0 = GTAO, 1 = HBAO.
+  float ao = mix(aoGTAO, aoHBAO, uDepthCue);
   return vec4(vec3(ao), 1.0);
 }
 `;
@@ -182,6 +197,7 @@ export function defineGTAOShader(builder: ShaderBuilder) {
   builder.addUniform("highp mat4", "uInvProjection");
   builder.addUniform("highp float", "uRadius");
   builder.addUniform("highp vec2", "uResolution");
+  builder.addUniform("highp float", "uDepthCue");
   builder.addOutputBuffer("vec4", "v4f_fragColor", null);
   builder.addFragmentCode(glsl_gtao);
   builder.setFragmentMain(`v4f_fragColor = gtao();`);

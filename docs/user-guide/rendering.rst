@@ -26,14 +26,17 @@ you perceive shapes, and makes the display more appealing.
    :alt: The same mesh rendered with SSAO, showing shading in crevices.
    :width: 45%
 
-Use the :kbd:`q` key to toggle SSAO on and off. The settings panel has three
+Use the :kbd:`q` key to toggle SSAO on and off. The settings panel has four
 controls for SSAO:
 
 - **Enable SSAO (shadows)**: the :kbd:`q` toggle.
 - **SSAO intensity**: a slider; higher values give darker shadow effects.
 - **SSAO radius**: a slider; higher values give broader, softer shadows.
+- **SSAO depth cue**: a slider; ``0`` gives the standard ambient-occlusion
+  result, while higher values darken concavities more strongly to give a clearer
+  sense of depth.
 
 SSAO applies only to mesh surfaces (segmentation layers with object surface
-meshes). It does not apply to other opaque geometry like skeletons and
+meshes, and single-mesh layers). It does not apply to other opaque geometry like skeletons and
 annotations. SSAO is disabled in any perspective view that contains a
 volume-rendering layer.

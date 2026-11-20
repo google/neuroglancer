@@ -17,6 +17,7 @@
 import "#src/ui/viewer_settings.css";
 
 import {
+  SSAO_DEPTH_CUE_RANGE,
   SSAO_INTENSITY_RANGE,
   SSAO_RADIUS_RANGE,
 } from "#src/ssao/trackable_ssao_params.js";
@@ -181,6 +182,13 @@ export class ViewerSettingsPanel extends SidePanel {
       viewer.ssao.radius,
       SSAO_RADIUS_RANGE,
       "Higher values give broader, softer shadows.",
+    );
+    addRange(
+      "SSAO depth cue",
+      viewer.ssao.depthCue,
+      SSAO_DEPTH_CUE_RANGE,
+      "0 = standard (ground-truth) ambient occlusion; higher values darken " +
+        "concavities more strongly for a clearer depth cue.",
     );
   }
 }

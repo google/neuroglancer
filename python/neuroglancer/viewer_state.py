@@ -1886,7 +1886,8 @@ class Ssao(JsonObjectWrapper):
 
     enabled = wrapped_property("enabled", optional(bool, False))
     intensity = wrapped_property("intensity", optional(float, 1.8))
-    radius = wrapped_property("radius", optional(float, 0.05))
+    radius = wrapped_property("radius", optional(float, 0.2))
+    depth_cue = depthCue = wrapped_property("depthCue", optional(float, 0.0))
 
 
 @export

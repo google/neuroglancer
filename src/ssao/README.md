@@ -1,6 +1,6 @@
 # Screen-Space Ambient Occlusion (SSAO)
 
-SSAO simulates shadows on 3D mesh surfaces by darkening crevices and concavities
+SSAO approximates shadows on 3D mesh surfaces by darkening crevices and concavities
 where ambient light would be occluded. It adds depth cues that help us perceive
 shapes, and it makes the display more appealing. SSAO is an efficient
 post-processing effect applied to the perspective view after opaque geometry is
@@ -8,7 +8,7 @@ drawn.
 
 ## Overview
 
-This implementation uses the Ground Truth Ambient Occlusion (GTAO) algorithm
+This implementation uses the ground truth ambient occlusion (GTAO) algorithm
 presented by Jimenez et al. at SIGGRAPH 2016
 (https://www.activision.com/cdn/research/PracticalRealtimeStrategiesTRfinal.pdf).
 
@@ -19,11 +19,20 @@ The algorithm does the following for each pixel:
 3. March in 4 view-space slices (`NUM_DIRECTIONS`) × 8 steps (`NUM_STEPS`) on
    both sides of the pixel to find the positive and negative horizon angles.
 4. Project the surface normal into each slice and analytically integrate the
-   visible arc between its horizons.
+   visible arc between its horizons. If the number of slices and steps were increased
+   then the integral would converge on the ground truth value.
 
 Then the raw ambient occlusion is bilaterally blurred (view-space-depth-aware,
 5-tap kernel, two passes) and composited with the color buffer using
 `color.rgb * pow(ao, intensity)`.
+
+The GTAO pass also accumulates, from the same samples, a simpler concavity-driven
+occlusion term, as in the horizon-based ambient occlusion (HBAO) algorithm. (The cost is a
+modest `dot` and `max` per sample and no additional texture fetches.) The horizon-based
+term darkens pits by proximity of occluders rather than by camera-relative orientation,
+and can give a stronger depth cue for surface morphology. A `uDepthCue` parameter (`0`–`1`)
+blends the two: `0` is the ground-truth GTAO result, and higher values shift toward the HBAO
+result.
 
 ## Scope
 
@@ -46,7 +55,7 @@ fully overwrite the underlying mesh normal with the sentinel. The sentinel
 lands at every annotation pixel (including explicitly translucent pixels and
 anti-aliased edges). A consequence is that translucent annotations also do not
 receive darkening at the covered pixels, since the sentinel takes precedence
-of the underlying mesh's normal. In practice, pixels affected this way should
+over the underlying mesh's normal. In practice, pixels affected this way should
 be limited. A fix could be to apply AO to the COLOR buffer before annotations
 render.
 
@@ -60,12 +69,15 @@ volume rendering and SSAO has not been validated.
 - **`perspective_view/panel.ts`**: Selects the `perspectivePanelEmitWithNormals`
   emitter when SSAO is enabled, inserts the SSAO passes between opaque geometry
   and OIT/transparency, modifies the final composite.
-- **`mesh/frontend.ts`**: `MeshShaderManager` adds `uViewNormalMatrix` uniform
-  and `vViewNormal` varying, calls `emit(color, pickId, viewNormal)`.
+- **`mesh/frontend.ts`** and **`single_mesh/frontend.ts`**: `MeshShaderManager`
+  and `SingleMeshShaderManager` add the `uViewNormalMatrix` uniform and
+  `vViewNormal` varying, and call `emit(color, pickId, viewNormal)`. The normal
+  is negated for back faces (`gl_FrontFacing`), so interiors seen through cut
+  surfaces shade correctly.
 - **`perspective_view/panel.ts` (`OffscreenTextures`)**: NORMAL = 3 added as
   4th color attachment (RGBA8).
-- **Settings panel**: SSAO checkbox and intensity/radius sliders appear in the
-  global Settings side panel via `ViewerSettingsPanel` in
+- **Settings panel**: SSAO checkbox and intensity/radius/depth-cue sliders appear
+  in the global Settings side panel via `ViewerSettingsPanel` in
   `ui/viewer_settings.ts`, backed by trackable properties on `Viewer`.
 
 ## Emitter variations
@@ -76,7 +88,7 @@ overloads via the `renderContext` emitter:
 - `emit(color, pickId, viewNormal)` — opaque surfaces that should _receive_ AO.
   `viewNormal` is in view space (right-handed, camera looking down -Z), need not
   be unit length. Caller is responsible for the world→view normal transform.
-- `emit(color, pickId)` — opaque skeletons, single-meshes, annotations, axis
+- `emit(color, pickId)` — opaque skeletons, annotations, axis
   lines, etc. Internally writes the zero-RGB sentinel `(0, 0, 0)` to NORMAL
   with alpha = 1. The composite shader skips the AO multiply for those pixels.
 

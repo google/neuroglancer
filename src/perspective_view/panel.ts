@@ -50,6 +50,7 @@ import { SliceViewRenderHelper } from "#src/sliceview/frontend.js";
 import { SSAOManager } from "#src/ssao/ssao_manager.js";
 import type { TrackableSSAO } from "#src/ssao/trackable_ssao_params.js";
 import {
+  SSAO_DEPTH_CUE_RANGE,
   SSAO_INTENSITY_RANGE,
   SSAO_RADIUS_RANGE,
 } from "#src/ssao/trackable_ssao_params.js";
@@ -1208,6 +1209,11 @@ export class PerspectivePanel extends RenderedDataPanel {
         Math.max(SSAO_RADIUS_RANGE.min, this.viewer.ssao.radius.value),
       );
 
+      const depthCue = Math.min(
+        SSAO_DEPTH_CUE_RANGE.max,
+        Math.max(SSAO_DEPTH_CUE_RANGE.min, this.viewer.ssao.depthCue.value),
+      );
+
       this.ssaoManager.render(
         width,
         height,
@@ -1215,6 +1221,7 @@ export class PerspectivePanel extends RenderedDataPanel {
         normalTexture,
         projectionParameters.projectionMat,
         radius,
+        depthCue,
       );
 
       bindFramebuffer();

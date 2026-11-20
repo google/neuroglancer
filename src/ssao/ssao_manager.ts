@@ -85,6 +85,7 @@ export class SSAOManager extends RefCounted {
     normalTexture: WebGLTexture | null,
     projectionMat: mat4,
     radius: number,
+    depthCue: number,
   ) {
     this.ensureResources();
     const { gl, invProjectionMat } = this;
@@ -108,10 +109,10 @@ export class SSAOManager extends RefCounted {
     );
     gl.uniform1f(gtaoShader.uniform("uRadius"), radius);
     gl.uniform2f(gtaoShader.uniform("uResolution"), width, height);
+    gl.uniform1f(gtaoShader.uniform("uDepthCue"), depthCue);
     this.gtaoCopyHelper!.draw(depthTexture, normalTexture);
 
-    // Blur horizontal
-    this.ssaoFboB!.bind(width, height);
+    // Uniforms shared by both blur passes.
     const blurShader = this.blurCopyHelper!.shader;
     blurShader.bind();
     gl.uniformMatrix4fv(
@@ -125,6 +126,9 @@ export class SSAOManager extends RefCounted {
       invProjectionMat,
     );
     gl.uniform1f(blurShader.uniform("uRadius"), radius);
+
+    // Blur horizontal
+    this.ssaoFboB!.bind(width, height);
     gl.uniform2f(blurShader.uniform("uDirection"), 1.0, 0.0);
     this.blurCopyHelper!.draw(
       this.ssaoFboA!.colorBuffers[0].texture,
@@ -133,7 +137,6 @@ export class SSAOManager extends RefCounted {
 
     // Blur vertical
     this.ssaoFboA!.bind(width, height);
-    blurShader.bind();
     gl.uniform2f(blurShader.uniform("uDirection"), 0.0, 1.0);
     this.blurCopyHelper!.draw(
       this.ssaoFboB!.colorBuffers[0].texture,

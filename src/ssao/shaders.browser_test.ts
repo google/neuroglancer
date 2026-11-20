@@ -95,6 +95,7 @@ function runGTAOAndReadCenter(
     normal?: [number, number, number];
     projection?: mat4;
     radius?: number;
+    depthCue?: number;
   } = {},
 ): Uint8Array {
   const helper = OffscreenCopyHelper.get(gl, defineGTAOShader, 2);
@@ -154,6 +155,7 @@ function runGTAOAndReadCenter(
     // kernel reaches ~3 pixels from center.
     gl.uniform1f(helper.shader.uniform("uRadius"), options.radius ?? 0.4);
     gl.uniform2f(helper.shader.uniform("uResolution"), w, h);
+    gl.uniform1f(helper.shader.uniform("uDepthCue"), options.depthCue ?? 0);
     helper.draw(depthTex, normalTex);
     const px = new Uint8Array(4);
     gl.readPixels(
@@ -373,6 +375,33 @@ describe("SSAO shaders", () => {
       // expected variation in noise, falloff curve, or sample count.
       expect(px[0]).toBeGreaterThan(64);
       expect(px[0]).toBeLessThan(192);
+    });
+  });
+
+  it("SSAO depth-cue blends GTAO (0) and HBAO (1)", () => {
+    webglTest((gl) => {
+      const w = 8;
+      const h = 8;
+      const cx = 4;
+      const cy = 4;
+      const depths = new Float32Array(w * h).fill(0.7);
+      depths[cy * w + cx] = 0.4; // occluded center, as above.
+      // Oblique normal, so the two measures disagree.
+      const normal: [number, number, number] = [0.6, 0, 0.8];
+      const run = (depthCue?: number) =>
+        runGTAOAndReadCenter(gl, w, h, cx, cy, depths, { normal, depthCue })[0];
+
+      const baseline = run();
+      const gtao = run(0);
+      const hbao = run(1);
+      const mid = run(0.5);
+
+      // Default is pure GTAO.
+      expect(gtao).toBe(baseline);
+      // Endpoints differ, so uDepthCue has an effect (measured: 93 vs. 133).
+      expect(Math.abs(hbao - gtao)).toBeGreaterThanOrEqual(20);
+      // Linear blend, ± rounding.
+      expect(Math.abs(mid - (gtao + hbao) / 2)).toBeLessThanOrEqual(2);
     });
   });
 
