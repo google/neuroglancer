@@ -13,54 +13,110 @@
 # limitations under the License.
 
 
+from copy import deepcopy
+
 import numpy as np
 import pytest
 from neuroglancer import viewer_state
+from neuroglancer.coordinate_space import CoordinateSpace
+from neuroglancer.json_wrappers import JsonObjectWrapper, wrapped_property
 
 
 def test_coordinate_space_from_json():
-    x = viewer_state.CoordinateSpace(
-        {
-            "x": [4e-9, "m"],
-            "y": [5e-9, "m"],
-            "z": [6e-9, "m"],
-            "t": [2, "s"],
-        }
-    )
-    assert x.names == ("x", "y", "z", "t")
-    np.testing.assert_array_equal(x.scales, [4e-9, 5e-9, 6e-9, 2])
-    assert x.units == ("m", "m", "m", "s")
-    assert x.rank == 4
-    assert x[0] == viewer_state.DimensionScale(4e-9, "m")
-    assert x[0:2] == [
-        viewer_state.DimensionScale(4e-9, "m"),
-        viewer_state.DimensionScale(5e-9, "m"),
-    ]
-    assert x["x"] == viewer_state.DimensionScale(4e-9, "m")
-    assert x[1] == viewer_state.DimensionScale(5e-9, "m")
-    assert x["y"] == viewer_state.DimensionScale(5e-9, "m")
-    assert x[2] == viewer_state.DimensionScale(6e-9, "m")
-    assert x["z"] == viewer_state.DimensionScale(6e-9, "m")
-    assert x[3] == viewer_state.DimensionScale(2, "s")
-    assert x["t"] == viewer_state.DimensionScale(2, "s")
-    assert x.to_json() == {
+    """Test that CoordinateSpace can be initialized from both object and array representations and that properties are consistent."""
+    object_representation = {
         "x": [4e-9, "m"],
         "y": [5e-9, "m"],
         "z": [6e-9, "m"],
         "t": [2, "s"],
     }
+    object_representation_copy = deepcopy(object_representation)
+    array_representation = [
+        {"name": "x", "scale": [4e-9, "m"]},
+        {"name": "y", "scale": [5e-9, "m"]},
+        {"name": "z", "scale": [6e-9, "m"]},
+        {"name": "t", "scale": [2, "s"]},
+    ]
+    array_representation_copy = deepcopy(array_representation)
+    coord_spaces = [
+        viewer_state.CoordinateSpace(object_representation),
+        viewer_state.CoordinateSpace(array_representation),
+    ]
+    for x in coord_spaces:
+        assert x.names == ("x", "y", "z", "t")
+        np.testing.assert_array_equal(x.scales, [4e-9, 5e-9, 6e-9, 2])
+        assert x.units == ("m", "m", "m", "s")
+        assert x.rank == 4
+        assert x[0] == viewer_state.DimensionScale(4e-9, "m")
+        assert x[0:2] == [
+            viewer_state.DimensionScale(4e-9, "m"),
+            viewer_state.DimensionScale(5e-9, "m"),
+        ]
+        assert x["x"] == viewer_state.DimensionScale(4e-9, "m")
+        assert x[1] == viewer_state.DimensionScale(5e-9, "m")
+        assert x["y"] == viewer_state.DimensionScale(5e-9, "m")
+        assert x[2] == viewer_state.DimensionScale(6e-9, "m")
+        assert x["z"] == viewer_state.DimensionScale(6e-9, "m")
+        assert x[3] == viewer_state.DimensionScale(2, "s")
+        assert x["t"] == viewer_state.DimensionScale(2, "s")
+        assert x.to_json() == array_representation
+    # Test that the input json was not mutated by to_json
+    assert object_representation == object_representation_copy
+    assert array_representation == array_representation_copy
 
 
 def test_coordinate_space_from_split():
+    """Test that CoordinateSpace can be initialized from split lists of names, scales, and units and that to_json produces the correct array representation."""
     x = viewer_state.CoordinateSpace(
         names=["x", "y", "z", "t"], scales=[4, 5, 6, 2], units=["nm", "nm", "nm", "s"]
     )
-    assert x.to_json() == {
+    assert x.to_json() == [
+        {"name": "x", "scale": [4e-9, "m"]},
+        {"name": "y", "scale": [5e-9, "m"]},
+        {"name": "z", "scale": [6e-9, "m"]},
+        {"name": "t", "scale": [2, "s"]},
+    ]
+
+
+def test_coordinate_space_supports_validation():
+    """Test that CoordinateSpace.supports_validation enables dict/list conversion in wrapped_property setters."""
+
+    class WrappedCoordinateSpace(JsonObjectWrapper):
+        coordspace = wrapped_property("coordspace", CoordinateSpace)
+
+    state = WrappedCoordinateSpace()
+
+    # Test 1: Setting coordspace with dict format
+    # without the proper validator, this would raise TypeError
+    dict_format = {
         "x": [4e-9, "m"],
         "y": [5e-9, "m"],
         "z": [6e-9, "m"],
-        "t": [2, "s"],
     }
+    state.coordspace = dict_format
+    assert isinstance(state.coordspace, CoordinateSpace)
+    assert state.coordspace.names == ("x", "y", "z")
+    np.testing.assert_array_equal(state.coordspace.scales, [4e-9, 5e-9, 6e-9])
+
+    # Test 2: Setting coordspace with list format
+    list_format = [
+        {"name": "a", "scale": [1, "m"]},
+        {"name": "b", "scale": [2, "m"]},
+    ]
+    state.coordspace = list_format
+
+    assert isinstance(state.coordspace, CoordinateSpace)
+    assert state.coordspace.names == ("a", "b")
+    np.testing.assert_array_equal(state.coordspace.scales, [1, 2])
+
+    # Test 3: Setting coordspace with CoordinateSpace instance
+    coord_space = viewer_state.CoordinateSpace(
+        names=["x", "y"], scales=[3, 4], units="nm"
+    )
+    state.coordspace = coord_space
+    assert isinstance(state.coordspace, CoordinateSpace)
+    assert state.coordspace.names == ("x", "y")
+    np.testing.assert_array_equal(state.coordspace.scales, [3e-9, 4e-9])
 
 
 def test_layers():
