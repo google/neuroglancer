@@ -461,6 +461,11 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.registerEventListener(element, "touchcancel", () => this.onMouseout());
     this.registerEventListener(
       element,
+      "mouseenter",
+      this.onMousemove.bind(this),
+    );
+    this.registerEventListener(
+      element,
       "mouseover",
       (event) => {
         if (event.target !== element) {
