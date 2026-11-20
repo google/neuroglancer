@@ -17,8 +17,10 @@
 import type { ShaderBuilder } from "#src/webgl/shader.js";
 
 const glsl_gtao = `
-// Number of directions in which to sample horizon angles.
-#define NUM_DIRECTIONS 4
+// Number of view-space slices in which to sample horizon angles. Eight
+// directions reduce angular noise and camera-motion pattern changes compared
+// with the previous four-direction kernel.
+#define NUM_DIRECTIONS 8
 // Number of steps along each direction at which to sample the horizon from the
 // depth buffer.
 #define NUM_STEPS 8
@@ -112,8 +114,9 @@ vec4 gtao() {
       continue;
     }
     projectedNormal /= projectedNormalLength;
-    float normalAngle = acos(clamp(dot(projectedNormal, viewDirection), -1.0, 1.0));
-    normalAngle *= sign(dot(projectedNormal, sliceTangent));
+    float normalAngle = atan(
+      dot(projectedNormal, sliceTangent),
+      dot(projectedNormal, viewDirection));
 
     // The projected normal's +/- pi/2 boundaries represent an unobstructed
     // hemisphere. Samples move each horizon inward as they occlude the slice.
