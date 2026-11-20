@@ -494,6 +494,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
     // assign it here first in order to allow it to be accessed by `segmentationGroupState`.
     layer.displayState = this;
 
+    this.skeletonRenderingOptions = new SkeletonRenderingOptions(layer);
     this.shaderError = makeAggregateWatchableShaderError(this.layer, [
       this.volumeShaderError,
       this.meshShaderError,
@@ -652,7 +653,7 @@ class SegmentationUserLayerDisplayState implements SegmentationDisplayState {
   );
   objectAlpha = trackableAlphaValue(1.0);
   ignoreNullVisibleSet = new TrackableBoolean(true, true);
-  skeletonRenderingOptions = new SkeletonRenderingOptions();
+  skeletonRenderingOptions: SkeletonRenderingOptions;
   volumeShaderError = makeWatchableShaderError();
   meshShaderError = makeWatchableShaderError();
   offscreenShaderError = makeWatchableShaderError();

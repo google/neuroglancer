@@ -118,7 +118,9 @@ void main () {
     )
 
 
-@pytest.mark.parametrize("layout", ["xy", "3d"])
+@pytest.mark.parametrize(
+    "layout,mode3d", [("xy", "lines"), ("3d", "lines"), ("3d", "cylinders_and_balls")]
+)
 @pytest.mark.parametrize("primitive", ["edge", "node"])
 @pytest.mark.parametrize(
     "shader_output,shader_alpha",
@@ -133,7 +135,7 @@ void main () {
 )
 @pytest.mark.parametrize("layer_alpha", [1, 0.5])
 def test_skeleton_opacity(
-    webdriver, layout, primitive, shader_output, shader_alpha, layer_alpha
+    webdriver, layout, mode3d, primitive, shader_output, shader_alpha, layer_alpha
 ):
     if primitive == "edge":
         source = SkeletonSource(
@@ -165,9 +167,10 @@ def test_skeleton_opacity(
         )
         rendering = s.layers[0].skeleton_rendering
         rendering.mode2d = "lines"
-        rendering.mode3d = "lines"
-        rendering.line_width2d = 16
-        rendering.line_width3d = 16
+        rendering.mode3d = mode3d
+        # Wide enough that a lit surface faces the camera across the sampled pixels.
+        rendering.line_width2d = 32
+        rendering.line_width3d = 32
         if shader_output == "rgba":
             rendering.shader = f"""
 void main() {{
@@ -240,3 +243,44 @@ void main() {
     pixels = webdriver.viewer.screenshot(size=[10, 10]).screenshot.image_pixels
     assert np.all(pixels[..., 0] > 0)
     assert np.all(pixels[..., 2] > 0)
+
+
+def test_cylinder_in_anisotropic_voxels_far_from_origin_looks_the_same(webdriver):
+    def render(scales, offset):
+        webdriver.viewer.set_state({})
+        with webdriver.viewer.txn() as s:
+            s.dimensions = neuroglancer.CoordinateSpace(
+                names=["x", "y", "z"], units="nm", scales=scales
+            )
+            s.position = [offset / scale for scale in scales]
+            s.layout = "3d"
+            s.projection_scale = 32
+            s.projection_background_color = "#000000"
+            s.show_axis_lines = False
+            s.show_scale_bar = False
+            s.layers.append(
+                name="skeleton",
+                layer=neuroglancer.SegmentationLayer(
+                    source=SkeletonSource(
+                        vertex_positions=[
+                            [offset - 100, offset, offset],
+                            [offset + 100, offset, offset],
+                        ],
+                        edges=[[0, 1]],
+                    ),
+                    segments=[1],
+                ),
+            )
+            rendering = s.layers[0].skeleton_rendering
+            rendering.mode3d = "cylinders"
+            rendering.line_width3d = 16
+            rendering.shader = "void main() { emitRGB(vec3(1.0)); }"
+        return webdriver.viewer.screenshot(size=[32, 32]).screenshot.image_pixels.copy()
+
+    isotropic_at_origin = render(scales=[1, 1, 1], offset=0).astype(int)
+    # Far enough that float32 coordinates move the surface by over 100 levels.
+    anisotropic_far_from_origin = render(scales=[1, 1, 10], offset=3e6).astype(int)
+    assert (isotropic_at_origin[..., 0] > 0).sum() > 100
+    np.testing.assert_allclose(
+        anisotropic_far_from_origin, isotropic_at_origin, atol=8, rtol=0
+    )
