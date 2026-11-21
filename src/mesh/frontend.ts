@@ -92,6 +92,28 @@ import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 const tempMat4 = mat4.create();
 const tempMat3 = mat3.create();
 
+// Same condition as segmentColorUserShader's uSelectedSegment comparison
+// (segment_color.ts), so AO is skipped exactly where the highlight is drawn.
+export function isSegmentHighlighted(
+  displayState: Pick<
+    SegmentationDisplayState3D,
+    "hoverHighlight" | "segmentSelectionState" | "baseSegmentHighlighting"
+  >,
+  colorObjectId: bigint,
+) {
+  const { segmentSelectionState } = displayState;
+  if (
+    !displayState.hoverHighlight.value ||
+    !segmentSelectionState.hasSelectedSegment
+  ) {
+    return false;
+  }
+  const selected = displayState.baseSegmentHighlighting.value
+    ? segmentSelectionState.baseSelectedSegment
+    : segmentSelectionState.selectedSegment;
+  return colorObjectId === selected;
+}
+
 // To validate the octrees and to determine the multiscale fragment responsible for each framebuffer
 // location, set `DEBUG_MULTISCALE_FRAGMENTS=true` and also set `DEBUG_PICKING=true` in
 // `src/object_picking.ts`.
@@ -638,12 +660,9 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
             displayState.objectAlpha.value,
           );
           if (renderContext.emitter === perspectivePanelEmitWithNormals) {
-            const isHighlighted =
-              displayState.hoverHighlight.value &&
-              displayState.segmentSelectionState.isSelected(objectId);
             gl.uniform1f(
               shader.uniform("uHighlighted"),
-              isHighlighted ? 1.0 : 0.0,
+              isSegmentHighlighted(displayState, colorObjectId) ? 1.0 : 0.0,
             );
           }
         }
@@ -1045,12 +1064,9 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
             displayState.objectAlpha.value,
           );
           if (renderContext.emitter === perspectivePanelEmitWithNormals) {
-            const isHighlighted =
-              displayState.hoverHighlight.value &&
-              displayState.segmentSelectionState.isSelected(objectId);
             gl.uniform1f(
               shader.uniform("uHighlighted"),
-              isHighlighted ? 1.0 : 0.0,
+              isSegmentHighlighted(displayState, colorObjectId) ? 1.0 : 0.0,
             );
           }
         }
