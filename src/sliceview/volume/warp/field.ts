@@ -62,7 +62,7 @@ export interface DisplacementFieldMetadata {
   unitMeters: number;
   // Row-major 3x4: spatial array index (sample n at n) -> output, of "path".
   indexToOutput: number[][];
-  // All resolutions, finest first (just "path" if not given).
+  // All resolutions, finest first.
   scales: {
     path: string;
     indexToOutput: number[][];
@@ -73,80 +73,205 @@ export interface DisplacementFieldMetadata {
   // Row-major 3x3: components -> output displacement.
   vectorToOutput: number[][];
   bounds?: { path: string; blockShape: number[] };
-  // Field of the inverse transformation, relative to this group.
+  // URL of the field of the inverse transformation (from the scene).
   inverse?: string;
 }
 
-function parseMatrix(rows: number, cols: number) {
-  return (x: unknown) =>
-    parseFixedLengthArray(new Array<number[]>(rows), x, (row) =>
-      parseFixedLengthArray(new Array<number>(cols), row, verifyFiniteFloat),
-    );
+interface OmeAxis {
+  name: string;
+  type?: string;
+  unit?: string;
 }
 
-/** Parses `attributes.displacement_field` of a displacement-field group. */
+function parseAxes(x: unknown): OmeAxis[] {
+  return parseArray(x, (a) => ({
+    name: verifyObjectProperty(a, "name", verifyString),
+    type: verifyOptionalObjectProperty(a, "type", verifyString),
+    unit: verifyOptionalObjectProperty(a, "unit", verifyString),
+  }));
+}
+
+function parseFloats(x: unknown) {
+  return parseArray(x, verifyFiniteFloat);
+}
+
+/** Flattens "sequence" transformations into a list of their members. */
+function flattenTransforms(x: unknown): unknown[] {
+  return parseArray(x, (t) => t).flatMap((t) =>
+    verifyObjectProperty(t, "type", verifyString) === "sequence"
+      ? flattenTransforms(verifyObjectProperty(t, "transformations", (y) => y))
+      : [t],
+  );
+}
+
+/**
+ * The scale and translation (array index -> coordinate system) of a
+ * multiscale dataset: scale and translation transformations, possibly in a
+ * sequence, applied in order.
+ */
+function parseDatasetTransform(rank: number, transforms: unknown) {
+  const scale = new Array<number>(rank).fill(1);
+  const translation = new Array<number>(rank).fill(0);
+  for (const t of flattenTransforms(transforms)) {
+    const type = verifyObjectProperty(t, "type", verifyString);
+    if (type === "identity") continue;
+    if (type === "scale") {
+      const s = verifyObjectProperty(t, "scale", parseFloats);
+      for (let i = 0; i < rank; ++i) {
+        scale[i] *= s[i];
+        translation[i] *= s[i];
+      }
+    } else if (type === "translation") {
+      const v = verifyObjectProperty(t, "translation", parseFloats);
+      for (let i = 0; i < rank; ++i) translation[i] += v[i];
+    } else {
+      throw new Error(
+        `Unsupported displacement field dataset transformation: ${type}`,
+      );
+    }
+  }
+  return { scale, translation };
+}
+
+/**
+ * Parses a displacement field: an OME-Zarr 0.6 multiscale image with one axis
+ * of type "displacement" (RFC-5), whose vectors are expressed in the
+ * coordinate system its datasets map to. An affine in the multiscale's
+ * coordinateTransformations, from that coordinate system to another one, gives
+ * the output space (otherwise the output space is that coordinate system).
+ * `attributes.warpfield` adds per-level interpolation errors and the bounds
+ * array.
+ */
 export function parseDisplacementFieldMetadata(
-  obj: unknown,
+  attributes: unknown,
 ): DisplacementFieldMetadata {
-  verifyObject(obj);
-  const unit = verifyObjectProperty(obj, "unit", verifyString);
+  const ome = verifyObjectProperty(attributes, "ome", verifyObject);
+  const multiscale = verifyObjectProperty(
+    ome,
+    "multiscales",
+    (x) => parseArray(x, verifyObject)[0],
+  );
+  const systems = verifyObjectProperty(multiscale, "coordinateSystems", (x) =>
+    parseArray(x, (c) => ({
+      name: verifyObjectProperty(c, "name", verifyString),
+      axes: verifyObjectProperty(c, "axes", parseAxes),
+    })),
+  );
+  const datasets = verifyObjectProperty(multiscale, "datasets", (x) =>
+    parseArray(x, (d) => ({
+      path: verifyObjectProperty(d, "path", verifyString),
+      transforms: verifyObjectProperty(
+        d,
+        "coordinateTransformations",
+        (t) => t,
+      ),
+    })),
+  );
+  if (datasets.length === 0) {
+    throw new Error("Displacement field has no datasets");
+  }
+  // The coordinate system the datasets map to: the vectors' coordinate system.
+  const fieldSystemName = verifyObjectProperty(
+    parseArray(datasets[0].transforms, (t) => t).at(-1),
+    "output",
+    (o) => verifyObjectProperty(o, "name", verifyString),
+  );
+  const fieldSystem = systems.find((c) => c.name === fieldSystemName);
+  if (fieldSystem === undefined) {
+    throw new Error(
+      `Unknown coordinate system ${JSON.stringify(fieldSystemName)}`,
+    );
+  }
+  const rank = fieldSystem.axes.length;
+  const vectorAxis = fieldSystem.axes.findIndex(
+    (a) => a.type === "displacement",
+  );
+  if (vectorAxis === -1) {
+    throw new Error('Displacement field has no axis of type "displacement"');
+  }
+  const spatial = fieldSystem.axes
+    .map((_, i) => i)
+    .filter((i) => i !== vectorAxis);
+  if (spatial.length !== 3) {
+    throw new Error("Only 3-d displacement fields are supported");
+  }
+  const units = new Set(spatial.map((i) => fieldSystem.axes[i].unit ?? ""));
+  const unit = [...units][0];
   const unitMeters = UNIT_TO_METERS[unit];
-  if (unitMeters === undefined) {
+  if (units.size !== 1 || unitMeters === undefined) {
     throw new Error(
-      `Unsupported displacement field unit: ${JSON.stringify(unit)}`,
+      `Unsupported displacement field units: ${JSON.stringify([...units])}`,
     );
   }
-  const interpolation = verifyOptionalObjectProperty(
-    obj,
-    "interpolation",
-    verifyString,
-    "linear",
+  // Optional affine from the field's coordinate system to the output space.
+  let affine = [
+    [1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, 1, 0],
+  ];
+  let outputAxes = spatial.map((i) => fieldSystem.axes[i].name);
+  const extra = verifyOptionalObjectProperty(
+    multiscale,
+    "coordinateTransformations",
+    (x) => parseArray(x, (t) => t),
+    [],
   );
-  if (interpolation !== "linear") {
-    throw new Error(
-      `Unsupported displacement field interpolation: ${JSON.stringify(interpolation)}`,
+  for (const t of extra) {
+    const input = verifyObjectProperty(t, "input", (o) =>
+      verifyOptionalObjectProperty(o, "name", verifyString),
     );
+    if (input !== fieldSystemName) continue;
+    if (verifyObjectProperty(t, "type", verifyString) !== "affine") continue;
+    const outputName = verifyObjectProperty(t, "output", (o) =>
+      verifyObjectProperty(o, "name", verifyString),
+    );
+    const outputSystem = systems.find((c) => c.name === outputName);
+    if (outputSystem === undefined) continue;
+    const m = verifyObjectProperty(t, "affine", (x) =>
+      parseArray(x, parseFloats),
+    );
+    // Rows and columns of the spatial axes, and the translation column.
+    affine = spatial.map((r) => [...spatial.map((c) => m[r][c]), m[r][rank]]);
+    outputAxes = outputSystem.axes
+      .filter((a) => a.type !== "displacement")
+      .map((a) => a.name);
+    break;
   }
-  const path = verifyObjectProperty(obj, "path", verifyString);
-  const indexToOutput = verifyObjectProperty(
-    obj,
-    "index_to_output",
-    parseMatrix(3, 4),
+  const extras = verifyOptionalObjectProperty(
+    attributes,
+    "warpfield",
+    verifyObject,
+    {},
   );
+  const levelErrors = new Map<string, number>();
+  verifyOptionalObjectProperty(extras, "levels", (x) =>
+    parseArray(x, (l) => {
+      const err = verifyOptionalObjectProperty(l, "interpolation_error", (e) =>
+        verifyObjectProperty(e, "max", verifyFiniteFloat),
+      );
+      if (err !== undefined) {
+        levelErrors.set(verifyObjectProperty(l, "path", verifyString), err);
+      }
+    }),
+  );
+  const scales = datasets.map(({ path, transforms }) => {
+    const { scale, translation } = parseDatasetTransform(rank, transforms);
+    // index -> field system: scale * n + translation; then the affine.
+    const indexToOutput = affine.map((row) => [
+      ...spatial.map((c, j) => row[j] * scale[c]),
+      row[3] + spatial.reduce((a, c, j) => a + row[j] * translation[c], 0),
+    ]);
+    return { path, indexToOutput, maxError: levelErrors.get(path) };
+  });
   return {
-    path,
-    scales: verifyOptionalObjectProperty(
-      obj,
-      "scales",
-      (x) =>
-        parseArray(x, (s) => ({
-          path: verifyObjectProperty(s, "path", verifyString),
-          indexToOutput: verifyObjectProperty(
-            s,
-            "index_to_output",
-            parseMatrix(3, 4),
-          ),
-          maxError: verifyOptionalObjectProperty(
-            s,
-            "interpolation_error",
-            (e) => verifyObjectProperty(e, "max", verifyFiniteFloat),
-          ),
-        })),
-      [{ path, indexToOutput, maxError: undefined }],
-    ),
-    vectorAxis: verifyObjectProperty(obj, "vector_axis", verifyInt),
-    outputAxes: verifyObjectProperty(obj, "output_axes", (x) =>
-      parseFixedLengthArray(new Array<string>(3), x, verifyString),
-    ),
+    path: scales[0].path,
+    vectorAxis,
+    outputAxes,
     unitMeters,
-    indexToOutput,
-    vectorToOutput: verifyObjectProperty(
-      obj,
-      "vector_to_output",
-      parseMatrix(3, 3),
-    ),
-    inverse: verifyOptionalObjectProperty(obj, "inverse", verifyString),
-    bounds: verifyOptionalObjectProperty(obj, "bounds", (b) => ({
+    indexToOutput: scales[0].indexToOutput,
+    scales,
+    vectorToOutput: affine.map((row) => row.slice(0, 3)),
+    bounds: verifyOptionalObjectProperty(extras, "bounds", (b) => ({
       path: verifyObjectProperty(b, "path", verifyString),
       blockShape: verifyObjectProperty(b, "block_shape", (x) =>
         parseFixedLengthArray(new Array<number>(3), x, verifyInt),
@@ -192,6 +317,67 @@ function resolveRelativeUrl(groupUrl: string, relative: string) {
   return `${origin}${parts.join("/")}/`;
 }
 
+/** The `displacements` path of a transformation (possibly in a sequence). */
+function displacementsPath(t: unknown): string | undefined {
+  if (t === undefined) return undefined;
+  for (const x of flattenTransforms([t])) {
+    if (verifyObjectProperty(x, "type", verifyString) === "displacements") {
+      return verifyObjectProperty(x, "path", verifyString);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The URL of the field of the inverse transformation: looks for an OME-Zarr
+ * scene in the field's parent or grandparent group (RFC-5 keeps transformation
+ * arrays in a "coordinateTransformations" group next to the images) with a
+ * "bijection" whose forward or inverse transformation uses this field.
+ */
+async function findInverseInScene(
+  kvStoreContext: DataSourceRegistry["sharedKvStoreContext"]["kvStoreContext"],
+  groupUrl: string,
+  options: GetDisplacementFieldOptions,
+): Promise<string | undefined> {
+  for (const up of ["..", "../.."]) {
+    const sceneUrl = resolveRelativeUrl(groupUrl, up);
+    let json: unknown;
+    try {
+      const response = await kvStoreContext.read(
+        `${sceneUrl}zarr.json`,
+        options,
+      );
+      if (response === undefined) continue;
+      json = await response.response.json();
+    } catch {
+      continue;
+    }
+    const transforms = verifyOptionalObjectProperty(json, "attributes", (a) =>
+      verifyOptionalObjectProperty(a, "ome", (o) =>
+        verifyOptionalObjectProperty(o, "scene", (s) =>
+          verifyOptionalObjectProperty(s, "coordinateTransformations", (x) =>
+            parseArray(x, (t) => t),
+          ),
+        ),
+      ),
+    );
+    for (const t of transforms ?? []) {
+      if (verifyObjectProperty(t, "type", verifyString) !== "bijection") {
+        continue;
+      }
+      const [f, i] = ["forward", "inverse"].map((k) => {
+        const p = displacementsPath(
+          verifyOptionalObjectProperty(t, k, (x) => x),
+        );
+        return p === undefined ? undefined : resolveRelativeUrl(sceneUrl, p);
+      });
+      if (f === groupUrl) return i;
+      if (i === groupUrl) return f;
+    }
+  }
+  return undefined;
+}
+
 export async function getDisplacementField(
   registry: DataSourceRegistry,
   url: string,
@@ -211,11 +397,14 @@ export async function getDisplacementField(
     verifyObject,
     {},
   );
-  const metadata = verifyObjectProperty(
-    attributes,
-    "displacement_field",
-    parseDisplacementFieldMetadata,
-  );
+  const metadata = parseDisplacementFieldMetadata(attributes);
+  if (loadInverse) {
+    metadata.inverse = await findInverseInScene(
+      kvStoreContext,
+      groupUrl,
+      options,
+    );
+  }
   const openArray = async (path: string) => {
     const source = await registry.get({
       url: `${groupUrl}${path}/|zarr3:`,
@@ -243,7 +432,7 @@ export async function getDisplacementField(
     try {
       inverse = await getDisplacementField(
         registry,
-        resolveRelativeUrl(groupUrl, metadata.inverse),
+        metadata.inverse,
         options,
         false,
       );

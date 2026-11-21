@@ -18,8 +18,8 @@
  * @file Warped volumes: view a moving volume in the space of a displacement
  * field, W(x) = M(x + u(x)), without making a copy of the data.
  *
- * The displacement field is a zarr group (see `parseDisplacementFieldMetadata`)
- * whose `attributes.displacement_field` says how to apply it. Each scale of the
+ * The displacement field is an OME-Zarr 0.6 multiscale image with an axis of
+ * type "displacement" (RFC-5; see `parseDisplacementFieldMetadata`). Each scale of the
  * moving volume becomes a scale of a warped volume on a grid aligned with the
  * output axes, whose chunks are computed in the worker
  * (`warp/backend.ts`) from field and moving chunks.

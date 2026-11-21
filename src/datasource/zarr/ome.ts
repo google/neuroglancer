@@ -194,12 +194,18 @@ function parseOmeAxis(axis: unknown): Axis {
   return { name, unit: parsedUnit.unit, scale: parsedUnit.scale, type };
 }
 
+// RFC-5 displacement and coordinate fields store their vectors along an axis of
+// type "displacement" / "coordinate"; like channels, it is not a spatial axis.
+function isChannelLikeAxisType(type: string | undefined) {
+  return type === "channel" || type === "displacement" || type === "coordinate";
+}
+
 function parseOmeAxes(axes: unknown): CoordinateSpace {
   const parsedAxes = parseArray(axes, parseOmeAxis);
   return makeCoordinateSpace({
     names: parsedAxes.map((axis) => {
       const { name, type } = axis;
-      if (type === "channel") {
+      if (isChannelLikeAxisType(type)) {
         return `${name}'`;
       }
       return name;
@@ -217,7 +223,7 @@ function parseOmeCoordinateSystem(coordinateSystem: unknown): CoordinateSpace {
   return makeCoordinateSpace({
     names: axes.map((axis) => {
       const { name, type } = axis;
-      if (type === "channel") {
+      if (isChannelLikeAxisType(type)) {
         return `${name}'`;
       }
       return name;
