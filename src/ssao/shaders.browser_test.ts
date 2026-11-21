@@ -15,12 +15,19 @@
  */
 
 import { describe, it, expect } from "vitest";
+import type { PerspectiveViewerState } from "#src/perspective_view/panel.js";
+import {
+  perspectivePanelEmit,
+  perspectivePanelEmitWithNormals,
+} from "#src/perspective_view/panel.js";
+import { SliceViewRenderHelper } from "#src/sliceview/frontend.js";
 import {
   defineBlurShader,
   defineGTAOShader,
   defineSSAOCompositeShader,
 } from "#src/ssao/shaders.js";
-import { mat4 } from "#src/util/geom.js";
+import { TrackableBoolean } from "#src/trackable_boolean.js";
+import { mat4, vec4 } from "#src/util/geom.js";
 import type { GL } from "#src/webgl/context.js";
 import {
   FramebufferConfiguration,
@@ -605,6 +612,87 @@ describe("SSAO shaders", () => {
         fbo.dispose();
         gl.deleteTexture(aoTex);
         gl.deleteTexture(depthTex);
+      }
+    });
+  });
+
+  // A cross-section drawn over a mesh must replace the mesh's normal with the
+  // no-AO sentinel, or SSAO darkens the slice.
+  it("slices drawn with the normals emitter write the no-AO sentinel", () => {
+    webglTest((gl) => {
+      const w = 4;
+      const h = 4;
+      const viewer = {
+        hideCrossSectionBackground3D: new TrackableBoolean(false),
+      } as unknown as PerspectiveViewerState;
+      const fbo = new FramebufferConfiguration(gl, {
+        colorBuffers: [0, 1, 2, 3].map(
+          () =>
+            new TextureBuffer(
+              gl,
+              WebGL2RenderingContext.RGBA8,
+              WebGL2RenderingContext.RGBA,
+              WebGL2RenderingContext.UNSIGNED_BYTE,
+            ),
+        ),
+      });
+      const sliceTex = makeTexture(
+        gl,
+        WebGL2RenderingContext.RGBA8,
+        WebGL2RenderingContext.RGBA,
+        WebGL2RenderingContext.UNSIGNED_BYTE,
+        new Uint8Array([200, 100, 50, 255]),
+      );
+      const readNormal = (emitter: typeof perspectivePanelEmit) => {
+        const helper = SliceViewRenderHelper.get(gl, emitter, viewer, true);
+        try {
+          fbo.bind(w, h);
+          // Stale mesh normal, as left by the opaque mesh pass.
+          gl.clearBufferfv(gl.COLOR, 3, [0.5, 0.5, 1, 1]);
+          if (emitter === perspectivePanelEmit) {
+            // Old path: NORMAL masked off.
+            gl.drawBuffers([
+              gl.COLOR_ATTACHMENT0,
+              gl.COLOR_ATTACHMENT1,
+              gl.COLOR_ATTACHMENT2,
+            ]);
+          }
+          helper.draw(
+            sliceTex,
+            mat4.create(),
+            vec4.fromValues(1, 1, 1, 1),
+            vec4.fromValues(0, 0, 0, 1),
+            0,
+            0,
+            1,
+            1,
+          );
+          gl.readBuffer(gl.COLOR_ATTACHMENT3);
+          const px = new Uint8Array(4);
+          gl.readPixels(
+            2,
+            2,
+            1,
+            1,
+            WebGL2RenderingContext.RGBA,
+            WebGL2RenderingContext.UNSIGNED_BYTE,
+            px,
+          );
+          return Array.from(px);
+        } finally {
+          gl.readBuffer(gl.COLOR_ATTACHMENT0);
+          helper.dispose();
+        }
+      };
+      try {
+        // Old path keeps the mesh normal; the fix writes the sentinel.
+        expect(readNormal(perspectivePanelEmit)).toEqual([128, 128, 255, 255]);
+        expect(readNormal(perspectivePanelEmitWithNormals)).toEqual([
+          0, 0, 0, 255,
+        ]);
+      } finally {
+        fbo.dispose();
+        gl.deleteTexture(sliceTex);
       }
     });
   });

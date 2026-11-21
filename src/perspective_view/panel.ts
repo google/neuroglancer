@@ -338,6 +338,9 @@ class PerspectiveViewState extends PerspectiveViewStateBase {
 export class PerspectivePanel extends RenderedDataPanel {
   declare viewer: PerspectiveViewerState;
   sliceViewRenderHelper: SliceViewRenderHelper;
+  // Writes the no-AO sentinel normal, so slices in front of meshes are not
+  // darkened by the mesh's normal.
+  sliceViewRenderHelperWithNormals: SliceViewRenderHelper;
 
   projectionParameters: Owned<DerivedProjectionParameters>;
 
@@ -521,6 +524,14 @@ export class PerspectivePanel extends RenderedDataPanel {
       SliceViewRenderHelper.get(
         this.gl,
         perspectivePanelEmit,
+        this.viewer,
+        true /*perspectivePanel*/,
+      ),
+    );
+    this.sliceViewRenderHelperWithNormals = this.registerDisposer(
+      SliceViewRenderHelper.get(
+        this.gl,
+        perspectivePanelEmitWithNormals,
         this.viewer,
         true /*perspectivePanel*/,
       ),
@@ -1634,12 +1645,19 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   protected drawSliceViews(renderContext: PerspectiveViewRenderContext) {
-    const { sliceViewRenderHelper, gl } = this;
-    // SliceViewRenderHelper's shader uses perspectivePanelEmit (3 outputs);
-    // mask ATT3 if the FB has a NORMAL attachment from SSAO so drawBuffers
-    // matches the shader output count.
-    if (this.hasNormalAttachment) {
-      gl.drawBuffers(kOpaqueDrawBuffersNoNormal);
+    const { gl } = this;
+    let sliceViewRenderHelper: SliceViewRenderHelper;
+    if (renderContext.emitter === perspectivePanelEmitWithNormals) {
+      // SSAO on: write NORMAL too, so slice pixels get the no-AO sentinel
+      // instead of keeping the normal of a mesh behind them.
+      sliceViewRenderHelper = this.sliceViewRenderHelperWithNormals;
+      gl.drawBuffers(this.offscreenFramebuffer.fullAttachmentList);
+    } else {
+      sliceViewRenderHelper = this.sliceViewRenderHelper;
+      // perspectivePanelEmit has 3 outputs; mask a leftover NORMAL attachment.
+      if (this.hasNormalAttachment) {
+        gl.drawBuffers(kOpaqueDrawBuffersNoNormal);
+      }
     }
     const {
       lightDirection,
