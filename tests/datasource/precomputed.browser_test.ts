@@ -18,4 +18,11 @@ import "#src/datasource/precomputed/register_default";
 import "#src/sliceview/uncompressed_chunk_format.js";
 import { datasourceMetadataSnapshotTests } from "#tests/datasource/metadata_snapshot_test_util.js";
 
-datasourceMetadataSnapshotTests("precomputed", ["one_channel", "two_channels"]);
+datasourceMetadataSnapshotTests("precomputed", [
+  "one_channel",
+  "two_channels",
+  // Same volume as `one_channel`, but with the scales listed coarsest first.
+  // The metadata must be identical apart from the URL, since the scales are
+  // sorted rather than trusted to be in order.
+  "reversed_scales",
+]);
