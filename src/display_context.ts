@@ -446,6 +446,15 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
     ScreenshotMode.OFF,
   );
   force3DHistogramForAutoRange = false;
+
+  /**
+   * If `true`, cross-section panels leave the canvas transparent where they show no data and keep
+   * the alpha of translucent content, so that an embedding page shows through.  The 3D panel stays
+   * opaque.  Intended for embedding Neuroglancer over other content.  Set through the viewer's
+   * `transparentBackground` option.
+   */
+  transparentBackground = false;
+
   private framerateMonitor = new FramerateMonitor();
 
   private continuousCameraMotionInProgress = false;
@@ -675,12 +684,14 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
       panel.draw();
     }
 
-    // Ensure the alpha buffer is set to 1.
-    gl.disable(gl.SCISSOR_TEST);
-    this.gl.clearColor(1.0, 1.0, 1.0, 1.0);
-    this.gl.colorMask(false, false, false, true);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    this.gl.colorMask(true, true, true, true);
+    if (!this.transparentBackground) {
+      // Ensure the alpha buffer is set to 1.
+      gl.disable(gl.SCISSOR_TEST);
+      this.gl.clearColor(1.0, 1.0, 1.0, 1.0);
+      this.gl.colorMask(false, false, false, true);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      this.gl.colorMask(true, true, true, true);
+    }
     this.updateFinished.dispatch();
     this.framerateMonitor.endLastTimeQuery(gl, ext);
     this.framerateMonitor.grabAnyFinishedQueryResults(gl);

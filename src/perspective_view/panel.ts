@@ -1411,6 +1411,13 @@ export class PerspectivePanel extends RenderedDataPanel {
     this.offscreenCopyHelper.draw(
       this.offscreenFramebuffer.colorBuffers[OffscreenTextures.COLOR].texture,
     );
+    if (this.context.transparentBackground) {
+      // Only cross-section panels are transparent; keep this panel opaque.
+      gl.colorMask(false, false, false, true);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(WebGL2RenderingContext.COLOR_BUFFER_BIT);
+      gl.colorMask(true, true, true, true);
+    }
     return true;
   }
 
