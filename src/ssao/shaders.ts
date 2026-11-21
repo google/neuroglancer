@@ -138,7 +138,8 @@ vec4 gtao() {
     for (int s = 1; s <= NUM_STEPS; s++) {
       float t = float(s) + stepNoise * 0.5;
 
-      vec2 uvP = uv + stepUV * t;
+      // Snap to the texel center, so the rebuilt position matches its depth.
+      vec2 uvP = (floor((uv + stepUV * t) * uResolution) + 0.5) / uResolution;
       if (uvP.x > 0.0 && uvP.x < 1.0 && uvP.y > 0.0 && uvP.y < 1.0) {
         float dv = texture(uSampler[0], uvP).r;
         if (dv > 0.0) {
@@ -154,7 +155,7 @@ vec4 gtao() {
         }
       }
 
-      vec2 uvN = uv - stepUV * t;
+      vec2 uvN = (floor((uv - stepUV * t) * uResolution) + 0.5) / uResolution;
       if (uvN.x > 0.0 && uvN.x < 1.0 && uvN.y > 0.0 && uvN.y < 1.0) {
         float dv = texture(uSampler[0], uvN).r;
         if (dv > 0.0) {

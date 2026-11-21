@@ -421,12 +421,14 @@ describe("SSAO shaders", () => {
       // All pixels at the same depth: no occlusion possible.
       const depths = new Float32Array(w * h).fill(0.5);
       const px = runGTAOAndReadCenter(gl, w, h, cx, cy, depths);
-      // Every sample has sinH ≤ 0, total occlusion is 0, ao = 1.0. Allow
+      // No sample rises above the surface, so visibility stays 1. Allow
       // tiny slack for floating-point rounding.
       expect(px[0]).toBeGreaterThanOrEqual(250);
     });
   });
 
+  // Both terms, GTAO (depthCue 0) and HBAO (depthCue 1), must leave flat
+  // oblique surfaces unshaded.
   it("SSAO produces ao ≈ 1 on a tilted plane", () => {
     webglTest((gl) => {
       const w = 16;
@@ -442,11 +444,14 @@ describe("SSAO shaders", () => {
           depths[y * w + x] = viewZToDepthValue(projection, viewZ);
         }
       }
-      const px = runGTAOAndReadCenter(gl, w, h, 8, 8, depths, {
-        normal,
-        projection,
-      });
-      expect(px[0]).toBeGreaterThanOrEqual(250);
+      for (const depthCue of [0, 1]) {
+        const px = runGTAOAndReadCenter(gl, w, h, 8, 8, depths, {
+          normal,
+          projection,
+          depthCue,
+        });
+        expect(px[0], `depthCue=${depthCue}`).toBeGreaterThanOrEqual(250);
+      }
     });
   });
 
@@ -485,15 +490,18 @@ describe("SSAO shaders", () => {
           [20, 32],
           [44, 32],
         ]) {
-          const px = runGTAOAndReadCenter(gl, w, h, x, y, depths, {
-            normal,
-            projection,
-            radius: 0.4,
-          });
-          expect(
-            px[0],
-            `normal=${unnormalizedNormal.join(",")}, pixel=${x},${y}`,
-          ).toBeGreaterThanOrEqual(245);
+          for (const depthCue of [0, 1]) {
+            const px = runGTAOAndReadCenter(gl, w, h, x, y, depths, {
+              normal,
+              projection,
+              radius: 0.4,
+              depthCue,
+            });
+            expect(
+              px[0],
+              `normal=${unnormalizedNormal.join(",")}, pixel=${x},${y}, depthCue=${depthCue}`,
+            ).toBeGreaterThanOrEqual(245);
+          }
         }
       }
     });
