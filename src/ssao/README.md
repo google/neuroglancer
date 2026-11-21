@@ -125,6 +125,6 @@ overloads via the `renderContext` emitter:
 Highlighted (hovered) mesh segments emit a zero-RGB sentinel from
 `MeshShaderManager`'s vertex shader, gated by a `uHighlighted` uniform owned by
 the mesh layer. Any other layer that wants to exclude fragments from AO can do
-the same: emit a zero-RGB view normal. The OIT emitter accepts the three-argument
-signature for source compatibility but discards the normal: transparent surfaces
-do not contribute to opaque AO.
+the same: emit a zero-RGB view normal. Only the SSAO emitter defines the
+three-argument form, so a layer calls it only when that emitter is active, as
+`MeshShaderManager` and `SingleMeshShaderManager` do.

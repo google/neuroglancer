@@ -2065,6 +2065,8 @@ class DataSelectionState(SidePanelLocation):
 
 @export
 class Ssao(JsonObjectWrapper):
+    """Screen-space ambient occlusion settings for the 3-D view."""
+
     __slots__ = ()
     supports_validation = True
 

@@ -133,19 +133,13 @@ export const glsl_perspectivePanelEmit = `
 void emit(vec4 color, highp uint pickId) {
   ${glslEmitBase}
 }
-// Provided so layers can call the 3-arg form unconditionally; the normal
-// is unused when SSAO is off (no NORMAL attachment to write to).
-void emit(vec4 color, highp uint pickId, vec3 viewNormal) {
-  emit(color, pickId);
-}
 `;
 
 // SSAO-aware emit ABI. 3-arg form: opaque surfaces that should receive AO,
 // viewNormal in view space (right-handed, -Z forward), need not be unit.
 // 2-arg form: anything else; writes the zero-RGB sentinel that the GTAO and
 // composite shaders short-circuit on. Alpha is always 1 so the sentinel
-// survives the annotation blend mode. The OIT emitter accepts the 3-arg
-// signature for source compatibility but discards the normal.
+// survives the annotation blend mode. Only this emitter has the 3-arg form.
 export const glsl_perspectivePanelEmitWithNormals = `
 void emit(vec4 color, highp uint pickId, vec3 viewNormal) {
   ${glslEmitBase}
@@ -189,10 +183,6 @@ void emit(vec4 color, highp uint pickId) {
   float weight = computeOITWeight(color.a, gl_FragCoord.z);
   vec4 accum = color * weight;
   emitAccumAndRevealage(accum, color.a, pickId);
-}
-// Transparent surfaces don't contribute to opaque AO; viewNormal is discarded.
-void emit(vec4 color, highp uint pickId, vec3 viewNormal) {
-  emit(color, pickId);
 }
 `,
 ];
