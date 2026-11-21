@@ -27,9 +27,7 @@
  *  - they stay cached (and are evicted) under the normal memory limits.
  */
 
-import type { ChunkManager } from "#src/chunk_manager/backend.js";
 import { WithParameters } from "#src/chunk_manager/backend.js";
-import { ChunkPriorityTier, ChunkState } from "#src/chunk_manager/base.js";
 import { postProcessRawData } from "#src/sliceview/backend_chunk_decoders/postprocess.js";
 import { DataType } from "#src/sliceview/base.js";
 import {
@@ -42,6 +40,17 @@ import {
   WarpedVolumeChunkSourceParameters,
   WarpInterpolation,
 } from "#src/sliceview/volume/warp/base.js";
+import type {
+  ChunkData,
+  Dependency,
+  VolumeDependency,
+} from "#src/sliceview/volume/warp/dependencies.js";
+import {
+  getDependencyData,
+  getDependencyRequests,
+  isAvailable,
+  volumeDependency,
+} from "#src/sliceview/volume/warp/dependencies.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
 import type { RPC } from "#src/worker_rpc.js";
@@ -49,141 +58,6 @@ import { registerSharedObject } from "#src/worker_rpc.js";
 
 // Fetch moving chunks from the block bounds while the field is still loading.
 const PREFETCH_FROM_BOUNDS = false;
-
-// --- Dependencies between chunks.
-
-interface Dependency {
-  source: VolumeChunkSource;
-  position: Float32Array;
-  key: string;
-}
-
-function makeDependency(
-  source: VolumeChunkSource,
-  position: ArrayLike<number>,
-): Dependency {
-  const p = Float32Array.from(position);
-  return { source, position: p, key: p.join() };
-}
-
-interface DependencyRequest {
-  requester: VolumeChunk;
-  deps: Dependency[];
-}
-
-/**
- * Re-requests, on every priority update, the dependencies of every warped
- * chunk being computed, at that chunk's priority.
- */
-class DependencyRequests {
-  private requests = new Set<DependencyRequest>();
-
-  constructor(private chunkManager: ChunkManager) {
-    chunkManager.recomputeChunkPrioritiesLate.add(() => this.update());
-  }
-
-  private update() {
-    const { chunkManager } = this;
-    for (const { requester, deps } of this.requests) {
-      const tier = requester.newPriorityTier;
-      if (tier === ChunkPriorityTier.RECENT) continue;
-      // Slightly ahead of the chunks that are not yet being computed.
-      const priority = requester.newPriority + 1;
-      for (const dep of deps) {
-        chunkManager.requestChunk(
-          dep.source.getChunk(dep.position),
-          tier,
-          priority,
-          ChunkState.SYSTEM_MEMORY_WORKER,
-        );
-      }
-    }
-  }
-
-  add(requester: VolumeChunk, deps: Dependency[]): DependencyRequest {
-    const request = { requester, deps };
-    this.requests.add(request);
-    this.chunkManager.scheduleUpdateChunkPriorities();
-    return request;
-  }
-
-  set(request: DependencyRequest, deps: Dependency[]) {
-    request.deps = deps;
-    this.chunkManager.scheduleUpdateChunkPriorities();
-  }
-
-  remove(request: DependencyRequest) {
-    this.requests.delete(request);
-  }
-}
-
-const dependencyRequests = new WeakMap<ChunkManager, DependencyRequests>();
-
-function getDependencyRequests(chunkManager: ChunkManager) {
-  let r = dependencyRequests.get(chunkManager);
-  if (r === undefined) {
-    r = new DependencyRequests(chunkManager);
-    dependencyRequests.set(chunkManager, r);
-  }
-  return r;
-}
-
-function isAvailable(dep: Dependency) {
-  const chunk = dep.source.chunks.get(dep.key);
-  return chunk !== undefined && chunk.state <= ChunkState.SYSTEM_MEMORY_WORKER;
-}
-
-type ChunkData = ArrayLike<number> | null;
-
-/**
- * The data of a dependency, once it is available; null for a missing chunk
- * (fill value).
- */
-function getDependencyData(
-  dep: Dependency,
-  signal: AbortSignal,
-): Promise<ChunkData> {
-  const { source, key } = dep;
-  return new Promise<ChunkData>((resolve, reject) => {
-    let done = false;
-    const finish = () => {
-      done = true;
-      source.unregisterChunkListener(key, check);
-      signal.removeEventListener("abort", onAbort);
-    };
-    function check() {
-      if (done) return;
-      const chunk = source.chunks.get(key) as VolumeChunk | undefined;
-      if (chunk === undefined) return;
-      switch (chunk.state) {
-        case ChunkState.SYSTEM_MEMORY_WORKER: {
-          finish();
-          resolve(chunk.data as ChunkData);
-          return;
-        }
-        case ChunkState.SYSTEM_MEMORY:
-        case ChunkState.GPU_MEMORY:
-          // Also displayed by another layer: the frontend holds the data.
-          finish();
-          chunk.queueManager
-            .retrieveChunkData(chunk)
-            .then((data) => resolve(data as ChunkData), reject);
-          return;
-        case ChunkState.FAILED:
-          finish();
-          reject(chunk.error);
-          return;
-      }
-    }
-    function onAbort() {
-      finish();
-      reject(signal.reason);
-    }
-    signal.addEventListener("abort", onAbort);
-    source.registerChunkListener(key, check);
-    check();
-  });
-}
 
 // --- Small linear algebra on row-major matrices.
 
@@ -230,16 +104,16 @@ function zarrChunksInBox(
   access: ZarrArrayAccess,
   lo: number[],
   hi: number[],
-): { dep: Dependency; grid: number[] }[] {
+): { dep: VolumeDependency; grid: number[] }[] {
   const rank = access.shape.length;
   const gLo = lo.map((v, a) => Math.floor(v / access.chunkShape[a]));
   const gHi = hi.map((v, a) => Math.floor(v / access.chunkShape[a]));
-  const out: { dep: Dependency; grid: number[] }[] = [];
+  const out: { dep: VolumeDependency; grid: number[] }[] = [];
   const g = gLo.slice();
   while (true) {
     const position = new Array<number>(rank);
     for (let a = 0; a < rank; ++a) position[rank - 1 - a] = g[a];
-    out.push({ dep: makeDependency(source, position), grid: g.slice() });
+    out.push({ dep: volumeDependency(source, position), grid: g.slice() });
     let a = rank - 1;
     while (a >= 0) {
       if (++g[a] <= gHi[a]) break;
@@ -452,11 +326,11 @@ export class WarpedVolumeChunkSource extends WithParameters(
       gLo.push(Math.floor((l - baseVoxelOffset[i]) / chunkDataSize[i]));
       gHi.push(Math.floor((h - baseVoxelOffset[i]) / chunkDataSize[i]));
     }
-    const out: Dependency[] = [];
+    const out: VolumeDependency[] = [];
     for (let z = gLo[2]; z <= gHi[2]; ++z) {
       for (let y = gLo[1]; y <= gHi[1]; ++y) {
         for (let x = gLo[0]; x <= gHi[0]; ++x) {
-          out.push(makeDependency(this.moving, [x, y, z]));
+          out.push(volumeDependency(this.moving, [x, y, z]));
         }
       }
     }
@@ -717,7 +591,7 @@ export class WarpedVolumeChunkSource extends WithParameters(
   private sampleNearest(
     coords: Float32Array,
     n: number,
-    deps: Dependency[],
+    deps: VolumeDependency[],
     data: ChunkData[],
   ) {
     const { spec } = this.moving;
@@ -841,7 +715,7 @@ export class WarpedVolumeChunkSource extends WithParameters(
   private resample(
     coords: Float32Array,
     n: number,
-    deps: Dependency[],
+    deps: VolumeDependency[],
     data: ChunkData[],
     lo: number[],
     hi: number[],

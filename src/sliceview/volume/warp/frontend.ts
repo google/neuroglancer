@@ -42,6 +42,7 @@ import type {
   DataSubsourceEntry,
 } from "#src/datasource/index.js";
 import type { MultiscaleVolumeChunkSource as ZarrMultiscaleVolumeChunkSource } from "#src/datasource/zarr/frontend.js";
+import { makeWarpedMeshSource } from "#src/mesh/warp/frontend.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
@@ -108,6 +109,8 @@ export interface DisplacementFieldMetadata {
   // Row-major 3x3: components -> output displacement.
   vectorToOutput: number[][];
   bounds?: { path: string; blockShape: number[] };
+  // Field of the inverse transformation, relative to this group.
+  inverse?: string;
 }
 
 function parseMatrix(rows: number, cols: number) {
@@ -178,6 +181,7 @@ export function parseDisplacementFieldMetadata(
       "vector_to_output",
       parseMatrix(3, 3),
     ),
+    inverse: verifyOptionalObjectProperty(obj, "inverse", verifyString),
     bounds: verifyOptionalObjectProperty(obj, "bounds", (b) => ({
       path: verifyObjectProperty(b, "path", verifyString),
       blockShape: verifyObjectProperty(b, "block_shape", (x) =>
@@ -192,6 +196,8 @@ export interface DisplacementField {
   metadata: DisplacementFieldMetadata;
   // One array per entry of metadata.scales.
   fields: ZarrMultiscaleVolumeChunkSource[];
+  // The field of the inverse transformation, if the metadata names one.
+  inverse?: DisplacementField;
   bounds: ZarrMultiscaleVolumeChunkSource | undefined;
 }
 
@@ -209,10 +215,24 @@ function normalizeGroupUrl(url: string) {
   return u;
 }
 
+/** Resolves `relative` (which may use "..") against a group URL ending in "/". */
+function resolveRelativeUrl(groupUrl: string, relative: string) {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(relative)) return relative;
+  const m = groupUrl.match(/^([a-z][a-z0-9+.-]*:\/\/[^/]*)(\/.*)$/i);
+  const [origin, path] = m === null ? ["", groupUrl] : [m[1], m[2]];
+  const parts = path.split("/").slice(0, -1);
+  for (const part of relative.split("/")) {
+    if (part === "..") parts.pop();
+    else if (part !== "." && part !== "") parts.push(part);
+  }
+  return `${origin}${parts.join("/")}/`;
+}
+
 export async function getDisplacementField(
   registry: DataSourceRegistry,
   url: string,
   options: GetDisplacementFieldOptions,
+  loadInverse = true,
 ): Promise<DisplacementField> {
   const groupUrl = normalizeGroupUrl(url);
   const { kvStoreContext } = registry.sharedKvStoreContext;
@@ -253,11 +273,26 @@ export async function getDisplacementField(
       : openArray(metadata.bounds.path),
     ...metadata.scales.map((s) => openArray(s.path)),
   ]);
+  // The inverse field moves points (mesh vertices) directly; it is optional.
+  let inverse: DisplacementField | undefined;
+  if (loadInverse && metadata.inverse !== undefined) {
+    try {
+      inverse = await getDisplacementField(
+        registry,
+        resolveRelativeUrl(groupUrl, metadata.inverse),
+        options,
+        false,
+      );
+    } catch (e) {
+      console.warn(`warp: could not load the inverse field: ${e}`);
+    }
+  }
   return {
     url: groupUrl,
     metadata,
     fields: fields as ZarrMultiscaleVolumeChunkSource[],
     bounds,
+    inverse,
   };
 }
 
@@ -271,7 +306,7 @@ function mat4FromRows(rows: number[][]): number[] {
   return m;
 }
 
-function mul4(a: number[], b: number[]): number[] {
+export function mul4(a: number[], b: number[]): number[] {
   const c = new Array<number>(16).fill(0);
   for (let i = 0; i < 4; ++i)
     for (let j = 0; j < 4; ++j)
@@ -280,7 +315,7 @@ function mul4(a: number[], b: number[]): number[] {
 }
 
 /** Inverse of an affine row-major 4x4. */
-function inverseAffine4(m: number[]): number[] {
+export function inverseAffine4(m: number[]): number[] {
   const [a, b, c, d, e, f, g, h, i] = [
     m[0],
     m[1],
@@ -320,7 +355,10 @@ function inverseAffine4(m: number[]): number[] {
 }
 
 /** Row-major 4x4 from a column-major (rank + 1)^2 homogeneous matrix. */
-function rowMajorFromColumnMajor(m: ArrayLike<number>, rank: number): number[] {
+export function rowMajorFromColumnMajor(
+  m: ArrayLike<number>,
+  rank: number,
+): number[] {
   const out = new Array<number>(16).fill(0);
   for (let i = 0; i < 4; ++i) {
     for (let j = 0; j < 4; ++j) {
@@ -332,7 +370,7 @@ function rowMajorFromColumnMajor(m: ArrayLike<number>, rank: number): number[] {
   return out;
 }
 
-function zarrArrayAccess(
+export function zarrArrayAccess(
   volume: ZarrMultiscaleVolumeChunkSource,
   source: VolumeChunkSource,
 ): ZarrArrayAccess {
@@ -350,7 +388,7 @@ function zarrArrayAccess(
   };
 }
 
-function canonicalSourceOptions(rank: number): VolumeSourceOptions {
+export function canonicalSourceOptions(rank: number): VolumeSourceOptions {
   const m = new Float32Array(rank * rank);
   for (let i = 0; i < rank; ++i) m[i * rank + i] = 1;
   return {
@@ -367,7 +405,7 @@ class WarpedVolumeChunkSource extends WithParameters(
   dependencies: VolumeChunkSource[] | undefined;
 }
 
-interface WarpGeometry {
+export interface WarpGeometry {
   // Warped model space (output axes order).
   modelSpace: CoordinateSpace;
   // Output-axis indices of the moving output space, in field output-axes order.
@@ -386,7 +424,7 @@ interface WarpGeometry {
   vectorToOutput: number[];
 }
 
-function getWarpGeometry(
+export function getWarpGeometry(
   movingTransform: CoordinateSpaceTransform,
   field: DisplacementField,
 ): WarpGeometry {
@@ -470,6 +508,37 @@ function getWarpGeometry(
   };
 }
 
+/**
+ * Moving model coordinates -> warped output coordinates (field output axes
+ * order), as a row-major 4x4. Linear coefficients of a coordinate space
+ * transform relate physical units, so in coordinates they scale by
+ * (input scale / output scale), as in getRenderLayerTransform; the
+ * translation is in output coordinates already.
+ */
+export function movingModelToOutput(
+  movingTransform: CoordinateSpaceTransform,
+  geometry: WarpGeometry,
+): number[] {
+  const m = rowMajorFromColumnMajor(
+    movingTransform.transform,
+    movingTransform.rank,
+  );
+  const inScales = movingTransform.inputSpace.scales;
+  const outScales = movingTransform.outputSpace.scales;
+  for (let i = 0; i < 3; ++i) {
+    for (let j = 0; j < 3; ++j) {
+      m[i * 4 + j] *= inScales[j] / outScales[i];
+    }
+  }
+  // Rows of the moving output space, reordered to the field output axes.
+  const select = new Array<number>(16).fill(0);
+  geometry.outputDims.forEach((d, i) => {
+    select[i * 4 + d] = 1;
+  });
+  select[15] = 1;
+  return mul4(select, m);
+}
+
 export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
     return this.moving.dataType;
@@ -502,35 +571,13 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
     for (const alternative of otherAlternatives) {
       for (const s of alternative) s.chunkSource.dispose();
     }
-    const modelTransform = rowMajorFromColumnMajor(
-      movingTransform.transform,
-      movingTransform.rank,
-    );
-    // Linear coefficients relate physical units: in output coordinates they
-    // scale by (input scale / output scale), as in getRenderLayerTransform.
-    // The translation is in output coordinates already.
-    const inScales = movingTransform.inputSpace.scales;
-    const outScales = movingTransform.outputSpace.scales;
-    for (let i = 0; i < 3; ++i) {
-      for (let j = 0; j < 3; ++j) {
-        modelTransform[i * 4 + j] *= inScales[j] / outScales[i];
-      }
-    }
-    // Rows of the moving output space, reordered to the field output axes.
-    const select = new Array<number>(16).fill(0);
-    geometry.outputDims.forEach((d, i) => {
-      select[i * 4 + d] = 1;
-    });
-    select[15] = 1;
+    const modelToOutput = movingModelToOutput(movingTransform, geometry);
     const chunkToModelOf = (
       movingScale: SliceViewSingleResolutionSource<VolumeChunkSource>,
     ) =>
       mul4(
-        select,
-        mul4(
-          modelTransform,
-          rowMajorFromColumnMajor(movingScale.chunkToMultiscaleTransform, 3),
-        ),
+        modelToOutput,
+        rowMajorFromColumnMajor(movingScale.chunkToMultiscaleTransform, 3),
       );
     const voxelSizeOf = (chunkToModel: number[]) =>
       [0, 1, 2].map((i) =>
@@ -705,8 +752,9 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
 
 /**
  * Wraps a loaded data source so that its volumes are shown in the space of a
- * displacement field. Non-spatial subsources (segment properties) are kept;
- * spatial ones that are not warped (meshes, annotations, ...) are dropped.
+ * displacement field. Multiscale meshes are warped too (one level of detail);
+ * segment properties are kept; other subsources (annotations, ...) are
+ * dropped.
  */
 export function makeWarpedDataSource(
   chunkManager: ChunkManager,
@@ -716,7 +764,25 @@ export function makeWarpedDataSource(
   const geometry = getWarpGeometry(moving.modelTransform, field);
   const subsources: DataSubsourceEntry[] = [];
   for (const entry of moving.subsources) {
-    const { volume, segmentPropertyMap } = entry.subsource;
+    const { volume, segmentPropertyMap, mesh } = entry.subsource;
+    if (mesh !== undefined) {
+      const warpedMesh = makeWarpedMeshSource(
+        chunkManager,
+        mesh,
+        entry.subsourceToModelSubspaceTransform,
+        moving.modelTransform,
+        field,
+        geometry,
+      );
+      if (warpedMesh !== undefined) {
+        subsources.push({
+          id: entry.id,
+          default: entry.default,
+          subsource: { mesh: warpedMesh },
+        });
+      }
+      continue;
+    }
     if (volume === undefined) {
       if (segmentPropertyMap !== undefined) {
         subsources.push({
