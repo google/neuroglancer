@@ -1017,7 +1017,12 @@ export class PerspectivePanel extends RenderedDataPanel {
     const { offscreenFramebuffer } = this;
     const needsNormalMask = !ssaoRequested && this.hasNormalAttachment;
     const disablePicking = () => {
-      gl.drawBuffers(offscreenFramebuffer.singleAttachmentList);
+      // With SSAO, keep NORMAL so the no-AO sentinel is still written.
+      gl.drawBuffers(
+        ssaoRequested
+          ? [gl.COLOR_ATTACHMENT0, gl.NONE, gl.NONE, gl.COLOR_ATTACHMENT3]
+          : offscreenFramebuffer.singleAttachmentList,
+      );
     };
     const bindFramebuffer = () => {
       offscreenFramebuffer.bind(width, height);
