@@ -145,3 +145,21 @@ def test_voxel_editing_state():
 
 def test_annotation():
     viewer_state.PointAnnotation(point=[1])
+
+
+def test_ssao():
+    # Defaults match TrackableSSAO in src/ssao/trackable_ssao_params.ts.
+    ssao = viewer_state.Ssao()
+    assert ssao.enabled is False
+    assert ssao.intensity == 1.8
+    assert ssao.radius == 0.2
+    assert ssao.depth_cue == 0.0
+
+    ssao.depth_cue = 0.3
+    assert ssao.depthCue == 0.3
+
+    json = {"enabled": True, "intensity": 2.5, "radius": 0.4, "depthCue": 0.7}
+    state = viewer_state.ViewerState(ssao=json)
+    assert isinstance(state.ssao, viewer_state.Ssao)
+    assert state.ssao.depth_cue == 0.7
+    assert state.to_json()["ssao"] == json

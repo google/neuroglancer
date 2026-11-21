@@ -15,9 +15,21 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { isSegmentHighlighted } from "#src/mesh/frontend.js";
+import { DisplayContext } from "#src/display_context.js";
+import { makeLayer } from "#src/layer/index.js";
+import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import "#layer/segmentation";
+import { VertexPositionFormat } from "#src/mesh/base.js";
+import type { MeshDisplayState } from "#src/mesh/frontend.js";
+import { isSegmentHighlighted, MeshShaderManager } from "#src/mesh/frontend.js";
+import {
+  perspectivePanelEmit,
+  perspectivePanelEmitWithNormals,
+} from "#src/perspective_view/panel.js";
 import type { SegmentSelectionState } from "#src/segmentation_display_state/frontend.js";
 import { WatchableValue } from "#src/trackable_value.js";
+import { RefCounted } from "#src/util/disposable.js";
+import { Viewer } from "#src/viewer.js";
 
 // Root segment 10 merges base segments 1 and 2; base 1 is under the mouse.
 const ROOT = 10n;
@@ -66,4 +78,59 @@ describe("isSegmentHighlighted", () => {
     expect(isSegmentHighlighted(state, BASE_OTHER)).toBe(false);
     expect(isSegmentHighlighted(state, ROOT)).toBe(false);
   });
+});
+
+// Compiles the mesh shader, including the segment color shader, with and
+// without the SSAO normals emitter.
+describe("MeshShaderManager", () => {
+  it.each([
+    [false, VertexPositionFormat.float32],
+    [true, VertexPositionFormat.uint10],
+  ])(
+    "builds with both emitters (fragmentRelativeVertices=%s, format=%s)",
+    (fragmentRelativeVertices, vertexPositionFormat) => {
+      const resources = new RefCounted();
+      try {
+        const display = resources.registerDisposer(
+          new DisplayContext(document.createElement("div")),
+        );
+        const viewer = resources.registerDisposer(new Viewer(display));
+        const managedLayer = resources.registerDisposer(
+          makeLayer(viewer.layerSpecification, "test", {
+            type: "segmentation",
+          }),
+        );
+        const { displayState } = managedLayer.layer! as SegmentationUserLayer;
+        const gl = viewer.chunkManager.chunkQueueManager.gl;
+        const layer = resources.registerDisposer(
+          Object.assign(new RefCounted(), {
+            gl,
+            // makeGetter uses only the segmentation fields, not transform.
+            displayState: displayState as unknown as MeshDisplayState,
+          }),
+        );
+        const getShader = new MeshShaderManager(
+          fragmentRelativeVertices,
+          vertexPositionFormat,
+        ).makeGetter(layer);
+
+        const plain = getShader(perspectivePanelEmit);
+        expect(plain.fallback).toBe(false);
+        expect(plain.shader).not.toBeNull();
+        expect(() => plain.shader!.uniform("uViewNormalMatrix")).toThrow(
+          "Invalid uniform",
+        );
+
+        const withNormals = getShader(perspectivePanelEmitWithNormals);
+        expect(withNormals.fallback).toBe(false);
+        expect(withNormals.shader).not.toBeNull();
+        expect(withNormals.shader).not.toBe(plain.shader);
+        // Non-null locations: the uniforms are used, not optimized away.
+        expect(withNormals.shader!.uniform("uViewNormalMatrix")).not.toBeNull();
+        expect(withNormals.shader!.uniform("uHighlighted")).not.toBeNull();
+      } finally {
+        resources.dispose();
+      }
+    },
+  );
 });
