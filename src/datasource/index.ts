@@ -231,6 +231,10 @@ export interface DataSourceSpecification {
   subsources: Map<string, DataSubsourceSpecification>;
   state?: any;
 
+  // URL of a displacement field group: when set, the source's volumes are shown
+  // warped into the field's space, W(x) = M(x + u(x)), without copying data.
+  warp?: string;
+
   // Indicates that the spec was set manually in the UI.
   setManually?: boolean;
 }

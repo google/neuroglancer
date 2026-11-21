@@ -13,3 +13,4 @@ import "#src/datasource/enabled_backend_modules.js";
 import "#src/kvstore/enabled_backend_modules.js";
 import "#src/worker_rpc_context.js";
 import "#src/voxel_editing/backend.js";
+import "#src/sliceview/volume/warp/backend.js";

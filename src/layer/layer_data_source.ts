@@ -36,6 +36,10 @@ import { makeEmptyDataSourceSpecification } from "#src/datasource/index.js";
 import type { UserLayer } from "#src/layer/index.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import type { RenderLayer } from "#src/renderlayer.js";
+import {
+  getDisplacementField,
+  makeWarpedDataSource,
+} from "#src/sliceview/volume/warp/frontend.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { arraysEqual } from "#src/util/array.js";
@@ -110,6 +114,7 @@ export function layerDataSourceSpecificationFromJson(
       new Map<string, DataSubsourceSpecification>(),
     ),
     state: verifyOptionalObjectProperty(obj, "state", verifyObject),
+    warp: verifyOptionalObjectProperty(obj, "warp", verifyString),
   };
 }
 
@@ -138,7 +143,8 @@ export function layerDataSourceSpecificationToJson(
     transform === undefined &&
     emptySubsources &&
     spec.enableDefaultSubsources === true &&
-    spec.state === undefined
+    spec.state === undefined &&
+    spec.warp === undefined
   ) {
     return spec.url;
   }
@@ -149,6 +155,7 @@ export function layerDataSourceSpecificationToJson(
     enableDefaultSubsources:
       spec.enableDefaultSubsources === true ? undefined : false,
     state: spec.state,
+    warp: spec.warp,
   };
 }
 
@@ -291,7 +298,8 @@ export class LoadedLayerDataSource extends RefCounted {
         dataSource.modelTransform,
       );
     }
-    if (spec.transform !== undefined) {
+    // With a warp, spec.transform was applied to the moving source instead.
+    if (spec.transform !== undefined && spec.warp === undefined) {
       this.transform.spec = spec.transform;
     }
     const subsourceSpecs = spec.subsources;
@@ -355,9 +363,13 @@ export class LayerDataSource extends RefCounted {
       const generation = this.changed.count;
       if (generation !== this.specGeneration) {
         this.specGeneration = generation;
+        const prev = this.spec_;
         this.spec_ = {
-          url: this.spec.url,
-          transform: loadState.transform.spec,
+          url: prev.url,
+          // With a warp, the transform places the moving source; the warped
+          // output is in the displacement field's space.
+          transform:
+            prev.warp !== undefined ? prev.transform : loadState.transform.spec,
           enableDefaultSubsources: loadState.enableDefaultSubsources,
           subsources: new Map(
             Array.from(loadState.subsources, (loadedSubsource) => {
@@ -376,6 +388,7 @@ export class LayerDataSource extends RefCounted {
             }),
           ),
           state: this.spec.state,
+          warp: this.spec.warp,
         };
       }
     }
@@ -428,6 +441,32 @@ export class LayerDataSource extends RefCounted {
         transform: spec.transform,
         state: spec.state,
         progressListener: this.progressListener,
+      })
+      .then(async (source: DataSourceWithRedirectInfo) => {
+        if (spec.warp !== undefined && !refCounted.wasDisposed) {
+          const field = await getDisplacementField(registry, spec.warp, {
+            globalCoordinateSpace: layer.manager.root.coordinateSpace,
+            signal: abortController.signal,
+            progressListener: this.progressListener,
+          });
+          // The layer transform places the moving source before warping.
+          const movingTransform = new WatchableCoordinateSpaceTransform(
+            source.modelTransform,
+          );
+          if (spec.transform !== undefined) {
+            movingTransform.spec = spec.transform;
+          }
+          source = {
+            ...makeWarpedDataSource(
+              registry.chunkManager,
+              { ...source, modelTransform: movingTransform.value },
+              field,
+            ),
+            originalCanonicalUrl: source.originalCanonicalUrl,
+            redirectLog: source.redirectLog,
+          };
+        }
+        return source;
       })
       .then((source: DataSourceWithRedirectInfo) => {
         if (refCounted.wasDisposed) return;
@@ -496,7 +535,10 @@ export class LayerDataSource extends RefCounted {
     }
     return layerDataSourceSpecificationToJson({
       url: this.spec.url,
-      transform: loadState.transform.spec,
+      transform:
+        this.spec.warp !== undefined
+          ? this.spec.transform
+          : loadState.transform.spec,
       enableDefaultSubsources: loadState.enableDefaultSubsources,
       subsources: new Map(
         Array.from(loadState.subsources, (loadedSubsource) => {
@@ -518,6 +560,7 @@ export class LayerDataSource extends RefCounted {
         }),
       ),
       state: this.spec.state,
+      warp: this.spec.warp,
     });
   }
 }

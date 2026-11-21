@@ -1,0 +1,26 @@
+{
+  "shape": [
+    3,
+    18,
+    21,
+    23
+  ],
+  "dataType": "float32",
+  "configuration": {
+    "axis_roles": [
+      "component",
+      "spatial",
+      "spatial",
+      "spatial"
+    ],
+    "error_bound": 0.05,
+    "jacobian": {
+      "grid_spacing": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "min_det": 0.1
+    }
+  }
+}

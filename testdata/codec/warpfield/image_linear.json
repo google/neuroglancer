@@ -1,0 +1,17 @@
+{
+  "shape": [
+    33,
+    40,
+    2
+  ],
+  "dataType": "float32",
+  "configuration": {
+    "axis_roles": [
+      "spatial",
+      "spatial",
+      "component"
+    ],
+    "error_bound": 0.1,
+    "predictor": "linear"
+  }
+}

@@ -38,6 +38,7 @@ import "#src/datasource/zarr/codec/crc32c/resolve.js";
 import "#src/datasource/zarr/codec/gzip/resolve.js";
 import "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
 import "#src/datasource/zarr/codec/transpose/resolve.js";
+import "#src/datasource/zarr/codec/warpfield/resolve.js";
 import type {
   ArrayMetadata,
   DimensionSeparator,
