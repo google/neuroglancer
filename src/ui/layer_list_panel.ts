@@ -25,6 +25,7 @@ import type {
 } from "#src/layer/index.js";
 import { deleteLayer } from "#src/layer/index.js";
 import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type { DropLayers } from "#src/ui/layer_drag_and_drop.js";
 import {
   registerLayerBarDragLeaveHandler,
@@ -44,6 +45,7 @@ import { createSteppedCssGradient } from "#src/util/color.js";
 import { RefCounted } from "#src/util/disposable.js";
 import { updateChildren } from "#src/util/dom.js";
 import { emptyToUndefined } from "#src/util/json.js";
+import { hasCommandOrControl } from "#src/util/platform.js";
 import type { Trackable } from "#src/util/trackable.js";
 import { CheckboxIcon } from "#src/widget/checkbox_icon.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
@@ -167,12 +169,15 @@ class LayerColorWidget extends RefCounted {
       if (colors.length === 1) setSingleColor();
       else setMultiColor();
     };
+    const scheduleLayerColorUpdate = this.registerCancellable(
+      animationFrameDebounce(updateLayerColorWidget),
+    );
 
     const listenForColorChange = () => {
       if (!this.layer.isReady()) return;
       this.colorChangeDisposer();
       this.colorChangeDisposer = layer.observeLayerColor(() => {
-        updateLayerColorWidget();
+        scheduleLayerColorUpdate();
       });
     };
     this.registerDisposer(this.colorChangeDisposer);
@@ -183,12 +188,12 @@ class LayerColorWidget extends RefCounted {
     this.registerDisposer(
       layer.layerChanged.add(() => {
         element.dataset.visible = this.layer.visible.toString();
-        updateLayerColorWidget();
+        scheduleLayerColorUpdate();
       }),
     );
     element.dataset.visible = this.layer.visible.toString();
     listenForColorChange();
-    updateLayerColorWidget();
+    scheduleLayerColorUpdate();
   }
 
   private updateTooltip(message: string) {
@@ -303,7 +308,7 @@ class LayerListItem extends RefCounted {
     );
 
     element.addEventListener("click", (event: MouseEvent) => {
-      if (event.ctrlKey) {
+      if (hasCommandOrControl(event)) {
         panel.selectedLayer.toggle(layer);
         event.preventDefault();
       } else if (event.altKey) {
@@ -338,11 +343,34 @@ export class LayerListPanel extends SidePanel {
     sidePanelManager: SidePanelManager,
     public manager: TopLevelLayerListSpecification,
     public state: LayerListPanelState,
+    public layerPanelVisibility: WatchableValueInterface<boolean>,
+    public showLayerPanel?: WatchableValueInterface<boolean>,
   ) {
     super(sidePanelManager, state.location);
     const { itemContainer, layerDropZone } = this;
-    const { titleElement } = this.addTitleBar({ title: "" });
+    const { titleElement, titleBar } = this.addTitleBar({ title: "" });
     this.titleElement = titleElement!;
+
+    // Add layer panel toggle button to title bar.
+    if (showLayerPanel !== undefined) {
+      const toggleButton = new CheckboxIcon(this.layerPanelVisibility, {
+        svg: svg_eye,
+        backgroundScheme: "dark",
+        enableTitle: "Show layer panel",
+        disableTitle: "Hide layer panel",
+      });
+      toggleButton.element.style.order = "50"; // Position before close button (order: 100)
+      titleBar.appendChild(toggleButton.element);
+      this.registerDisposer(toggleButton);
+
+      // The toggle is only meaningful while the configuration permits the
+      // panel, so track the configuration rather than sampling it once.
+      const updateToggleVisibility = () => {
+        toggleButton.element.style.display = showLayerPanel.value ? "" : "none";
+      };
+      this.registerDisposer(showLayerPanel.changed.add(updateToggleVisibility));
+      updateToggleVisibility();
+    }
     itemContainer.classList.add("neuroglancer-layer-list-panel-items");
     this.addBody(itemContainer);
     layerDropZone.style.flex = "1";

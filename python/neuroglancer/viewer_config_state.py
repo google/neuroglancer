@@ -311,6 +311,9 @@ class ConfigState(JsonObjectWrapper):
     show_location = showLocation = wrapped_property(
         "showLocation", optional(bool, True)
     )
+    show_annotation_tool_status = showAnnotationToolStatus = wrapped_property(
+        "showAnnotationToolStatus", optional(bool, True)
+    )
     show_layer_panel = showLayerPanel = wrapped_property(
         "showLayerPanel", optional(bool, True)
     )
@@ -319,6 +322,9 @@ class ConfigState(JsonObjectWrapper):
     )
     show_settings_button = showSettingsButton = wrapped_property(
         "showSettingsButton", optional(bool, True)
+    )
+    show_edit_state_button = showEditStateButton = wrapped_property(
+        "showEditStateButton", optional(bool, True)
     )
     show_layer_side_panel_button = showLayerSidePanelButton = wrapped_property(
         "showLayerSidePanelButton", optional(bool, True)
@@ -340,6 +346,9 @@ class ConfigState(JsonObjectWrapper):
     )
     show_panel_borders = showPanelBorders = wrapped_property(
         "showPanelBorders", optional(bool, True)
+    )
+    show_panel_controls = showPanelControls = wrapped_property(
+        "showPanelControls", optional(bool, True)
     )
     show_all_dimension_plot_bounds = showAllDimensionPlotBounds = wrapped_property(
         "showAllDimensionPlotBounds", optional(bool, True)

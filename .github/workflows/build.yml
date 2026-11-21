@@ -31,11 +31,11 @@ jobs:
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           # Need full history to determine version number.
           fetch-depth: 0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24.x
           cache: "npm"
@@ -47,7 +47,7 @@ jobs:
           enable-cache: false
       # go needed for fake_gcs_server used by the javascript tests
       - name: Setup go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "stable"
           cache: false
@@ -76,19 +76,19 @@ jobs:
       - name: Run JavaScript benchmarks
         run: npm run benchmark
       - name: Upload NPM package as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: npm-package
           path: dist/package
         if: ${{ runner.os == 'Linux' }}
       - name: Upload client as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: client
           path: dist/client
         if: ${{ runner.os == 'Linux' }}
       - name: Upload Python client static as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: python-client-static
           path: python/neuroglancer/static/client
@@ -96,18 +96,18 @@ jobs:
   example-project-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Install pnpm
         uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
         with:
           version: 10
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24.x
           cache: "pnpm"
           cache-dependency-path: |
             examples/**/pnpm-lock.yaml
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24.x
           cache: "npm"
@@ -116,7 +116,7 @@ jobs:
       - run: npm ci
       - run: npm run example-project-test -- --reporter=html
       - name: Upload report and built clients
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: example-project-test-results
@@ -130,6 +130,8 @@ jobs:
   # Windows, this only runs tests that do not require a browser, since a working
   # headless WebGL2 implementation is not available on Github actions.
   python-tests:
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     strategy:
       matrix:
         python-version:
@@ -141,11 +143,11 @@ jobs:
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           # Need full history to determine version number.
           fetch-depth: 0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24.x
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
@@ -179,19 +181,19 @@ jobs:
           - os: "windows-2025-vs2026"
             cibw_build: "*"
             wheel_identifier: "windows"
-          - os: "macos-14"
+          - os: "macos-15"
             cibw_build: "*_x86_64"
             wheel_identifier: "macos_x86_64"
-          - os: "macos-14"
+          - os: "macos-15"
             cibw_build: "*_arm64"
             wheel_identifier: "macos_arm64"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           # Need full history to determine version number.
           fetch-depth: 0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24.x
           cache: "npm"
@@ -227,7 +229,7 @@ jobs:
           # capping the transitive cryptography version for x86_64 test installs only.
           CIBW_TEST_ENVIRONMENT_MACOS: ${{ matrix.wheel_identifier == 'macos_x86_64' && format('UV_CONSTRAINT={0}/python/build_tools/macos-x86_64-test-constraints.txt', github.workspace) || '' }}
       - name: Upload wheels as artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: python-wheels-${{ matrix.wheel_identifier }}
           path: |
@@ -237,10 +239,11 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: false
+          python-version: "3.13"
       - name: Setup Graphviz
         uses: ts-graphviz/setup-graphviz@b1de5da23ed0a6d14e0aeee8ed52fdd87af2363c # v2.0.2
         with:
@@ -248,7 +251,7 @@ jobs:
       - name: Build docs
         run: uvx nox -s docs
       - name: Upload docs as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: docs
           path: |
@@ -262,23 +265,23 @@ jobs:
       - "client"
       - "python-build-package"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Use Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24.x
           registry-url: "https://registry.npmjs.org"
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: python-wheels-*
           path: dist
           merge-multiple: true
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: npm-package
           path: npm-package
       - name: Publish to PyPI (main server)
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           user: __token__
           password: ${{ secrets.pypi_token }}
@@ -296,15 +299,15 @@ jobs:
       - "client"
       - "docs"
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "24.18.0"
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: client
           path: dist/client
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: python-client-static
           path: python/neuroglancer/static/client
@@ -315,7 +318,7 @@ jobs:
           projectId: neuroglancer-demo
           channelId: live
           target: app
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: docs
           path: dist/docs
@@ -383,9 +386,9 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Setup go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: ngauth_server/go.mod
           cache-dependency-path: ngauth_server/go.sum
@@ -399,10 +402,11 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - run: ./src/mesh/draco/build.sh
       - run: ./src/sliceview/compresso/build.sh
       - run: ./src/sliceview/png/build.sh
       - run: ./src/sliceview/jxl/build.sh
+      - run: ./src/sliceview/crackle/build.sh
       # Check that there are no differences.
       - run: git diff --exit-code

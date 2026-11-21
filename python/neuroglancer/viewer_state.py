@@ -361,6 +361,72 @@ class DimensionTool(LayerTool):
     dimension = wrapped_property("dimension", str)
 
 
+@export_tool
+class PaintBrushTool(LayerTool):
+    __slots__ = ()
+    TOOL_TYPE = "paintBrush"
+
+
+@export_tool
+class FloodFillTool(LayerTool):
+    __slots__ = ()
+    TOOL_TYPE = "floodFill"
+
+
+@export_tool
+class PickPaintValueTool(LayerTool):
+    __slots__ = ()
+    TOOL_TYPE = "pickPaintValue"
+
+
+@export_tool
+class BrushRadiusTool(LayerTool):
+    __slots__ = ()
+    TOOL_TYPE = "brushRadius"
+
+
+@export_tool
+class BrushShapeTool(LayerTool):
+    __slots__ = ()
+    TOOL_TYPE = "brushShape"
+
+
+@export_tool
+class FloodFillMaxVoxelsTool(LayerTool):
+    __slots__ = ()
+    TOOL_TYPE = "floodFillMaxVoxels"
+
+
+@export_tool
+class ErasePaintValueOnlyTool(LayerTool):
+    __slots__ = ()
+    TOOL_TYPE = "erasePaintValueOnly"
+
+
+@export_tool
+class PaintValueTool(LayerTool):
+    __slots__ = ()
+    TOOL_TYPE = "paintValue"
+
+
+@export_tool
+class RandomizePaintValueTool(LayerTool):
+    __slots__ = ()
+    TOOL_TYPE = "randomizePaintValue"
+
+
+@export_tool
+class UndoPaintTool(LayerTool):
+    __slots__ = ()
+    TOOL_TYPE = "undoPaint"
+
+
+@export_tool
+class RedoPaintTool(LayerTool):
+    __slots__ = ()
+    TOOL_TYPE = "redoPaint"
+
+
 @export
 class SidePanelLocation(JsonObjectWrapper):
     __slots__ = ()
@@ -414,6 +480,84 @@ class DimensionPlaybackVelocity(JsonObjectWrapper):
     velocity = wrapped_property("velocity", optional(float, 10))
     at_boundary = atBoundary = wrapped_property("atBoundary", optional(str, "reverse"))
     paused = wrapped_property("paused", optional(bool, True))
+
+
+@export
+class AnnotationsAccordion(JsonObjectWrapper):
+    """Accordion state for layer annotation controls."""
+
+    __slots__ = ()
+
+    spacing_expanded = spacingExpanded = wrapped_property(
+        "spacingExpanded", optional(bool)
+    )
+    related_segments_expanded = relatedSegmentsExpanded = wrapped_property(
+        "relatedSegmentsExpanded", optional(bool)
+    )
+    annotations_expanded = annotationsExpanded = wrapped_property(
+        "annotationsExpanded", optional(bool)
+    )
+
+
+@export
+class ImageRenderingAccordion(JsonObjectWrapper):
+    """Accordion state for image layer rendering controls."""
+
+    __slots__ = ()
+
+    slice_expanded = sliceExpanded = wrapped_property("sliceExpanded", optional(bool))
+    volume_rendering_expanded = volumeRenderingExpanded = wrapped_property(
+        "volumeRenderingExpanded", optional(bool)
+    )
+    shader_expanded = shaderExpanded = wrapped_property(
+        "shaderExpanded", optional(bool)
+    )
+
+
+@export
+class SegmentationRenderingAccordion(JsonObjectWrapper):
+    """Accordion state for segmentation layer rendering controls."""
+
+    __slots__ = ()
+
+    visibility_expanded = visibilityExpanded = wrapped_property(
+        "visibilityExpanded", optional(bool)
+    )
+    appearance_expanded = appearanceExpanded = wrapped_property(
+        "appearanceExpanded", optional(bool)
+    )
+    slice_rendering_expanded = sliceRenderingExpanded = wrapped_property(
+        "sliceRenderingExpanded", optional(bool)
+    )
+    mesh_rendering_expanded = meshRenderingExpanded = wrapped_property(
+        "meshRenderingExpanded", optional(bool)
+    )
+    skeletons_expanded = skeletonsExpanded = wrapped_property(
+        "skeletonsExpanded", optional(bool)
+    )
+
+
+@export
+class LayerAccordions(JsonObjectWrapper):
+    """Keyed by layer tab id."""
+
+    __slots__ = ()
+
+    annotations = wrapped_property("annotations", AnnotationsAccordion)
+
+
+@export
+class ImageLayerAccordions(LayerAccordions):
+    __slots__ = ()
+
+    rendering = wrapped_property("rendering", ImageRenderingAccordion)
+
+
+@export
+class SegmentationLayerAccordions(LayerAccordions):
+    __slots__ = ()
+
+    rendering = wrapped_property("rendering", SegmentationRenderingAccordion)
 
 
 @export
@@ -490,6 +634,9 @@ class LayerDataSubsource(JsonObjectWrapper):
         super().__init__(json_data, *args, **kwargs)
 
     enabled = wrapped_property("enabled", optional(bool))
+    writing_enabled = writingEnabled = wrapped_property(
+        "writingEnabled", optional(bool)
+    )
 
 
 @export
@@ -538,6 +685,7 @@ class LayerDataSources(_LayerDataSourcesBase):
 
 class _AnnotationLayerOptions:
     __slots__ = ()
+    accordions = wrapped_property("accordions", LayerAccordions)
     annotation_color = annotationColor = wrapped_property(
         "annotationColor", optional(str)
     )
@@ -593,6 +741,35 @@ _shader_control_parameters.supports_readonly = True  # type: ignore[attr-defined
 ShaderControls = typed_map(str, _shader_control_parameters)
 
 
+class _PaintValue(int):
+    supports_validation = True
+    _neuroglancer_annotation = int
+
+    # Serialized as a base-10 string, like the frontend, to keep 64-bit precision.
+    def to_json(self):
+        return str(self)
+
+
+@export
+class VoxelEditingOptions(JsonObjectWrapper):
+    __slots__ = ()
+
+    paint_value = paintValue = wrapped_property(
+        "paintValue", optional(_PaintValue, _PaintValue(1))
+    )
+    brush_radius = brushRadius = wrapped_property("brushRadius", optional(int, 3))
+    brush_shape = brushShape = wrapped_property("brushShape", optional(str, "disk"))
+    flood_fill_max_voxels = floodFillMaxVoxels = wrapped_property(
+        "floodFillMaxVoxels", optional(int, 10000)
+    )
+    flood_fill_morphological = floodFillMorphological = wrapped_property(
+        "floodFillMorphological", optional(bool, True)
+    )
+    erase_paint_value_only = erasePaintValueOnly = wrapped_property(
+        "erasePaintValueOnly", optional(bool, False)
+    )
+
+
 @export
 class ImageLayer(Layer, _AnnotationLayerOptions):
     __slots__ = ()
@@ -622,6 +799,8 @@ class ImageLayer(Layer, _AnnotationLayerOptions):
     cross_section_render_scale = crossSectionRenderScale = wrapped_property(
         "crossSectionRenderScale", optional(float, 1)
     )
+    accordions = wrapped_property("accordions", ImageLayerAccordions)
+    voxel_editing = voxelEditing = wrapped_property("voxelEditing", VoxelEditingOptions)
 
     @staticmethod
     def interpolate(a, b, t):
@@ -960,6 +1139,7 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     skeleton_rendering = skeletonRendering = wrapped_property(
         "skeletonRendering", SkeletonRenderingOptions
     )
+    accordions = wrapped_property("accordions", SegmentationLayerAccordions)
 
     @property
     def skeleton_shader(self):
@@ -988,6 +1168,9 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     segment_default_color = segmentDefaultColor = wrapped_property(
         "segmentDefaultColor", optional(str)
     )
+    segment_color_shader = segmentColorShader = wrapped_property(
+        "segmentColorShader", optional(str)
+    )
 
     @property
     def segment_html_color_dict(self):
@@ -1006,6 +1189,7 @@ class SegmentationLayer(Layer, _AnnotationLayerOptions):
     linked_segmentation_group = linkedSegmentationGroup = wrapped_property(
         "linkedSegmentationGroup", optional(str)
     )
+    voxel_editing = voxelEditing = wrapped_property("voxelEditing", VoxelEditingOptions)
     linked_segmentation_color_group = linkedSegmentationColorGroup = wrapped_property(
         "linkedSegmentationColorGroup", optional(_linked_segmentation_color_group_value)
     )

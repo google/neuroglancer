@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
+import { VolumeChunk } from "#src/sliceview/volume/chunk.js";
 import type {
   VolumeChunkSource,
   ChunkFormat,
 } from "#src/sliceview/volume/frontend.js";
-import { VolumeChunk } from "#src/sliceview/volume/frontend.js";
 import type { TypedArray } from "#src/util/array.js";
 import type { DataType } from "#src/util/data_type.js";
 import type { Disposable } from "#src/util/disposable.js";
@@ -57,7 +57,7 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
   abstract get shaderSamplerType(): ShaderSamplerType;
 
   beginDrawing(gl: GL, shader: ShaderProgram) {
-    const textureUnit = shader.textureUnit(textureUnitSymbol);
+    const textureUnit = shader.textureUnit(textureUnitSymbol)!;
     gl.activeTexture(WebGL2RenderingContext.TEXTURE0 + textureUnit);
     (<any>shader)[textureLayoutSymbol] = null;
   }
@@ -144,6 +144,28 @@ export abstract class SingleTextureVolumeChunk<
     gl.bindTexture(textureTarget, texture);
     this.setTextureData(gl);
     gl.bindTexture(textureTarget, null);
+  }
+
+  updateFromCpuData(gl: GL) {
+    if (this.data == null) return;
+
+    if (this.texture == null) {
+      this.copyToGPU(gl);
+      return;
+    }
+
+    const textureTarget =
+      textureTargetForSamplerType[this.chunkFormat.shaderSamplerType];
+    gl.bindTexture(textureTarget, this.texture);
+    try {
+      this.chunkFormat.setTextureData(
+        gl,
+        this.textureLayout!,
+        this.data as unknown as TypedArray,
+      );
+    } finally {
+      gl.bindTexture(textureTarget, null);
+    }
   }
 
   freeGPUMemory(gl: GL) {

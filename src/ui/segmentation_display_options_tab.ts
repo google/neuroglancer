@@ -16,9 +16,17 @@
 
 import { buildShaderPropertyList } from "#src/layer/annotation/shader_ui_property_list.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
-import { SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID } from "#src/layer/segmentation/json_keys.js";
+import {
+  APPEARANCE_SECTION_JSON_KEY,
+  MESH_SECTION_JSON_KEY,
+  SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID,
+  SKELETON_SECTION_JSON_KEY,
+  VISIBILITY_SECTION_JSON_KEY,
+} from "#src/layer/segmentation/json_keys.js";
 import { LAYER_CONTROLS } from "#src/layer/segmentation/layer_controls.js";
 import { Overlay } from "#src/overlay.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { AccordionTab } from "#src/widget/accordion.js";
 import { DependentViewWidget } from "#src/widget/dependent_view_widget.js";
 import { addLayerControlToOptionsTab } from "#src/widget/layer_control.js";
 import { LinkedLayerGroupWidget } from "#src/widget/linked_layer.js";
@@ -27,20 +35,27 @@ import {
   ShaderCodeWidget,
 } from "#src/widget/shader_code_widget.js";
 import { ShaderControls } from "#src/widget/shader_controls.js";
-import { Tab } from "#src/widget/tab_view.js";
+
+function makeSegmentColorShaderCodeWidget(layer: SegmentationUserLayer) {
+  return new ShaderCodeWidget({
+    fragment: layer.displayState.fragmentSegmentColor,
+    shaderError: layer.displayState.shaderError,
+    shaderControlState: layer.displayState.segmentColorShaderControlState,
+  });
+}
 
 function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
   return new ShaderCodeWidget({
-    fragmentMain: layer.displayState.skeletonRenderingOptions.shader,
-    shaderError: layer.displayState.shaderError,
+    fragment: layer.displayState.skeletonRenderingOptions.shader,
+    shaderError: layer.displayState.skeletonRenderingOptions.shaderError,
     shaderControlState:
       layer.displayState.skeletonRenderingOptions.shaderControlState,
   });
 }
 
-export class DisplayOptionsTab extends Tab {
+export class DisplayOptionsTab extends AccordionTab {
   constructor(public layer: SegmentationUserLayer) {
-    super();
+    super(layer.renderingAccordionState);
     const { element } = this;
     element.classList.add("neuroglancer-segmentation-rendering-tab");
 
@@ -50,7 +65,7 @@ export class DisplayOptionsTab extends Tab {
         new LinkedLayerGroupWidget(layer.displayState.linkedSegmentationGroup),
       );
       widget.label.textContent = "Linked to: ";
-      element.appendChild(widget.element);
+      this.appendChild(widget.element, VISIBILITY_SECTION_JSON_KEY);
     }
 
     // Linked segmentation control
@@ -61,14 +76,43 @@ export class DisplayOptionsTab extends Tab {
         ),
       );
       widget.label.textContent = "Colors linked to: ";
-      element.appendChild(widget.element);
+      this.appendChild(widget.element, APPEARANCE_SECTION_JSON_KEY);
     }
 
     for (const control of LAYER_CONTROLS) {
-      element.appendChild(
+      this.appendChild(
         addLayerControlToOptionsTab(this, layer, this.visibility, control),
+        control.sectionKey,
       );
     }
+
+    const segmentColorCodeWidget = this.registerDisposer(
+      makeSegmentColorShaderCodeWidget(layer),
+    );
+    element.appendChild(
+      makeShaderCodeWidgetTopRow(
+        this.layer,
+        segmentColorCodeWidget,
+        SegmentColorShaderCodeOverlay,
+        {
+          title: "Documentation on segmentation layer rendering",
+          href: "https://github.com/google/neuroglancer/blob/master/src/layer/segmentation/rendering.md",
+        },
+        "neuroglancer-segmentation-dropdown-shader-header",
+        "Segment Color Shader",
+      ),
+    );
+    element.appendChild(segmentColorCodeWidget.element);
+    element.appendChild(
+      this.registerDisposer(
+        new ShaderControls(
+          this.layer.displayState.segmentColorShaderControlState,
+          this.layer.manager.root.display,
+          this.layer,
+          { visibility: this.visibility },
+        ),
+      ).element,
+    );
 
     const skeletonControls = this.registerDisposer(
       new DependentViewWidget(
@@ -94,12 +138,14 @@ export class DisplayOptionsTab extends Tab {
             makeShaderCodeWidgetTopRow(
               this.layer,
               codeWidget,
-              ShaderCodeOverlay,
+              SkeletonShaderCodeOverlay,
               {
                 title: "Documentation on image layer rendering",
                 href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
               },
-              "neuroglancer-segmentation-dropdown-skeleton-shader-header",
+              "neuroglancer-segmentation-dropdown-shader-header",
+              "Skeleton Shader",
+              layer.displayState.skeletonRenderingOptions.codeVisible,
             ),
           );
           parent.appendChild(codeWidget.element);
@@ -124,11 +170,37 @@ export class DisplayOptionsTab extends Tab {
         this.visibility,
       ),
     );
-    element.appendChild(skeletonControls.element);
+    this.appendChild(skeletonControls.element, SKELETON_SECTION_JSON_KEY);
+    this.hideSectionUnless(SKELETON_SECTION_JSON_KEY, layer.hasSkeletonsLayer);
+    this.hideSectionUnless(MESH_SECTION_JSON_KEY, layer.hasMeshLayer);
+  }
+
+  private hideSectionUnless(
+    jsonKey: string,
+    hasContent: WatchableValueInterface<boolean>,
+  ) {
+    const update = () => this.setSectionHidden(jsonKey, !hasContent.value);
+    update();
+    this.registerDisposer(hasContent.changed.add(update));
   }
 }
 
-class ShaderCodeOverlay extends Overlay {
+class SegmentColorShaderCodeOverlay extends Overlay {
+  codeWidget: ShaderCodeWidget;
+  constructor(public layer: SegmentationUserLayer) {
+    super();
+    this.codeWidget = this.registerDisposer(
+      makeSegmentColorShaderCodeWidget(layer),
+    );
+    this.content.classList.add(
+      "neuroglancer-segmentation-layer-segment-color-shader-overlay",
+    );
+    this.content.appendChild(this.codeWidget.element);
+    this.codeWidget.textEditor.refresh();
+  }
+}
+
+class SkeletonShaderCodeOverlay extends Overlay {
   codeWidget: ShaderCodeWidget;
   constructor(public layer: SegmentationUserLayer) {
     super();

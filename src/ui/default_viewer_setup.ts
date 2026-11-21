@@ -15,13 +15,17 @@
  */
 
 import { StatusMessage } from "#src/status.js";
+import { bindCommandPalette } from "#src/ui/command_palette.js";
 import {
   bindDefaultCopyHandler,
   bindDefaultPasteHandler,
 } from "#src/ui/default_clipboard_handling.js";
+import { registerDefaultCommands } from "#src/ui/default_commands.js";
 import { setDefaultInputEventBindings } from "#src/ui/default_input_event_bindings.js";
 import { makeDefaultViewer } from "#src/ui/default_viewer.js";
 import type { MinimalViewerOptions } from "#src/ui/minimal_viewer.js";
+import { bindScreenshotDialog } from "#src/ui/screenshot_menu.js";
+import { bindStateEditor } from "#src/ui/state_editor.js";
 import { bindTitle } from "#src/ui/title.js";
 import { UrlHashBinding } from "#src/ui/url_hash_binding.js";
 
@@ -62,6 +66,29 @@ export function setupDefaultViewer(options?: Partial<MinimalViewerOptions>) {
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);
+  registerDefaultCommands(viewer.commandRegistry);
+  bindCommandPalette(viewer);
+  bindStateEditor(viewer);
+  bindScreenshotDialog(viewer);
 
   return viewer;
+}
+
+/**
+ * Sets up a neuroglancer viewer with no chrome, for a host that supplies its
+ * own UI.
+ *
+ * The viewer keeps the bindings, the commands and the dialogs of
+ * `setupDefaultViewer`. The layout fills the viewer element. The layer bar,
+ * the panel controls and the add-layer dialog are off unless the options turn
+ * them on.
+ */
+export function setupEngine(options?: Partial<MinimalViewerOptions>) {
+  return setupDefaultViewer({
+    showLayerDialog: false,
+    showLayerPanel: false,
+    showPanelControls: false,
+    ...options,
+    chrome: false,
+  });
 }

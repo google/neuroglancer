@@ -30,7 +30,15 @@ import type { CoordinateTransformSpecification } from "#src/coordinate_transform
 import { makeCoordinateSpace } from "#src/coordinate_transform.js";
 import type { DataSourceSpecification } from "#src/datasource/index.js";
 import { localAnnotationsUrl, LocalDataSource } from "#src/datasource/local.js";
+import {
+  registerAnnotationPropertyTools,
+  removeInvalidPropertyToolBindings,
+} from "#src/layer/annotation/property_tools.js";
 import { buildShaderPropertyList } from "#src/layer/annotation/shader_ui_property_list.js";
+import {
+  SELECT_NEXT_ANNOTATION_TOOL_ID,
+  SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
+} from "#src/layer/annotation/tool_state.js";
 import type { LayerManager, ManagedUserLayer } from "#src/layer/index.js";
 import {
   LayerReference,
@@ -59,7 +67,13 @@ import type {
   AnnotationLayerView,
   MergedAnnotationStates,
 } from "#src/ui/annotations.js";
-import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
+import {
+  RELATED_SEGMENT_SECTION_JSON_KEY,
+  SPACING_SECTION_JSON_KEY,
+  UserLayerWithAnnotationsMixin,
+} from "#src/ui/annotations.js";
+import type { ToolActivation } from "#src/ui/tool.js";
+import { LayerTool, registerTool } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -399,11 +413,38 @@ class LinkedSegmentationLayersWidget extends RefCounted {
 }
 
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
+
+class SelectPreviousAnnotationTool extends LayerTool<AnnotationUserLayer> {
+  activate(activation: ToolActivation<this>) {
+    this.layer.shiftSelectedIndexBy(-1);
+    activation.cancel();
+  }
+  toJSON() {
+    return SELECT_PREVIOUS_ANNOTATION_TOOL_ID;
+  }
+  get description() {
+    return "select previous annotation";
+  }
+}
+
+class SelectNextAnnotationTool extends LayerTool<AnnotationUserLayer> {
+  activate(activation: ToolActivation<this>) {
+    this.layer.shiftSelectedIndexBy(1);
+    activation.cancel();
+  }
+  toJSON() {
+    return SELECT_NEXT_ANNOTATION_TOOL_ID;
+  }
+  get description() {
+    return "select next annotation";
+  }
+}
+
 export class AnnotationUserLayer extends Base {
   localAnnotations: LocalAnnotationSource | undefined;
   codeVisible = new TrackableBoolean(true);
   hideInactiveShaderControls = new TrackableBoolean(false);
-  private localAnnotationProperties: WatchableValue<AnnotationPropertySpec[]> =
+  readonly localAnnotationProperties: WatchableValue<AnnotationPropertySpec[]> =
     new WatchableValue([]);
   private localAnnotationRelationships: string[];
   private localAnnotationsJson: any = undefined;
@@ -455,9 +496,20 @@ export class AnnotationUserLayer extends Base {
       getter: () => new AnnotationSchemaTab(this),
     });
     this.tabs.default = "annotations";
+    this.registerDisposer(
+      this.localAnnotationProperties.changed.add(() =>
+        removeInvalidPropertyToolBindings(this),
+      ),
+    );
   }
 
   restoreState(specification: any) {
+    const properties = verifyOptionalObjectProperty(
+      specification,
+      ANNOTATION_PROPERTIES_JSON_KEY,
+      parseAnnotationPropertySpecs,
+    );
+    this.localAnnotationProperties.value = properties ?? [];
     super.restoreState(specification);
     this.linkedSegmentationLayers.restoreState(specification);
     this.codeVisible.restoreState(specification[CODE_VISIBLE_KEY]);
@@ -465,13 +517,6 @@ export class AnnotationUserLayer extends Base {
       specification[HIDE_INACTIVE_SHADER_CONTROLS_JSON_KEY],
     );
     this.localAnnotationsJson = specification[ANNOTATIONS_JSON_KEY];
-    const properties = verifyOptionalObjectProperty(
-      specification,
-      ANNOTATION_PROPERTIES_JSON_KEY,
-      parseAnnotationPropertySpecs,
-    );
-    this.localAnnotationProperties.value = properties ?? [];
-
     this.localAnnotationRelationships = verifyOptionalObjectProperty(
       specification,
       ANNOTATION_RELATIONSHIPS_JSON_KEY,
@@ -711,12 +756,14 @@ export class AnnotationUserLayer extends Base {
             renderScaleWidget.label.textContent = "Spacing (projection)";
             parent.appendChild(renderScaleWidget.element);
           }
+          tab.showSection(SPACING_SECTION_JSON_KEY);
         },
       ),
     );
-    tab.element.insertBefore(
+    tab.appendChild(
       renderScaleControls.element,
-      tab.element.firstChild,
+      SPACING_SECTION_JSON_KEY,
+      !hasChunkedSource.value,
     );
     {
       const checkbox = tab.registerDisposer(
@@ -731,12 +778,13 @@ export class AnnotationUserLayer extends Base {
       label.title =
         "Display all annotations if filtering by related segments is enabled but no segments are selected";
       label.appendChild(checkbox.element);
-      tab.element.appendChild(label);
+      tab.appendChild(label, RELATED_SEGMENT_SECTION_JSON_KEY);
     }
-    tab.element.appendChild(
+    tab.appendChild(
       tab.registerDisposer(
         new LinkedSegmentationLayersWidget(this.linkedSegmentationLayers),
       ).element,
+      RELATED_SEGMENT_SECTION_JSON_KEY,
     );
   }
 
@@ -808,7 +856,7 @@ export class AnnotationUserLayer extends Base {
 function makeShaderCodeWidget(layer: AnnotationUserLayer) {
   return new ShaderCodeWidget({
     shaderError: layer.annotationDisplayState.shaderError,
-    fragmentMain: layer.annotationDisplayState.shader,
+    fragment: layer.annotationDisplayState.shader,
     shaderControlState: layer.annotationDisplayState.shaderControls,
   });
 }
@@ -913,6 +961,20 @@ for (const control of Object.values(LAYER_CONTROLS)) {
 
 registerLayerType(AnnotationUserLayer);
 registerLayerType(AnnotationUserLayer, "pointAnnotation");
+
+registerAnnotationPropertyTools(AnnotationUserLayer);
+
+registerTool(
+  AnnotationUserLayer,
+  SELECT_PREVIOUS_ANNOTATION_TOOL_ID,
+  (layer) => new SelectPreviousAnnotationTool(layer),
+);
+registerTool(
+  AnnotationUserLayer,
+  SELECT_NEXT_ANNOTATION_TOOL_ID,
+  (layer) => new SelectNextAnnotationTool(layer),
+);
+
 registerLayerTypeDetector((subsource) => {
   if (subsource.local === LocalDataSource.annotations) {
     return { layerConstructor: AnnotationUserLayer, priority: 100 };

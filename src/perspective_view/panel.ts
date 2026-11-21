@@ -56,7 +56,6 @@ import {
 } from "#src/ssao/trackable_ssao_params.js";
 import { StatusMessage } from "#src/status.js";
 import type { TrackableBoolean } from "#src/trackable_boolean.js";
-import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
 import type {
   TrackableValue,
   WatchableValueInterface,
@@ -99,7 +98,6 @@ export interface PerspectiveViewerState extends RenderedDataViewerState {
   showSliceViews: TrackableBoolean;
   showScaleBar: TrackableBoolean;
   scaleBarOptions: TrackableValue<ScaleBarOptions>;
-  showSliceViewsCheckbox?: boolean;
   crossSectionBackgroundColor: TrackableRGB;
   perspectiveViewBackgroundColor: TrackableRGB;
   hideCrossSectionBackground3D: TrackableBoolean;
@@ -658,19 +656,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       },
     );
 
-    if (viewer.showSliceViewsCheckbox) {
-      const showSliceViewsCheckbox = this.registerDisposer(
-        new TrackableBooleanCheckbox(viewer.showSliceViews),
-      );
-      showSliceViewsCheckbox.element.className =
-        "perspective-panel-show-slice-views neuroglancer-noselect";
-      const showSliceViewsLabel = document.createElement("label");
-      showSliceViewsLabel.className =
-        "perspective-panel-show-slice-views neuroglancer-noselect";
-      showSliceViewsLabel.appendChild(document.createTextNode("Sections"));
-      showSliceViewsLabel.appendChild(showSliceViewsCheckbox.element);
-      this.element.appendChild(showSliceViewsLabel);
-    }
     this.registerDisposer(
       viewer.orthographicProjection.changed.add(() => {
         this.projectionParameters.update();

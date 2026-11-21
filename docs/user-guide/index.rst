@@ -12,6 +12,10 @@ Topics
   to segmentation layers.
 - :doc:`annotation_shaders` — writing custom GLSL shader code to drive
   the visual appearance of annotations from their properties.
+- :doc:`voxel_annotation` — painting, erasing and flood filling voxels of
+  image and segmentation layers.
+- :doc:`segmentation_shaders` — writing custom GLSL shader code to color
+  segmentation layers from segment ids and segment properties.
 - :doc:`rendering` — perspective-view rendering modes, including
   screen-space ambient occlusion.
 
@@ -21,4 +25,6 @@ Topics
    navigation
    annotations
    annotation_shaders
+   voxel_annotation
+   segmentation_shaders
    rendering

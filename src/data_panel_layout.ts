@@ -43,12 +43,15 @@ import { SliceView } from "#src/sliceview/frontend.js";
 import type { SliceViewerState } from "#src/sliceview/panel.js";
 import { SliceViewPanel } from "#src/sliceview/panel.js";
 import type { TrackableSSAO } from "#src/ssao/trackable_ssao_params.js";
-import { TrackableBoolean } from "#src/trackable_boolean.js";
+import {
+  TrackableBoolean,
+  TrackableBooleanCheckbox,
+} from "#src/trackable_boolean.js";
 import type {
   WatchableSet,
   WatchableValueInterface,
 } from "#src/trackable_value.js";
-import { TrackableValue } from "#src/trackable_value.js";
+import { registerNested, TrackableValue } from "#src/trackable_value.js";
 import type { TrackableRGB } from "#src/util/color.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { RefCounted } from "#src/util/disposable.js";
@@ -104,6 +107,7 @@ export interface ViewerUIState
   hideCrossSectionBackground3D: TrackableBoolean;
   ssao: TrackableSSAO;
   pickRadius: TrackableValue<number>;
+  showPanelControls: WatchableValueInterface<boolean>;
 }
 
 export interface DataDisplayLayout extends RefCounted {
@@ -211,24 +215,64 @@ function getCommonSliceViewerState(viewer: ViewerUIState) {
   };
 }
 
+/**
+ * Adds a control to a data panel while `showPanelControls` is true.
+ */
+function addPanelControl(
+  layout: DataDisplayLayout,
+  panel: RenderedDataPanel,
+  makeControl: (context: RefCounted) => HTMLElement,
+) {
+  layout.registerDisposer(
+    registerNested((context, showPanelControls) => {
+      if (!showPanelControls) return;
+      const element = makeControl(context);
+      panel.element.appendChild(element);
+      context.registerDisposer(() => removeFromParent(element));
+    }, layout.container.viewer.showPanelControls),
+  );
+}
+
 function addDisplayDimensionsWidget(
   layout: DataDisplayLayout,
   panel: RenderedDataPanel,
 ) {
   const { navigationState } = panel;
-  panel.element.appendChild(
-    layout.registerDisposer(
-      new DisplayDimensionsWidget(
-        navigationState.pose.displayDimensionRenderInfo.addRef(),
-        navigationState.zoomFactor,
-        navigationState.depthRange.addRef(),
-        navigationState.pose.orientation.addRef(),
-        panel.boundsUpdated,
-        panel.renderViewport,
-        panel instanceof SliceViewPanel,
-      ),
-    ).element,
+  addPanelControl(
+    layout,
+    panel,
+    (context) =>
+      context.registerDisposer(
+        new DisplayDimensionsWidget(
+          navigationState.pose.displayDimensionRenderInfo.addRef(),
+          navigationState.zoomFactor,
+          navigationState.depthRange.addRef(),
+          navigationState.pose.orientation.addRef(),
+          panel.boundsUpdated,
+          panel.renderViewport,
+          panel instanceof SliceViewPanel,
+        ),
+      ).element,
   );
+}
+
+function addShowSliceViewsCheckbox(
+  layout: DataDisplayLayout,
+  panel: PerspectivePanel,
+) {
+  addPanelControl(layout, panel, (context) => {
+    const checkbox = context.registerDisposer(
+      new TrackableBooleanCheckbox(panel.viewer.showSliceViews),
+    );
+    checkbox.element.className =
+      "perspective-panel-show-slice-views neuroglancer-noselect";
+    const label = document.createElement("label");
+    label.className =
+      "perspective-panel-show-slice-views neuroglancer-noselect";
+    label.appendChild(document.createTextNode("Sections"));
+    label.appendChild(checkbox.element);
+    return label;
+  });
 }
 
 function registerRelatedLayouts(
@@ -236,9 +280,6 @@ function registerRelatedLayouts(
   panel: RenderedDataPanel,
   relatedLayouts: string[],
 ) {
-  const controls = document.createElement("div");
-  controls.className = "neuroglancer-data-panel-layout-controls";
-  layout.registerDisposer(() => removeFromParent(controls));
   for (let i = 0; i < 2; ++i) {
     const relatedLayout =
       relatedLayouts[Math.min(relatedLayouts.length - 1, i)];
@@ -253,18 +294,22 @@ function registerRelatedLayouts(
       ),
     );
   }
-  for (const relatedLayout of relatedLayouts) {
-    const button = document.createElement("button");
-    const innerDiv = document.createElement("div");
-    button.appendChild(innerDiv);
-    innerDiv.textContent = LAYOUT_SYMBOLS.get(relatedLayout)!;
-    button.title = `Switch to ${relatedLayout} layout.`;
-    button.addEventListener("click", () => {
-      layout.container.name = relatedLayout;
-    });
-    controls.appendChild(button);
-  }
-  panel.element.appendChild(controls);
+  addPanelControl(layout, panel, () => {
+    const controls = document.createElement("div");
+    controls.className = "neuroglancer-data-panel-layout-controls";
+    for (const relatedLayout of relatedLayouts) {
+      const button = document.createElement("button");
+      const innerDiv = document.createElement("div");
+      button.appendChild(innerDiv);
+      innerDiv.textContent = LAYOUT_SYMBOLS.get(relatedLayout)!;
+      button.title = `Switch to ${relatedLayout} layout.`;
+      button.addEventListener("click", () => {
+        layout.container.name = relatedLayout;
+      });
+      controls.appendChild(button);
+    }
+    return controls;
+  });
 }
 
 function makeSliceViewFromSpecification(
@@ -350,7 +395,6 @@ export class FourPanelLayout extends RefCounted {
     const perspectiveViewerState = {
       ...getCommonPerspectiveViewerState(container),
       showSliceViews: viewer.showPerspectiveSliceViews,
-      showSliceViewsCheckbox: true,
     };
 
     const sliceViewerState = {
@@ -412,6 +456,7 @@ export class FourPanelLayout extends RefCounted {
                 for (const sliceView of sliceViews.values()) {
                   panel.sliceViews.set(sliceView.addRef(), false);
                 }
+                addShowSliceViewsCheckbox(this, panel);
                 addDisplayDimensionsWidget(this, panel);
                 addUnconditionalSliceViews(viewer, panel, crossSections);
                 registerRelatedLayouts(this, panel, ["3d", "4panel-alt"]);
@@ -453,7 +498,6 @@ export class FourPanelAltLayout extends RefCounted {
     const perspectiveViewerState = {
       ...getCommonPerspectiveViewerState(container),
       showSliceViews: viewer.showPerspectiveSliceViews,
-      showSliceViewsCheckbox: true,
     };
 
     const sliceViewerState = {
@@ -523,6 +567,7 @@ export class FourPanelAltLayout extends RefCounted {
                 for (const sliceView of sliceViews.values()) {
                   panel.sliceViews.set(sliceView.addRef(), false);
                 }
+                addShowSliceViewsCheckbox(this, panel);
                 addDisplayDimensionsWidget(this, panel);
                 addUnconditionalSliceViews(viewer, panel, crossSections);
                 registerRelatedLayouts(this, panel, ["3d", "4panel"]);
@@ -558,7 +603,6 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
     const perspectiveViewerState = {
       ...getCommonPerspectiveViewerState(container),
       showSliceViews: viewer.showPerspectiveSliceViews,
-      showSliceViewsCheckbox: true,
     };
 
     const sliceViewerState = {
@@ -581,6 +625,7 @@ export class SliceViewPerspectiveTwoPanelLayout extends RefCounted {
             new PerspectivePanel(display, element, perspectiveViewerState),
           );
           panel.sliceViews.set(sliceView.addRef(), false);
+          addShowSliceViewsCheckbox(this, panel);
           addUnconditionalSliceViews(viewer, panel, crossSections);
           addDisplayDimensionsWidget(this, panel);
           registerRelatedLayouts(this, panel, ["3d", "4panel-alt"]);

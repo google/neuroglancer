@@ -34,7 +34,10 @@ import {
   UserLayer,
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
+import { registerVoxelEditingLayerControls } from "#src/layer/voxel_editing/controls.js";
+import { UserLayerWithVoxelEditingMixin } from "#src/layer/voxel_editing/index.js";
 import { Overlay } from "#src/overlay.js";
+import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import { getChannelSpace } from "#src/render_coordinate_transform.js";
 import {
   RenderScaleHistogram,
@@ -48,21 +51,25 @@ import {
   ImageRenderLayer,
 } from "#src/sliceview/volume/image_renderlayer.js";
 import { trackableAlphaValue } from "#src/trackable_alpha.js";
-import { trackableBlendModeValue } from "#src/trackable_blend.js";
+import { BLEND_MODES, trackableBlendModeValue } from "#src/trackable_blend.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { trackableFiniteFloat } from "#src/trackable_finite_float.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   makeCachedDerivedWatchableValue,
   makeCachedLazyDerivedWatchableValue,
+  makeDerivedWatchableValue,
   registerNested,
+  TrackableValue,
   WatchableValue,
 } from "#src/trackable_value.js";
 import { UserLayerWithAnnotationsMixin } from "#src/ui/annotations.js";
+import { registerVoxelEditingTools } from "#src/ui/voxel_editing.js";
 import { setClipboard } from "#src/util/clipboard.js";
 import type { Borrowed } from "#src/util/disposable.js";
 import { makeValueOrError } from "#src/util/error.js";
-import { verifyOptionalObjectProperty } from "#src/util/json.js";
+import { verifyFloat01, verifyOptionalObjectProperty } from "#src/util/json.js";
+import { TrackableEnum } from "#src/util/trackable_enum.js";
 import {
   trackableShaderModeValue,
   VolumeRenderingModes,
@@ -72,6 +79,8 @@ import {
   VOLUME_RENDERING_DEPTH_SAMPLES_DEFAULT_VALUE,
   VolumeRenderingRenderLayer,
 } from "#src/volume_rendering/volume_render_layer.js";
+import { EMPTY_VOXEL_VALUE } from "#src/voxel_editing/base.js";
+import { VoxelEditingPreviewRenderLayerMixin } from "#src/voxel_editing/preview_render_layer.js";
 import type { ParameterizedShaderGetterResult } from "#src/webgl/dynamic_shader.js";
 import { makeWatchableShaderError } from "#src/webgl/dynamic_shader.js";
 import type { ShaderControlsBuilderState } from "#src/webgl/shader_ui_controls.js";
@@ -79,6 +88,8 @@ import {
   setControlsInShader,
   ShaderControlState,
 } from "#src/webgl/shader_ui_controls.js";
+import type { AccordionState } from "#src/widget/accordion.js";
+import { AccordionTab } from "#src/widget/accordion.js";
 import { ChannelDimensionsWidget } from "#src/widget/channel_dimensions_widget.js";
 import { makeCopyButton } from "#src/widget/copy_button.js";
 import type { DependentViewContext } from "#src/widget/dependent_view_widget.js";
@@ -102,7 +113,6 @@ import {
   registerLayerShaderControlsTool,
   ShaderControls,
 } from "#src/widget/shader_controls.js";
-import { Tab } from "#src/widget/tab_view.js";
 
 const OPACITY_JSON_KEY = "opacity";
 const BLEND_JSON_KEY = "blend";
@@ -115,12 +125,20 @@ const CHANNEL_DIMENSIONS_JSON_KEY = "channelDimensions";
 const VOLUME_RENDERING_JSON_KEY = "volumeRendering";
 const VOLUME_RENDERING_GAIN_JSON_KEY = "volumeRenderingGain";
 const VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY = "volumeRenderingDepthSamples";
+const SLICE_SECTION_JSON_KEY = "sliceExpanded";
+const VOLUME_RENDERING_SECTION_JSON_KEY = "volumeRenderingExpanded";
+const SHADER_SECTION_JSON_KEY = "shaderExpanded";
 
 export interface ImageLayerSelectionState extends UserLayerSelectionState {
   value: any;
 }
 
-const Base = UserLayerWithAnnotationsMixin(UserLayer);
+class ImagePreviewRenderLayer extends VoxelEditingPreviewRenderLayerMixin(
+  ImageRenderLayer,
+) {}
+const Base = UserLayerWithVoxelEditingMixin(
+  UserLayerWithAnnotationsMixin(UserLayer),
+);
 const [
   volumeRenderingDepthSamplesOriginLogScale,
   volumeRenderingDepthSamplesMaxLogScale,
@@ -134,6 +152,7 @@ export class ImageUserLayer extends Base {
   shaderError = makeWatchableShaderError();
   dataType = new WatchableValue<DataType | undefined>(undefined);
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
+  voxelEditingPreviewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
   volumeRenderingGain = trackableFiniteFloat(0);
   volumeRenderingChunkResolutionHistogram = new RenderScaleHistogram(
@@ -158,6 +177,25 @@ export class ImageUserLayer extends Base {
     ),
   );
   volumeRenderingMode = trackableShaderModeValue();
+
+  renderingAccordionState = this.accordions.add("rendering", {
+    sections: [
+      {
+        jsonKey: SLICE_SECTION_JSON_KEY,
+        displayName: "Slice 2D",
+      },
+      {
+        jsonKey: VOLUME_RENDERING_SECTION_JSON_KEY,
+        displayName: "Volume rendering",
+      },
+      {
+        jsonKey: SHADER_SECTION_JSON_KEY,
+        displayName: "Shader controls",
+        defaultExpanded: true,
+        isDefaultKey: true,
+      },
+    ],
+  });
 
   shaderControlState = this.registerDisposer(
     new ShaderControlState(
@@ -188,6 +226,51 @@ export class ImageUserLayer extends Base {
       baseDisposer();
       channelDisposer();
     };
+  }
+
+  createVoxelEditingPreviewRenderLayer(
+    source: MultiscaleVolumeChunkSource,
+    transform: WatchableValueInterface<RenderLayerTransformOrError>,
+  ): ImageRenderLayer {
+    const wrappedFragmentMain = makeDerivedWatchableValue(
+      (originalShader: string) => `
+#define main userMain
+${originalShader}
+#undef main
+
+void main() {
+  // EMPTY_VOXEL_VALUE is transparent in the preview so the underlying data
+  // shows through. This means it cannot be used as a paint value on image layers.
+  if (toRaw(getDataValue()) == ${EMPTY_VOXEL_VALUE}n) {
+    emitTransparent();
+    return;
+  }
+  userMain();
+}
+`,
+      this.fragmentMain,
+    );
+
+    const shaderControlState = new ShaderControlState(
+      wrappedFragmentMain,
+      this.shaderControlState.dataContext,
+      this.channelCoordinateSpaceCombiner,
+    );
+
+    const renderLayer = new ImagePreviewRenderLayer(source, {
+      opacity: new TrackableValue(1.0, verifyFloat01),
+      blendMode: new TrackableEnum(BLEND_MODES, BLEND_MODES.ADDITIVE),
+      shaderControlState: shaderControlState,
+      shaderError: this.shaderError,
+      transform: transform,
+      renderScaleTarget: this.sliceViewRenderScaleTarget,
+      renderScaleHistogram: this.voxelEditingPreviewRenderScaleHistogram,
+      localPosition: this.localPosition,
+      channelCoordinateSpace: this.channelCoordinateSpace,
+    });
+    renderLayer.registerDisposer(wrappedFragmentMain);
+    renderLayer.registerDisposer(shaderControlState);
+    return renderLayer;
   }
 
   addCoordinateSpace(
@@ -227,7 +310,7 @@ export class ImageUserLayer extends Base {
     this.tabs.add("rendering", {
       label: "Rendering",
       order: -100,
-      getter: () => new RenderingOptionsTab(this),
+      getter: () => new RenderingOptionsTab(this, this.renderingAccordionState),
     });
     this.tabs.default = "rendering";
   }
@@ -251,21 +334,20 @@ export class ImageUserLayer extends Base {
       }
       dataType = volume.dataType;
       loadedSubsource.activate((context) => {
-        loadedSubsource.addRenderLayer(
-          new ImageRenderLayer(volume, {
-            opacity: this.opacity,
-            blendMode: this.blendMode,
-            shaderControlState: this.shaderControlState,
-            shaderError: this.shaderError,
-            transform: loadedSubsource.getRenderLayerTransform(
-              this.channelCoordinateSpace,
-            ),
-            renderScaleTarget: this.sliceViewRenderScaleTarget,
-            renderScaleHistogram: this.sliceViewRenderScaleHistogram,
-            localPosition: this.localPosition,
-            channelCoordinateSpace: this.channelCoordinateSpace,
-          }),
-        );
+        const imageRenderLayer = new ImageRenderLayer(volume, {
+          opacity: this.opacity,
+          blendMode: this.blendMode,
+          shaderControlState: this.shaderControlState,
+          shaderError: this.shaderError,
+          transform: loadedSubsource.getRenderLayerTransform(
+            this.channelCoordinateSpace,
+          ),
+          renderScaleTarget: this.sliceViewRenderScaleTarget,
+          renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+          localPosition: this.localPosition,
+          channelCoordinateSpace: this.channelCoordinateSpace,
+        });
+        loadedSubsource.addRenderLayer(imageRenderLayer);
         const volumeRenderLayer = context.registerDisposer(
           new VolumeRenderingRenderLayer({
             gain: this.volumeRenderingGain,
@@ -295,6 +377,18 @@ export class ImageUserLayer extends Base {
           }, this.volumeRenderingMode),
         );
         this.shaderError.changed.dispatch();
+        context.registerDisposer(
+          registerNested((context, writingEnabled) => {
+            this.initializeVoxelEditingForSubsource(
+              loadedSubsource,
+              imageRenderLayer,
+              writingEnabled,
+            );
+            context.registerDisposer(() => {
+              this.deinitializeVoxelEditingForSubsource(loadedSubsource);
+            });
+          }, loadedSubsource.writingEnabled),
+        );
       });
     }
     this.dataType.value = dataType;
@@ -471,7 +565,7 @@ export class ImageUserLayer extends Base {
 function makeShaderCodeWidget(layer: ImageUserLayer) {
   return new ShaderCodeWidget({
     shaderError: layer.shaderError,
-    fragmentMain: layer.fragmentMain,
+    fragment: layer.fragmentMain,
     shaderControlState: layer.shaderControlState,
   });
 }
@@ -480,6 +574,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
     label: "Resolution (slice)",
     toolJson: CROSS_SECTION_RENDER_SCALE_JSON_KEY,
+    sectionKey: SLICE_SECTION_JSON_KEY,
     ...renderScaleLayerControl((layer) => ({
       histogram: layer.sliceViewRenderScaleHistogram,
       target: layer.sliceViewRenderScaleTarget,
@@ -488,21 +583,25 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
     label: "Blending (slice)",
     toolJson: BLEND_JSON_KEY,
+    sectionKey: SLICE_SECTION_JSON_KEY,
     ...enumLayerControl((layer) => layer.blendMode),
   },
   {
     label: "Opacity (slice)",
     toolJson: OPACITY_JSON_KEY,
+    sectionKey: SLICE_SECTION_JSON_KEY,
     ...rangeLayerControl((layer) => ({ value: layer.opacity })),
   },
   {
     label: "Volume rendering (experimental)",
     toolJson: VOLUME_RENDERING_JSON_KEY,
+    sectionKey: VOLUME_RENDERING_SECTION_JSON_KEY,
     ...enumLayerControl((layer) => layer.volumeRenderingMode),
   },
   {
     label: "Gain (3D)",
     toolJson: VOLUME_RENDERING_GAIN_JSON_KEY,
+    sectionKey: VOLUME_RENDERING_SECTION_JSON_KEY,
     isValid: (layer) =>
       makeCachedDerivedWatchableValue(
         (volumeRenderingMode) =>
@@ -517,6 +616,7 @@ const LAYER_CONTROLS: LayerControlDefinition<ImageUserLayer>[] = [
   {
     label: "Resolution (3D)",
     toolJson: VOLUME_RENDERING_DEPTH_SAMPLES_JSON_KEY,
+    sectionKey: VOLUME_RENDERING_SECTION_JSON_KEY,
     isValid: (layer) =>
       makeCachedDerivedWatchableValue(
         (volumeRenderingMode) =>
@@ -537,21 +637,25 @@ for (const control of LAYER_CONTROLS) {
   registerLayerControl(ImageUserLayer, control);
 }
 
-class RenderingOptionsTab extends Tab {
+class RenderingOptionsTab extends AccordionTab {
   codeWidget: ShaderCodeWidget;
-  constructor(public layer: ImageUserLayer) {
-    super();
+  constructor(
+    public layer: ImageUserLayer,
+    protected accordionState: AccordionState,
+  ) {
+    super(accordionState);
     const { element } = this;
     this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
     element.classList.add("neuroglancer-image-dropdown");
 
     for (const control of LAYER_CONTROLS) {
-      element.appendChild(
+      this.appendChild(
         addLayerControlToOptionsTab(this, layer, this.visibility, control),
+        control.sectionKey,
       );
     }
 
-    element.appendChild(
+    this.appendChild(
       makeShaderCodeWidgetTopRow(
         this.layer,
         this.codeWidget,
@@ -563,14 +667,14 @@ class RenderingOptionsTab extends Tab {
         "neuroglancer-image-dropdown-top-row",
       ),
     );
-    element.appendChild(
+    this.appendChild(
       this.registerDisposer(
         new ChannelDimensionsWidget(layer.channelCoordinateSpaceCombiner),
       ).element,
     );
 
-    element.appendChild(this.codeWidget.element);
-    element.appendChild(
+    this.appendChild(this.codeWidget.element);
+    this.appendChild(
       this.registerDisposer(
         new ShaderControls(
           layer.shaderControlState,
@@ -599,6 +703,8 @@ class ShaderCodeOverlay extends Overlay {
 }
 
 registerLayerType(ImageUserLayer);
+registerVoxelEditingTools(ImageUserLayer);
+registerVoxelEditingLayerControls(ImageUserLayer);
 registerVolumeLayerType(VolumeType.IMAGE, ImageUserLayer);
 // Use ImageUserLayer as a fallback layer type if there is a `volume` subsource.
 registerLayerTypeDetector((subsource) => {
