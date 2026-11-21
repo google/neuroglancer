@@ -1,13 +1,7 @@
 Rendering
 =========
 
-Neuroglancer offers several rendering modes for displaying data in the
-perspective (3-D) view.
-
-Volume rendering
-----------------
-
-TODO
+Neuroglancer offers optional rendering effects for the perspective (3-D) view.
 
 .. _ssao:
 
