@@ -70,6 +70,11 @@ export class WarpedVolumeChunkSourceParameters {
   // rpcId of the moving volume chunk source.
   movingSource: number;
   // output coordinates -> moving voxel coordinates (row-major 4x4).
+  // Moving chunk dimensions that are spatial (in the order of the rows of
+  // outputToMoving) and channel dimensions, carried whole into every warped
+  // chunk (which has the 3 spatial dimensions, then the channels).
+  movingSpatialDims: number[];
+  movingChannelDims: number[];
   outputToMoving: number[];
   // warped voxel coordinates -> output coordinates (row-major 4x4).
   warpedToOutput: number[];

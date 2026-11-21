@@ -57,7 +57,9 @@ import {
   inverseAffine4,
   movingModelToOutput,
   mul4,
-  rowMajorFromColumnMajor,
+  fullRowMajor,
+  spatialSubmatrix,
+  splitChunkDims,
   zarrArrayAccess,
 } from "#src/sliceview/volume/warp/field.js";
 
@@ -85,7 +87,7 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
     return this.moving.volumeType;
   }
   get rank() {
-    return 3;
+    return 3 + this.geometry.channelDims.length;
   }
 
   constructor(
@@ -110,13 +112,33 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
       for (const s of alternative) s.chunkSource.dispose();
     }
     const modelToOutput = movingModelToOutput(movingTransform, geometry);
+    // Moving chunk dimensions that are spatial (natural order) and channels.
+    const { spatialChunkDims, channelChunkDims } = splitChunkDims(
+      movingScales[0].chunkToMultiscaleTransform,
+      movingRank,
+      geometry.spatialInputDims,
+    );
     const chunkToModelOf = (
       movingScale: SliceViewSingleResolutionSource<VolumeChunkSource>,
     ) =>
       mul4(
         modelToOutput,
-        rowMajorFromColumnMajor(movingScale.chunkToMultiscaleTransform, 3),
+        spatialSubmatrix(
+          fullRowMajor(movingScale.chunkToMultiscaleTransform, movingRank),
+          movingRank,
+          geometry.spatialInputDims,
+          spatialChunkDims,
+        ),
       );
+    // Channels are carried whole in every warped chunk.
+    const movingSpec = movingScales[0].chunkSource.spec;
+    const channelLower = channelChunkDims.map(
+      (d) => movingSpec.lowerVoxelBound[d],
+    );
+    const channelExtent = channelChunkDims.map(
+      (d) => movingSpec.upperVoxelBound[d] - movingSpec.lowerVoxelBound[d],
+    );
+    const rank = 3 + channelChunkDims.length;
     const voxelSizeOf = (chunkToModel: number[]) =>
       [0, 1, 2].map((i) =>
         Math.hypot(
@@ -154,12 +176,15 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
       const chunkToModel = chunkToModelOf(movingScale);
       // Voxel size of this scale along each output axis.
       const voxelSize = voxelSizeOf(chunkToModel).map((v) => v * factor);
-      const upperVoxelBound = Float32Array.from([0, 1, 2], (i) =>
-        Math.max(
-          1,
-          Math.ceil((geometry.upper[i] - geometry.lower[i]) / voxelSize[i]),
+      const upperVoxelBound = Float32Array.from([
+        ...[0, 1, 2].map((i) =>
+          Math.max(
+            1,
+            Math.ceil((geometry.upper[i] - geometry.lower[i]) / voxelSize[i]),
+          ),
         ),
-      );
+        ...channelExtent,
+      ]);
       const warpedToOutput = [
         voxelSize[0],
         0,
@@ -178,12 +203,20 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
         0,
         1,
       ];
-      const chunkToMultiscaleTransform = new Float32Array(16);
+      // Column-major (rank + 1)^2: the spatial block, then identity channels
+      // (offset to the moving volume's channel lower bounds).
+      const chunkToMultiscaleTransform = new Float32Array((rank + 1) ** 2);
+      const at = (i: number, j: number) =>
+        (j === 3 ? rank : j) * (rank + 1) + (i === 3 ? rank : i);
       for (let i = 0; i < 4; ++i) {
         for (let j = 0; j < 4; ++j) {
-          chunkToMultiscaleTransform[j * 4 + i] = warpedToOutput[i * 4 + j];
+          chunkToMultiscaleTransform[at(i, j)] = warpedToOutput[i * 4 + j];
         }
       }
+      channelExtent.forEach((_, c) => {
+        chunkToMultiscaleTransform[(3 + c) * (rank + 1) + 3 + c] = 1;
+        chunkToMultiscaleTransform[rank * (rank + 1) + 3 + c] = channelLower[c];
+      });
       const movingSource = movingScale.chunkSource;
       // The coarsest field level accurate enough for this scale: its measured
       // interpolation error is at most half a voxel (or, if not measured, its
@@ -207,6 +240,8 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
         boundsSource: VolumeChunkSource | undefined,
       ): WarpedVolumeChunkSourceParameters => ({
         movingSource: movingSource.rpcId!,
+        movingSpatialDims: spatialChunkDims,
+        movingChannelDims: channelChunkDims,
         outputToMoving: inverseAffine4(chunkToModel),
         warpedToOutput,
         field: {
@@ -238,7 +273,7 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
       // cross section only computes (and fetches moving data for) a thin slab.
       return WARPED_CHUNK_SHAPES.map((chunkDataSize, alternative) => {
         const spec = makeDefaultVolumeChunkSpecifications({
-          rank: 3,
+          rank,
           chunkToMultiscaleTransform,
           dataType: this.dataType,
           upperVoxelBound,
@@ -247,12 +282,15 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
           // chunk size (down to a minimum edge), so a cross section still
           // needs only a thin slab of moving data.
           chunkDataSizes: [
-            Uint32Array.from(chunkDataSize, (c) =>
-              Math.max(
-                MIN_CHUNK_EDGE,
-                Math.round(c / (factor * COARSE_CHUNK_SCALING)),
+            Uint32Array.from([
+              ...chunkDataSize.map((c) =>
+                Math.max(
+                  MIN_CHUNK_EDGE,
+                  Math.round(c / (factor * COARSE_CHUNK_SCALING)),
+                ),
               ),
-            ),
+              ...channelExtent,
+            ]),
           ],
           volumeSourceOptions: options,
         })[0];

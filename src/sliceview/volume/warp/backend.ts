@@ -281,8 +281,9 @@ export class WarpedVolumeChunkSource extends WithParameters(
     this.boundsSource =
       bounds === undefined ? undefined : rpc.get(bounds.array.source);
     const { spec } = this.moving;
-    if (spec.rank !== 3) {
-      throw new Error("warp: the moving volume must have rank 3");
+    const { movingSpatialDims: S, movingChannelDims: C } = parameters;
+    if (spec.rank !== 3 + C.length || S.length !== 3) {
+      throw new Error("warp: unexpected moving chunk dimensions");
     }
   }
 
@@ -313,26 +314,40 @@ export class WarpedVolumeChunkSource extends WithParameters(
   }
 
   /** Moving chunks covering the moving voxel box [lo, hi] (inclusive). */
+  /**
+   * Moving chunks covering the moving voxel box [lo, hi] (inclusive; spatial
+   * dimensions, in movingSpatialDims order) and every channel.
+   */
   private movingChunksInBox(lo: number[], hi: number[]) {
     const { spec } = this.moving;
     const { chunkDataSize, baseVoxelOffset, lowerVoxelBound, upperVoxelBound } =
       spec;
-    const gLo: number[] = [];
-    const gHi: number[] = [];
-    for (let i = 0; i < 3; ++i) {
-      const l = Math.max(lo[i], lowerVoxelBound[i]);
-      const h = Math.min(hi[i], upperVoxelBound[i] - 1);
+    const { movingSpatialDims: S } = this.parameters;
+    const rank = spec.rank;
+    const gLo = new Array<number>(rank);
+    const gHi = new Array<number>(rank);
+    for (let d = 0; d < rank; ++d) {
+      const i = S.indexOf(d);
+      const l =
+        i === -1 ? lowerVoxelBound[d] : Math.max(lo[i], lowerVoxelBound[d]);
+      const h =
+        i === -1
+          ? upperVoxelBound[d] - 1
+          : Math.min(hi[i], upperVoxelBound[d] - 1);
       if (l > h) return [];
-      gLo.push(Math.floor((l - baseVoxelOffset[i]) / chunkDataSize[i]));
-      gHi.push(Math.floor((h - baseVoxelOffset[i]) / chunkDataSize[i]));
+      gLo[d] = Math.floor((l - baseVoxelOffset[d]) / chunkDataSize[d]);
+      gHi[d] = Math.floor((h - baseVoxelOffset[d]) / chunkDataSize[d]);
     }
     const out: VolumeDependency[] = [];
-    for (let z = gLo[2]; z <= gHi[2]; ++z) {
-      for (let y = gLo[1]; y <= gHi[1]; ++y) {
-        for (let x = gLo[0]; x <= gHi[0]; ++x) {
-          out.push(volumeDependency(this.moving, [x, y, z]));
-        }
+    const pos = gLo.slice();
+    while (true) {
+      out.push(volumeDependency(this.moving, pos));
+      let d = 0;
+      while (d < rank && ++pos[d] > gHi[d]) {
+        pos[d] = gLo[d];
+        ++d;
       }
+      if (d === rank) break;
     }
     return out;
   }
@@ -596,6 +611,9 @@ export class WarpedVolumeChunkSource extends WithParameters(
   ) {
     const { spec } = this.moving;
     const { dataType } = this.spec;
+    if (this.parameters.movingChannelDims.length > 0) {
+      throw new Error("warp: labels with channel dimensions are not supported");
+    }
     const out = new (DATA_TYPE_ARRAY_CONSTRUCTOR[dataType] as any)(n);
     if (deps.length === 0) return out;
     const {
@@ -712,6 +730,12 @@ export class WarpedVolumeChunkSource extends WithParameters(
     return out;
   }
 
+  /**
+   * Linear (or nearest) resampling of the moving volume at `coords` (spatial,
+   * in movingSpatialDims order), through one dense region per channel
+   * assembled from the moving chunks. Output: x fastest, then y, z, then the
+   * channels.
+   */
   private resample(
     coords: Float32Array,
     n: number,
@@ -722,42 +746,53 @@ export class WarpedVolumeChunkSource extends WithParameters(
   ) {
     const { spec } = this.moving;
     const { dataType } = this.spec;
-    const out = new (DATA_TYPE_ARRAY_CONSTRUCTOR[dataType] as any)(n);
-    if (deps.length === 0) return out;
+    const { movingSpatialDims: S, movingChannelDims: Cd } = this.parameters;
+    const rank = spec.rank;
     const {
       chunkDataSize: cds,
       baseVoxelOffset: base,
       lowerVoxelBound: lb,
       upperVoxelBound: ub,
     } = spec;
-    // Copy the moving region [rlo, rhi] (inclusive) out of its chunks into one
-    // dense array, x fastest; missing chunks stay 0.
-    const rlo = [0, 1, 2].map((i) => Math.max(lo[i], lb[i]));
-    const rhi = [0, 1, 2].map((i) => Math.min(hi[i], ub[i] - 1));
+    const chExtent = Cd.map((d) => ub[d] - lb[d]);
+    const numChannels = chExtent.reduce((a, b) => a * b, 1);
+    const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[dataType] as any;
+    const out = new Ctor(n * numChannels);
+    if (deps.length === 0) return out;
+    // Spatial bounds, in movingSpatialDims order.
+    const slb = S.map((d) => lb[d]);
+    const sub = S.map((d) => ub[d]);
+    const rlo = [0, 1, 2].map((i) => Math.max(lo[i], slb[i]));
+    const rhi = [0, 1, 2].map((i) => Math.min(hi[i], sub[i] - 1));
     const rx = rhi[0] - rlo[0] + 1;
     const ry = rhi[1] - rlo[1] + 1;
     const rz = rhi[2] - rlo[2] + 1;
     if (rx <= 0 || ry <= 0 || rz <= 0) return out;
-    const region = new (DATA_TYPE_ARRAY_CONSTRUCTOR[dataType] as any)(
-      rx * ry * rz,
-    );
-    const fullSize = cds[0] * cds[1] * cds[2];
+    const rsize = rx * ry * rz;
+    // One dense region per channel, x fastest; missing chunks stay 0.
+    const region = new Ctor(rsize * numChannels);
+    const fullSize = cds.reduce((a: number, b: number) => a * b, 1);
     const csBlock = spec.compressedSegmentationBlockSize;
     deps.forEach((dep, ci) => {
       const d = data[ci] as any;
       if (d === null || d.length === 0) return;
-      const o = [0, 1, 2].map((i) => dep.position[i] * cds[i] + base[i]);
+      const o = Array.from(
+        { length: rank },
+        (_, k) => dep.position[k] * cds[k] + base[k],
+      );
       // Chunks may be clipped at the upper bound (zarr chunks are not).
-      const clipped = [0, 1, 2].map((i) => Math.min(cds[i], ub[i] - o[i]));
-      const x0 = Math.max(rlo[0], o[0]);
-      const x1 = Math.min(rhi[0], o[0] + clipped[0] - 1);
-      const y0 = Math.max(rlo[1], o[1]);
-      const y1 = Math.min(rhi[1], o[1] + clipped[1] - 1);
-      const z0 = Math.max(rlo[2], o[2]);
-      const z1 = Math.min(rhi[2], o[2] + clipped[2] - 1);
+      const clipped = o.map((ok, k) => Math.min(cds[k], ub[k] - ok));
+      const [s0, s1, s2] = S;
+      const x0 = Math.max(rlo[0], o[s0]);
+      const x1 = Math.min(rhi[0], o[s0] + clipped[s0] - 1);
+      const y0 = Math.max(rlo[1], o[s1]);
+      const y1 = Math.min(rhi[1], o[s1] + clipped[s1] - 1);
+      const z0 = Math.max(rlo[2], o[s2]);
+      const z1 = Math.min(rhi[2], o[s2] + clipped[s2] - 1);
       if (x1 < x0 || y1 < y0 || z1 < z0) return;
       if (csBlock !== undefined) {
-        // Decode just the part of the chunk this region needs.
+        // Compressed segmentation (rank 3, no channels): decode just the part
+        // of the chunk this region needs.
         decodeCompressedSegmentationBox(
           d,
           clipped,
@@ -772,15 +807,48 @@ export class WarpedVolumeChunkSource extends WithParameters(
         );
         return;
       }
-      const sx = d.length === fullSize ? cds[0] : clipped[0];
-      const sy = d.length === fullSize ? cds[1] : clipped[1];
+      // Strides of the chunk's data (stored at full size, or clipped).
+      const size = d.length === fullSize ? cds : clipped;
+      const stride = new Array<number>(rank);
+      for (let k = 0, m = 1; k < rank; ++k) {
+        stride[k] = m;
+        m *= size[k];
+      }
+      const sx = stride[s0];
+      const sy = stride[s1];
+      const sz = stride[s2];
       const w = x1 - x0 + 1;
-      for (let z = z0; z <= z1; ++z) {
-        for (let y = y0; y <= y1; ++y) {
-          const src = x0 - o[0] + sx * (y - o[1] + sy * (z - o[2]));
-          const dst = x0 - rlo[0] + rx * (y - rlo[1] + ry * (z - rlo[2]));
-          for (let k = 0; k < w; ++k) region[dst + k] = d[src + k];
+      // Each channel index of this chunk.
+      const cLo = Cd.map((k) => Math.max(o[k], lb[k]));
+      const cHi = Cd.map((k) => Math.min(o[k] + clipped[k], ub[k]) - 1);
+      const c = cLo.slice();
+      while (true) {
+        let srcBase = 0;
+        let chIndex = 0;
+        for (let i = Cd.length - 1; i >= 0; --i) {
+          srcBase += (c[i] - o[Cd[i]]) * stride[Cd[i]];
+          chIndex = chIndex * chExtent[i] + (c[i] - lb[Cd[i]]);
         }
+        const dstBase = chIndex * rsize;
+        for (let z = z0; z <= z1; ++z) {
+          for (let y = y0; y <= y1; ++y) {
+            const src =
+              srcBase + (x0 - o[s0]) * sx + (y - o[s1]) * sy + (z - o[s2]) * sz;
+            const dst =
+              dstBase + x0 - rlo[0] + rx * (y - rlo[1] + ry * (z - rlo[2]));
+            if (sx === 1) {
+              for (let k = 0; k < w; ++k) region[dst + k] = d[src + k];
+            } else {
+              for (let k = 0; k < w; ++k) region[dst + k] = d[src + k * sx];
+            }
+          }
+        }
+        let i = 0;
+        while (i < Cd.length && ++c[i] > cHi[i]) {
+          c[i] = cLo[i];
+          ++i;
+        }
+        if (i === Cd.length) break;
       }
     });
     const integer = dataType !== DataType.FLOAT32;
@@ -788,12 +856,12 @@ export class WarpedVolumeChunkSource extends WithParameters(
       this.parameters.interpolation === WarpInterpolation.NEAREST ||
       dataType === DataType.UINT64;
     // Inside if within half a voxel of the samples (ITK); 0 outside.
-    const loX = lb[0] - 0.5;
-    const loY = lb[1] - 0.5;
-    const loZ = lb[2] - 0.5;
-    const hiX = ub[0] - 0.5;
-    const hiY = ub[1] - 0.5;
-    const hiZ = ub[2] - 0.5;
+    const loX = slb[0] - 0.5;
+    const loY = slb[1] - 0.5;
+    const loZ = slb[2] - 0.5;
+    const hiX = sub[0] - 0.5;
+    const hiY = sub[1] - 0.5;
+    const hiZ = sub[2] - 0.5;
     const maxX = rx - 1;
     const maxY = ry - 1;
     const maxZ = rz - 1;
@@ -824,7 +892,10 @@ export class WarpedVolumeChunkSource extends WithParameters(
         const ix = Math.min(Math.max(Math.round(x), 0), maxX);
         const iy = Math.min(Math.max(Math.round(y), 0), maxY);
         const iz = Math.min(Math.max(Math.round(z), 0), maxZ);
-        out[v] = region[ix + sY * iy + sZ * iz];
+        const at = ix + sY * iy + sZ * iz;
+        for (let ch = 0; ch < numChannels; ++ch) {
+          out[v + n * ch] = region[at + rsize * ch];
+        }
         continue;
       }
       const fx = Math.floor(x);
@@ -839,14 +910,20 @@ export class WarpedVolumeChunkSource extends WithParameters(
       const yb = (fy + 1 > maxY ? maxY : fy + 1 < 0 ? 0 : fy + 1) * sY;
       const za = (fz < 0 ? 0 : fz > maxZ ? maxZ : fz) * sZ;
       const zb = (fz + 1 > maxZ ? maxZ : fz + 1 < 0 ? 0 : fz + 1) * sZ;
-      const c00 = region[xa + ya + za] * (1 - tx) + region[xb + ya + za] * tx;
-      const c10 = region[xa + yb + za] * (1 - tx) + region[xb + yb + za] * tx;
-      const c01 = region[xa + ya + zb] * (1 - tx) + region[xb + ya + zb] * tx;
-      const c11 = region[xa + yb + zb] * (1 - tx) + region[xb + yb + zb] * tx;
-      const value =
-        (c00 * (1 - ty) + c10 * ty) * (1 - tz) +
-        (c01 * (1 - ty) + c11 * ty) * tz;
-      out[v] = integer ? Math.round(value) : value;
+      for (let ch = 0, r = 0; ch < numChannels; ++ch, r += rsize) {
+        const c00 =
+          region[r + xa + ya + za] * (1 - tx) + region[r + xb + ya + za] * tx;
+        const c10 =
+          region[r + xa + yb + za] * (1 - tx) + region[r + xb + yb + za] * tx;
+        const c01 =
+          region[r + xa + ya + zb] * (1 - tx) + region[r + xb + ya + zb] * tx;
+        const c11 =
+          region[r + xa + yb + zb] * (1 - tx) + region[r + xb + yb + zb] * tx;
+        const value =
+          (c00 * (1 - ty) + c10 * ty) * (1 - tz) +
+          (c01 * (1 - ty) + c11 * ty) * tz;
+        out[v + n * ch] = integer ? Math.round(value) : value;
+      }
     }
     return out;
   }

@@ -552,10 +552,15 @@ export function canonicalSourceOptions(rank: number): VolumeSourceOptions {
 }
 
 export interface WarpGeometry {
-  // Warped model space (output axes order).
+  // Warped model space: the field output axes, then the moving volume's
+  // channel dimensions.
   modelSpace: CoordinateSpace;
   // Output-axis indices of the moving output space, in field output-axes order.
   outputDims: number[];
+  // Output-axis indices of the moving volume's channel (non-spatial) dimensions.
+  channelDims: number[];
+  // Moving source (input) dimensions that are spatial, in ascending order.
+  spatialInputDims: number[];
   // Meters per model unit, per axis.
   scales: number[];
   // Field domain in model coordinates.
@@ -576,9 +581,7 @@ export function getWarpGeometry(
 ): WarpGeometry {
   const { metadata } = field;
   const { outputSpace } = movingTransform;
-  if (movingTransform.rank !== 3 || movingTransform.sourceRank !== 3) {
-    throw new Error("warp: the moving volume must be 3-dimensional");
-  }
+  const { rank, sourceRank } = movingTransform;
   const outputDims = metadata.outputAxes.map((name) => {
     const i = outputSpace.names.indexOf(name);
     if (i === -1) {
@@ -594,6 +597,49 @@ export function getWarpGeometry(
     }
     return i;
   });
+  // The other output dimensions are channels (e.g. "c^"), carried through
+  // unwarped; each must come from source dimensions of its own.
+  const channelDims = [...Array(rank).keys()].filter(
+    (i) => !outputDims.includes(i),
+  );
+  for (const i of channelDims) {
+    if (outputSpace.units[i] === "m") {
+      throw new Error(
+        `warp: spatial dimension ${outputSpace.names[i]} of the moving volume ` +
+          "is not an output axis of the displacement field",
+      );
+    }
+  }
+  const full = fullRowMajor(movingTransform.transform, rank, sourceRank);
+  const spatialInputDims = outputDims
+    .map((o) => {
+      let best = -1;
+      for (let j = 0; j < sourceRank; ++j) {
+        if (channelDims.some((c) => full[c * (sourceRank + 1) + j] !== 0)) {
+          continue;
+        }
+        if (
+          best === -1 ||
+          Math.abs(full[o * (sourceRank + 1) + j]) >
+            Math.abs(full[o * (sourceRank + 1) + best])
+        ) {
+          best = j;
+        }
+      }
+      return best;
+    })
+    // Natural order: the moving chunk's spatial dimensions keep their order.
+    .sort((a, b) => a - b);
+  if (
+    spatialInputDims.includes(-1) ||
+    new Set(spatialInputDims).size !== 3 ||
+    sourceRank - 3 !== channelDims.length
+  ) {
+    throw new Error(
+      "warp: the moving volume must have 3 spatial dimensions, plus " +
+        "channel dimensions that do not mix with them",
+    );
+  }
   const scales = outputDims.map((i) => outputSpace.scales[i]);
   // field units -> model coordinates, per axis
   const toModel = scales.map((s) => metadata.unitMeters / s);
@@ -632,20 +678,35 @@ export function getWarpGeometry(
       upper[i] = Math.max(upper[i], v);
     }
   }
+  const { lowerBounds, upperBounds } = outputSpace.bounds;
   const modelSpace = makeCoordinateSpace({
-    names: metadata.outputAxes,
-    units: ["m", "m", "m"],
-    scales: Float64Array.from(scales),
+    names: [
+      ...metadata.outputAxes,
+      ...channelDims.map((i) => outputSpace.names[i]),
+    ],
+    units: ["m", "m", "m", ...channelDims.map((i) => outputSpace.units[i])],
+    scales: Float64Array.from([
+      ...scales,
+      ...channelDims.map((i) => outputSpace.scales[i]),
+    ]),
     boundingBoxes: [
       makeIdentityTransformedBoundingBox({
-        lowerBounds: Float64Array.from(lower),
-        upperBounds: Float64Array.from(upper),
+        lowerBounds: Float64Array.from([
+          ...lower,
+          ...channelDims.map((i) => lowerBounds[i]),
+        ]),
+        upperBounds: Float64Array.from([
+          ...upper,
+          ...channelDims.map((i) => upperBounds[i]),
+        ]),
       }),
     ],
   });
   return {
     modelSpace,
     outputDims,
+    channelDims,
+    spatialInputDims,
     scales,
     lower,
     upper,
@@ -661,28 +722,96 @@ export function getWarpGeometry(
  * (input scale / output scale), as in getRenderLayerTransform; the
  * translation is in output coordinates already.
  */
+/**
+ * Row-major (rank + 1) x (sourceRank + 1) matrix of a column-major
+ * CoordinateSpaceTransform-style homogeneous matrix.
+ */
+export function fullRowMajor(
+  m: ArrayLike<number>,
+  rank: number,
+  sourceRank = rank,
+): number[] {
+  const out = new Array<number>((rank + 1) * (sourceRank + 1)).fill(0);
+  for (let i = 0; i <= rank; ++i) {
+    for (let j = 0; j <= sourceRank; ++j) {
+      out[i * (sourceRank + 1) + j] = m[j * (rank + 1) + i];
+    }
+  }
+  return out;
+}
+
+/**
+ * Row-major 4x4 of the rows `rows` and columns `cols` (and the translation)
+ * of a row-major (rank + 1) x (sourceRank + 1) matrix.
+ */
+export function spatialSubmatrix(
+  full: number[],
+  sourceRank: number,
+  rows: number[],
+  cols: number[],
+): number[] {
+  const out = new Array<number>(16).fill(0);
+  for (let i = 0; i < 3; ++i) {
+    for (let j = 0; j < 3; ++j) {
+      out[i * 4 + j] = full[rows[i] * (sourceRank + 1) + cols[j]];
+    }
+    out[i * 4 + 3] = full[rows[i] * (sourceRank + 1) + sourceRank];
+  }
+  out[15] = 1;
+  return out;
+}
+
+/**
+ * The chunk dimensions of a moving scale that are spatial (those mapping to
+ * the model's `spatialInputDims`, in natural order) and the rest (channels).
+ */
+export function splitChunkDims(
+  chunkToMultiscaleTransform: ArrayLike<number>,
+  rank: number,
+  spatialInputDims: number[],
+): { spatialChunkDims: number[]; channelChunkDims: number[] } {
+  const full = fullRowMajor(chunkToMultiscaleTransform, rank);
+  const spatialChunkDims: number[] = [];
+  const channelChunkDims: number[] = [];
+  for (let j = 0; j < rank; ++j) {
+    const spatial = spatialInputDims.some(
+      (r) => full[r * (rank + 1) + j] !== 0,
+    );
+    (spatial ? spatialChunkDims : channelChunkDims).push(j);
+  }
+  if (spatialChunkDims.length !== 3) {
+    throw new Error(
+      "warp: the moving volume's chunks must have 3 spatial dimensions",
+    );
+  }
+  return { spatialChunkDims, channelChunkDims };
+}
+
+/**
+ * Row-major 4x4: the moving volume's spatial model coordinates (its
+ * `spatialInputDims`) -> warped model coordinates (field output axes).
+ */
 export function movingModelToOutput(
   movingTransform: CoordinateSpaceTransform,
   geometry: WarpGeometry,
 ): number[] {
-  const m = rowMajorFromColumnMajor(
-    movingTransform.transform,
-    movingTransform.rank,
+  const { rank, sourceRank } = movingTransform;
+  const m = spatialSubmatrix(
+    fullRowMajor(movingTransform.transform, rank, sourceRank),
+    sourceRank,
+    geometry.outputDims,
+    geometry.spatialInputDims,
   );
   const inScales = movingTransform.inputSpace.scales;
   const outScales = movingTransform.outputSpace.scales;
   for (let i = 0; i < 3; ++i) {
     for (let j = 0; j < 3; ++j) {
-      m[i * 4 + j] *= inScales[j] / outScales[i];
+      m[i * 4 + j] *=
+        inScales[geometry.spatialInputDims[j]] /
+        outScales[geometry.outputDims[i]];
     }
   }
-  // Rows of the moving output space, reordered to the field output axes.
-  const select = new Array<number>(16).fill(0);
-  geometry.outputDims.forEach((d, i) => {
-    select[i * 4 + d] = 1;
-  });
-  select[15] = 1;
-  return mul4(select, m);
+  return m;
 }
 
 /**
