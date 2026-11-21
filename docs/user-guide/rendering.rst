@@ -37,6 +37,11 @@ controls for SSAO:
   sense of depth.
 
 SSAO applies only to mesh surfaces (segmentation layers with object surface
-meshes, and single-mesh layers). It does not apply to other opaque geometry like skeletons and
-annotations. SSAO is disabled in any perspective view that contains a
+meshes, and single-mesh layers). It does not apply to other opaque geometry like
+skeletons and annotations. Translucent meshes receive no shading of their own,
+but a translucent mesh in front of an opaque mesh shows the opaque mesh's
+shading through it. SSAO is disabled in any perspective view that contains a
 volume-rendering layer.
+
+When SSAO is on, the axis lines are drawn on top of all meshes rather than
+hidden behind them.

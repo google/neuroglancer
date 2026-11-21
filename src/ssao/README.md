@@ -34,35 +34,65 @@ and can give a stronger depth cue for surface morphology. A `uDepthCue` paramete
 blends the two: `0` is the ground-truth GTAO result, and higher values shift toward the HBAO
 result.
 
+## Differences from Jimenez et al. (2016)
+
+The shader computes two terms from one set of depth samples: a GTAO term, by the
+paper's horizon search and analytic arc integration, and the HBAO term described
+above. The `uDepthCue` parameter blends them. The implementation differs from
+the paper as follows:
+
+- It samples 4 slices (`NUM_DIRECTIONS`) of 8 steps (`NUM_STEPS`) per side, with
+  per-pixel hash noise on the slice angle and step offset. Its only denoising
+  is the bilateral blur; the paper also uses spatial and temporal filtering.
+- It sets the radius as a fraction of viewport height, not as a world-space
+  distance, so the effect has the same size on screen at every zoom.
+- For the GTAO term, it divides the visibility by that of the same slices with
+  unobstructed horizons (`totalUnoccludedVisibility`). Without this, the sparse
+  sampling darkens unoccluded surfaces that are oblique to the view direction.
+- For the GTAO term, it pulls each sample's horizon toward the unobstructed
+  limit by a quadratic falloff in view-space distance.
+- It omits the paper's multi-bounce approximation, bent normals, and thickness
+  heuristic.
+- It applies the blended result as `color.rgb * pow(ao, intensity)`, with a
+  user-controlled `intensity`.
+
 ## Scope
 
 SSAO is limited to mesh surfaces because `MeshLayer`, `MultiscaleMeshLayer`, and
-`SingleMeshLayer` supply a view-space normal via the three-argument
-`emit(color, pickId, viewNormal)` form. Annotations are omitted from SSAO because
-they are glyphs for which 3D shading makes little sense. Skeletons are omitted
-because they are rendered as lines without the surface normals needed for SSAO.
-The omitted types call the two-argument
-`emit(color, pickId)` form, which writes the zero sentinel `vec4(0)` to the NORMAL
-attachment. The SSAO shader treats a zero-RGB normal as a no-AO sentinel, so those
-pixels render at full brightness. Highlighted (hovered) mesh segments use the same
-zero-RGB sentinel so they also render without darkening.
+`SingleMeshLayer` supply a view-space normal via the three-argument `emit(color,
+pickId, viewNormal)` form. Annotations are omitted from SSAO because they are
+glyphs for which 3D shading makes little sense. Skeletons are omitted because
+they are rendered as lines without the surface normals needed for SSAO. The
+omitted types call the two-argument `emit(color, pickId)` form, which writes the
+zero sentinel `vec4(0, 0, 0, 1)` to the NORMAL attachment. The SSAO shader
+treats a zero-RGB normal as a no-AO sentinel, so those pixels render at full
+brightness. Highlighted (hovered) mesh segments use the same zero-RGB sentinel
+so they also render without darkening.
 
 This limitation for annotations is enforced in the compositing stage, where the
 shader skips the AO multiplication for any pixel whose NORMAL value is the
 zero-RGB sentinel. The two-argument emit writes `vec4(0, 0, 0, 1)` to NORMAL;
 alpha must be 1 here for the blend mode `(SRC_ALPHA, ONE_MINUS_SRC_ALPHA)` to
-fully overwrite the underlying mesh normal with the sentinel. The sentinel
-lands at every annotation pixel (including explicitly translucent pixels and
-anti-aliased edges). A consequence is that translucent annotations also do not
-receive darkening at the covered pixels, since the sentinel takes precedence
-over the underlying mesh's normal. In practice, pixels affected this way should
-be limited. A fix could be to apply AO to the COLOR buffer before annotations
-render.
+fully overwrite the underlying mesh normal with the sentinel. The sentinel lands
+at every annotation pixel (including explicitly translucent pixels and
+anti-aliased edges), and annotation layers drawn with picking disabled (e.g.,
+graphene's in-progress merge line) still write it. A consequence is that
+translucent annotations also do not receive darkening at the covered pixels,
+since the sentinel takes precedence over the underlying mesh's normal. In
+practice, pixels affected this way should be limited. A fix could be to apply AO
+to the COLOR buffer before annotations render.
 
-Ordinary translucent volume layers do not interact with SSAO because the SSAO
-pass runs after opaque geometry but before OIT/transparency. Max-projection
-volume layers do write to the Z buffer, though, and the combination of that
-volume rendering and SSAO has not been validated.
+Translucent meshes receive no AO. They render in the OIT/transparency pass,
+after the SSAO pass, and the OIT emitter does not write NORMAL. The composite
+then darkens each pixel by the AO of the opaque surface beneath it, so a
+translucent mesh in front of an opaque mesh shows that mesh's shading.
+
+SSAO is disabled in any perspective view that contains a volume-rendering
+layer, and the view shows a one-time message saying so. The composite
+multiplies the color buffer after the volume has been blended into it, so AO
+would darken the volume too. Supporting both would require applying AO before
+the transparency pass, at the cost of another color buffer. This is a known
+limitation.
 
 ## Integration points
 
@@ -88,8 +118,8 @@ overloads via the `renderContext` emitter:
 - `emit(color, pickId, viewNormal)` — opaque surfaces that should _receive_ AO.
   `viewNormal` is in view space (right-handed, camera looking down -Z), need not
   be unit length. Caller is responsible for the world→view normal transform.
-- `emit(color, pickId)` — opaque skeletons, annotations, axis
-  lines, etc. Internally writes the zero-RGB sentinel `(0, 0, 0)` to NORMAL
+- `emit(color, pickId)` — opaque skeletons, annotations, cross-section
+  slices, etc. Internally writes the zero-RGB sentinel `(0, 0, 0)` to NORMAL
   with alpha = 1. The composite shader skips the AO multiply for those pixels.
 
 Highlighted (hovered) mesh segments emit a zero-RGB sentinel from
