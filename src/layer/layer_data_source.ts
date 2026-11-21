@@ -38,8 +38,8 @@ import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transfo
 import type { RenderLayer } from "#src/renderlayer.js";
 import {
   getDisplacementField,
-  makeWarpedDataSource,
-} from "#src/sliceview/volume/warp/frontend.js";
+  getWarpedDataSourceFactory,
+} from "#src/sliceview/volume/warp/field.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { arraysEqual } from "#src/util/array.js";
@@ -444,6 +444,7 @@ export class LayerDataSource extends RefCounted {
       })
       .then(async (source: DataSourceWithRedirectInfo) => {
         if (spec.warp !== undefined && !refCounted.wasDisposed) {
+          const makeWarpedDataSource = getWarpedDataSourceFactory();
           const field = await getDisplacementField(registry, spec.warp, {
             globalCoordinateSpace: layer.manager.root.coordinateSpace,
             signal: abortController.signal,

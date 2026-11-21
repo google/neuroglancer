@@ -25,11 +25,10 @@ import { WithParameters } from "#src/chunk_manager/frontend.js";
 import type { CoordinateSpaceTransform } from "#src/coordinate_transform.js";
 import { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
 import { WarpedMeshSourceParameters } from "#src/mesh/warp/base.js";
-import type { FieldLevelAccess } from "#src/sliceview/volume/warp/field_sampler.js";
 import type {
   DisplacementField,
   WarpGeometry,
-} from "#src/sliceview/volume/warp/frontend.js";
+} from "#src/sliceview/volume/warp/field.js";
 import {
   canonicalSourceOptions,
   getWarpGeometry,
@@ -37,7 +36,8 @@ import {
   mul4,
   rowMajorFromColumnMajor,
   zarrArrayAccess,
-} from "#src/sliceview/volume/warp/frontend.js";
+} from "#src/sliceview/volume/warp/field.js";
+import type { FieldLevelAccess } from "#src/sliceview/volume/warp/field_sampler.js";
 
 // The finest field level used for meshes is the coarsest one whose measured
 // interpolation error is at most this.
