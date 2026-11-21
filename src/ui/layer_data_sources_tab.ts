@@ -33,7 +33,10 @@ import type {
   LoadedDataSubsource,
 } from "#src/layer/layer_data_source.js";
 import { LoadedLayerDataSource } from "#src/layer/layer_data_source.js";
-import { createImageLayerAsMultiChannel } from "#src/layer/multi_channel_setup.js";
+import {
+  createImageLayerAsMultiChannelWhenReady,
+  getRelatedSources,
+} from "#src/layer/multi_channel_setup.js";
 import { getVoxelEditingIncompatibility } from "#src/layer/voxel_editing/eligibility.js";
 import { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
 import { SkeletonSource } from "#src/skeleton/frontend.js";
@@ -476,6 +479,7 @@ export class LayerDataSourcesTab extends Tab {
   });
   private layerTypeDetection = document.createElement("div");
   private multiChannelLayerCreate = document.createElement("div");
+  private multiChannelLayerTypeElement = document.createElement("span");
   private layerTypeElement = document.createElement("span");
   private dataSourcesContainer = document.createElement("div");
   private reRender: DebouncedFunction;
@@ -498,8 +502,12 @@ export class LayerDataSourcesTab extends Tab {
     });
     element.appendChild(this.dataSourcesContainer);
     if (layer instanceof NewUserLayer) {
-      const { layerTypeDetection, layerTypeElement, multiChannelLayerCreate } =
-        this;
+      const {
+        layerTypeDetection,
+        layerTypeElement,
+        multiChannelLayerCreate,
+        multiChannelLayerTypeElement,
+      } = this;
       layerTypeDetection.style.display = "none";
       layerTypeElement.classList.add(
         "neuroglancer-layer-data-sources-tab-type-detection-type",
@@ -518,25 +526,17 @@ export class LayerDataSourcesTab extends Tab {
       multiChannelLayerCreate.classList.add(
         "neuroglancer-layer-data-sources-tab-type-detection",
       );
-      const multiChannelLayerCreateLabel = document.createElement("span");
-      multiChannelLayerCreateLabel.classList.add(
+      multiChannelLayerTypeElement.classList.add(
         "neuroglancer-layer-data-sources-tab-type-detection-type",
       );
-      multiChannelLayerCreateLabel.textContent = "multi-channel image";
       multiChannelLayerCreate.appendChild(
         document.createTextNode("Create as "),
       );
-      multiChannelLayerCreate.appendChild(multiChannelLayerCreateLabel);
-      multiChannelLayerCreate.appendChild(document.createTextNode(" layer"));
+      multiChannelLayerCreate.appendChild(multiChannelLayerTypeElement);
+      multiChannelLayerCreate.appendChild(document.createTextNode(" layers"));
       multiChannelLayerCreate.addEventListener("click", () => {
         changeLayerTypeToDetected(layer);
-        layer.managedLayer.registerDisposer(
-          layer.managedLayer.readyStateChanged.add(() => {
-            if (layer.managedLayer.isReady()) {
-              createImageLayerAsMultiChannel(layer.managedLayer, makeLayer);
-            }
-          }),
-        );
+        createImageLayerAsMultiChannelWhenReady(layer.managedLayer, makeLayer);
       });
       multiChannelLayerCreate.style.display = "none";
       multiChannelLayerCreate.style.marginTop = "0.5em";
@@ -563,6 +563,12 @@ export class LayerDataSourcesTab extends Tab {
       }
       return layerConstructor;
     })();
+    if (layerConstructor?.type === "image") {
+      this.multiChannelLayerTypeElement.textContent =
+        getRelatedSources(this.layer.managedLayer).length > 0
+          ? "multi-channel image and related"
+          : "multi-channel image";
+    }
     if (layerConstructor === this.detectedLayerConstructor) return;
     const { layerTypeDetection, multiChannelLayerCreate } = this;
     this.detectedLayerConstructor = layerConstructor;

@@ -19,11 +19,13 @@ import { makeCoordinateSpace } from "#src/coordinate_transform.js";
 import type {
   SingleChannelMetadata,
   ChannelMetadata,
+  RelatedDataSource,
 } from "#src/datasource/index.js";
 import {
   joinBaseUrlAndPath,
   kvstoreEnsureDirectoryPipelineUrl,
 } from "#src/kvstore/url.js";
+import { VolumeType } from "#src/sliceview/volume/base.js";
 import {
   makeAffineRelativeToBaseTransform,
   extractScalesFromAffineMatrix,
@@ -38,6 +40,7 @@ import {
   verifyObject,
   verifyObjectProperty,
   verifyOptionalObjectProperty,
+  verifyStringArray,
   verifyString,
 } from "#src/util/json.js";
 import { clampToInterval } from "#src/util/lerp.js";
@@ -61,6 +64,7 @@ export interface OmeMultiscaleMetadata {
 export interface OmeMetadata {
   multiscale: OmeMultiscaleMetadata;
   channels: ChannelMetadata | undefined;
+  volumeType: VolumeType;
 }
 
 const SUPPORTED_OME_MULTISCALE_VERSIONS = new Set([
@@ -830,6 +834,25 @@ function parseOmeMultiscale(
   }
 }
 
+export function parseOmeLabelsGroup(
+  labelsGroupUrl: string,
+  attrs: unknown,
+  zarrVersion: 2 | 3,
+): RelatedDataSource[] | undefined {
+  verifyObject(attrs);
+  const metadata =
+    verifyOptionalObjectProperty(attrs, "ome", verifyObject) ?? attrs;
+  const paths = verifyOptionalObjectProperty(
+    metadata,
+    "labels",
+    verifyStringArray,
+  );
+  return paths?.map((path) => ({
+    name: `labels/${path}`,
+    url: `${kvstoreEnsureDirectoryPipelineUrl(joinBaseUrlAndPath(labelsGroupUrl, path))}|zarr${zarrVersion}:`,
+  }));
+}
+
 export function parseOmeMetadata(
   url: string,
   attrs: any,
@@ -872,7 +895,14 @@ export function parseOmeMetadata(
     }
     const multiScaleInfo = parseOmeMultiscale(url, multiscale, version);
     const channelMetadata = omero ? parseOmeroMetadata(omero) : undefined;
-    return { multiscale: multiScaleInfo, channels: channelMetadata };
+    return {
+      multiscale: multiScaleInfo,
+      channels: channelMetadata,
+      volumeType:
+        metadata["image-label"] === undefined
+          ? VolumeType.IMAGE
+          : VolumeType.SEGMENTATION,
+    };
   }
   if (errors.length !== 0) {
     throw new Error(errors[0]);
