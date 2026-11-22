@@ -428,6 +428,12 @@
       "neuroglancer/kvstore/icechunk:disabled": "./src/util/false.ts",
       "default": "./src/kvstore/icechunk/register_backend.ts"
     },
+    "#kvstore/kvstack/register": {
+      "neuroglancer/kvstore/kvstack:enabled": "./src/kvstore/kvstack/register.ts",
+      "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",
+      "neuroglancer/kvstore/kvstack:disabled": "./src/util/false.ts",
+      "default": "./src/kvstore/kvstack/register.ts"
+    },
     "#kvstore/middleauth/register_frontend": {
       "neuroglancer/kvstore/middleauth:enabled": "./src/kvstore/middleauth/register_frontend.ts",
       "neuroglancer/kvstore:none_by_default": "./src/util/false.ts",

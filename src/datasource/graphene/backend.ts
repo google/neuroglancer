@@ -28,6 +28,7 @@ import type {
 } from "#src/datasource/graphene/base.js";
 import {
   getGrapheneFragmentKey,
+  GRAPHENE_INVALIDATE_OCDBT_RPC_ID,
   GRAPHENE_MESH_NEW_SEGMENT_RPC_ID,
   ChunkedGraphSourceParameters,
   MeshSourceParameters,
@@ -42,6 +43,7 @@ import { decodeManifestChunk } from "#src/datasource/precomputed/backend.js";
 import { WithSharedKvStoreContextCounterpart } from "#src/kvstore/backend.js";
 import type { KvStoreWithPath, ReadResponse } from "#src/kvstore/index.js";
 import { readKvStore } from "#src/kvstore/index.js";
+import { invalidateOcdbtCaches } from "#src/kvstore/ocdbt/metadata_cache.js";
 import type { FragmentChunk, ManifestChunk } from "#src/mesh/backend.js";
 import { assignMeshFragmentData, MeshSource } from "#src/mesh/backend.js";
 import { decodeDraco } from "#src/mesh/draco/index.js";
@@ -641,4 +643,9 @@ registerRPC(CHUNKED_GRAPH_RENDER_LAYER_UPDATE_SOURCES_RPC_ID, function (x) {
 registerRPC(GRAPHENE_MESH_NEW_SEGMENT_RPC_ID, function (x) {
   const obj = <GrapheneMeshSource>this.get(x.rpcId);
   obj.addNewSegment(x.segment);
+});
+
+registerRPC(GRAPHENE_INVALIDATE_OCDBT_RPC_ID, function (x) {
+  const source = this.get(x.layerId) as GrapheneChunkedGraphChunkSource;
+  invalidateOcdbtCaches(source.sharedKvStoreContext);
 });
