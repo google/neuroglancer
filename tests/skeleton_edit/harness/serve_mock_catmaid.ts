@@ -63,7 +63,7 @@ const viewer = spawn(
 
 console.log(
   `\nMock CATMAID (in memory, reset on restart): ${mockServer.url}\n` +
-    `Open once the viewer reports it has compiled, then press E to edit:\n` +
+    `Open once the viewer reports it has compiled, then press shift+E to edit:\n` +
     `http://127.0.0.1:${viewerPort}/#!${encodeURIComponent(JSON.stringify(viewerState))}\n`,
 );
 
