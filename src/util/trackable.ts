@@ -19,7 +19,11 @@
  */
 
 import { RefCounted } from "#src/util/disposable.js";
-import { verifyObject, verifyOptionalObjectProperty } from "#src/util/json.js";
+import {
+  emptyToUndefined,
+  verifyObject,
+  verifyOptionalObjectProperty,
+} from "#src/util/json.js";
 import type { NullaryReadonlySignal } from "#src/util/signal.js";
 import { NullarySignal } from "#src/util/signal.js";
 
@@ -80,11 +84,7 @@ export class CompoundTrackable extends RefCounted implements Trackable {
   }
 
   toJSON() {
-    const result = this.baseJSON();
-    for (const [key, value] of this.children) {
-      result[key] = value.toJSON();
-    }
-    return result;
+    return jsonFromCompound(this, (child) => child.toJSON());
   }
 
   baseJSON() {
@@ -157,6 +157,23 @@ export class PersistentCompoundTrackable extends CompoundTrackable {
   }
 }
 
+function jsonFromCompound(
+  compound: CompoundTrackable,
+  getChildJson: (child: Trackable) => any,
+): { [key: string]: any } {
+  const result = compound.baseJSON();
+  for (const [key, child] of compound.children) {
+    let childJson = getChildJson(child);
+    if (child instanceof CompoundTrackable) {
+      childJson = emptyToUndefined(childJson);
+    }
+    if (childJson !== undefined) {
+      result[key] = childJson;
+    }
+  }
+  return result;
+}
+
 /**
  * Cache used by getCachedJson.
  */
@@ -183,10 +200,7 @@ export function getCachedJson(root: Trackable): {
   }
   let value: any;
   if (root instanceof CompoundTrackable) {
-    value = root.baseJSON();
-    for (const [k, v] of root.children) {
-      value[k] = getCachedJson(v).value;
-    }
+    value = jsonFromCompound(root, (child) => getCachedJson(child).value);
   } else {
     value = root.toJSON();
   }

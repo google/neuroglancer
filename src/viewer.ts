@@ -251,15 +251,6 @@ class TrackableUiControlVisibility extends CompoundTrackable {
     this.add("showLayerPanel", this.showLayerPanel);
     this.add("showTopBar", this.showTopBar);
   }
-
-  toJSON(): any {
-    const result = super.toJSON();
-    for (const key in result) {
-      if (result[key] !== undefined) return result;
-    }
-    // Omit the section rather than emitting an empty object in every state.
-    return undefined;
-  }
 }
 
 export class TrackableViewerState extends CompoundTrackable {
