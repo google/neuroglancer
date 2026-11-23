@@ -963,6 +963,11 @@ class SkeletonNodeTypeControl extends RefCounted {
   readonly element = document.createElement("div");
   private readonly label = document.createElement("span");
   private readonly buttons: Record<SkeletonNodeTypeChoice, HTMLButtonElement>;
+  private readonly choiceNames: Record<SkeletonNodeTypeChoice, string> = {
+    [SkeletonNodeTypeChoice.ROOT]: "root",
+    [SkeletonNodeTypeChoice.VIRTUAL_END]: "virtual end",
+    [SkeletonNodeTypeChoice.TRUE_END]: "true end",
+  };
 
   constructor(
     private readonly options: {
@@ -990,10 +995,7 @@ class SkeletonNodeTypeControl extends RefCounted {
       );
       const textElement = document.createElement("span");
       textElement.textContent = text;
-      button.append(
-        makeIcon({ svg, title: text, clickable: false }),
-        textElement,
-      );
+      button.append(makeIcon({ svg, clickable: false }), textElement);
       this.registerEventListener(button, "click", () => {
         if (button.disabled || button.hasAttribute("data-checked")) return;
         choose();
@@ -1044,7 +1046,16 @@ class SkeletonNodeTypeControl extends RefCounted {
       const button = buttons[choice];
       button.toggleAttribute("data-checked", checked);
       button.disabled = checked || disabledReason !== undefined;
-      setDisabledReason(button, checked ? undefined : disabledReason);
+      const choiceName = this.choiceNames[choice];
+      if (checked) {
+        button.title = `This node is a ${choiceName}`;
+      } else {
+        setDisabledReason(
+          button,
+          disabledReason,
+          `Click to set this node as ${choiceName}`,
+        );
+      }
     };
     setChoice(SkeletonNodeTypeChoice.ROOT, isRoot, disabledReasons.reroot);
     setChoice(

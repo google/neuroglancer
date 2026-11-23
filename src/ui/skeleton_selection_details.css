@@ -88,6 +88,7 @@
 }
 
 .neuroglancer-selection-details-skeleton-summary-icon .neuroglancer-icon {
+  cursor: default;
   min-width: 14px;
   min-height: 14px;
 }
@@ -147,10 +148,13 @@
   font-weight: 600;
 }
 
+.neuroglancer-selection-details-skeleton-node-type-choice:disabled {
+  cursor: default;
+}
+
 .neuroglancer-selection-details-skeleton-node-type-choice:disabled:not(
     [data-checked]
   ) {
-  cursor: default;
   opacity: 0.35;
 }
 
