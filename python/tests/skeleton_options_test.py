@@ -119,7 +119,7 @@ void main () {
 
 
 @pytest.mark.parametrize(
-    "layout,mode3d", [("xy", "lines"), ("3d", "lines"), ("3d", "cylinders_and_balls")]
+    "layout,mode3d", [("xy", "lines"), ("3d", "lines"), ("3d", "cylinders_and_spheres")]
 )
 @pytest.mark.parametrize("primitive", ["edge", "node"])
 @pytest.mark.parametrize(

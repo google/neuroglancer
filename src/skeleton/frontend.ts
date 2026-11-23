@@ -146,7 +146,7 @@ export enum SkeletonRenderMode3d {
   LINES = 0,
   LINES_AND_POINTS = 1,
   CYLINDERS = 2,
-  CYLINDERS_AND_BALLS = 3,
+  CYLINDERS_AND_SPHERES = 3,
 }
 
 export enum SkeletonRenderMode2d {
@@ -159,14 +159,14 @@ export type SkeletonRenderMode = SkeletonRenderMode2d | SkeletonRenderMode3d;
 function isRaycastMode(mode: SkeletonRenderMode) {
   return (
     mode === SkeletonRenderMode3d.CYLINDERS ||
-    mode === SkeletonRenderMode3d.CYLINDERS_AND_BALLS
+    mode === SkeletonRenderMode3d.CYLINDERS_AND_SPHERES
   );
 }
 
 function hasEnlargedNodes(mode: SkeletonRenderMode) {
   return (
     mode === SkeletonRenderMode3d.LINES_AND_POINTS ||
-    mode === SkeletonRenderMode3d.CYLINDERS_AND_BALLS
+    mode === SkeletonRenderMode3d.CYLINDERS_AND_SPHERES
   );
 }
 
