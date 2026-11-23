@@ -993,6 +993,33 @@ export class SegmentationUserLayer extends Base {
     x === undefined ? undefined : parseUint64(x),
   );
 
+  renderingAccordionState = this.accordions.add("rendering", {
+    sections: [
+      {
+        jsonKey: json_keys.VISIBILITY_SECTION_JSON_KEY,
+        displayName: "Visibility",
+      },
+      {
+        jsonKey: json_keys.APPEARANCE_SECTION_JSON_KEY,
+        displayName: "Appearance",
+        defaultExpanded: true,
+        isDefaultKey: true,
+      },
+      {
+        jsonKey: json_keys.SLICE_SECTION_JSON_KEY,
+        displayName: "Slice 2D",
+      },
+      {
+        jsonKey: json_keys.MESH_SECTION_JSON_KEY,
+        displayName: "Mesh 3D",
+      },
+      {
+        jsonKey: json_keys.SKELETON_SECTION_JSON_KEY,
+        displayName: "Skeletons",
+      },
+    ],
+  });
+
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
     this.codeVisible.changed.add(this.specificationChanged.dispatch);
@@ -1171,6 +1198,16 @@ export class SegmentationUserLayer extends Base {
             x instanceof MultiscaleMeshLayer ||
             x instanceof PerspectiveViewSkeletonLayer ||
             x instanceof PerspectiveViewSpatiallyIndexedSkeletonLayer,
+        ),
+      { changed: this.layersChanged, value: this.renderLayers },
+    ),
+  );
+
+  readonly hasMeshLayer = this.registerDisposer(
+    makeCachedLazyDerivedWatchableValue(
+      (layers) =>
+        layers.some(
+          (x) => x instanceof MeshLayer || x instanceof MultiscaleMeshLayer,
         ),
       { changed: this.layersChanged, value: this.renderLayers },
     ),

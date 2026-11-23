@@ -27,6 +27,7 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     label: "Color seed",
     title: "Color segments based on a hash of their id",
     toolJson: json_keys.COLOR_SEED_JSON_KEY,
+    sectionKey: json_keys.APPEARANCE_SECTION_JSON_KEY,
     ...colorSeedLayerControl(),
   },
   {
@@ -34,19 +35,32 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     title:
       "Use a fixed color for all segments without an explicitly-specified color",
     toolJson: json_keys.SEGMENT_DEFAULT_COLOR_JSON_KEY,
+    sectionKey: json_keys.APPEARANCE_SECTION_JSON_KEY,
     ...fixedColorLayerControl(),
   },
   {
     label: "Saturation",
     toolJson: json_keys.SATURATION_JSON_KEY,
     title: "Saturation of segment colors",
+    sectionKey: json_keys.APPEARANCE_SECTION_JSON_KEY,
     ...rangeLayerControl((layer) => ({ value: layer.displayState.saturation })),
+  },
+  {
+    label: "Opacity (3d)",
+    toolJson: json_keys.OBJECT_ALPHA_JSON_KEY,
+    isValid: (layer) => layer.has3dLayer,
+    title: "Opacity of meshes and skeletons",
+    sectionKey: json_keys.APPEARANCE_SECTION_JSON_KEY,
+    ...rangeLayerControl((layer) => ({
+      value: layer.displayState.objectAlpha,
+    })),
   },
   {
     label: "Opacity (on)",
     toolJson: json_keys.SELECTED_ALPHA_JSON_KEY,
     isValid: (layer) => layer.has2dLayer,
     title: "Opacity in cross-section views of segments that are selected",
+    sectionKey: json_keys.SLICE_SECTION_JSON_KEY,
     ...rangeLayerControl((layer) => ({
       value: layer.displayState.selectedAlpha,
     })),
@@ -56,6 +70,7 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     toolJson: json_keys.NOT_SELECTED_ALPHA_JSON_KEY,
     isValid: (layer) => layer.has2dLayer,
     title: "Opacity in cross-section views of segments that are not selected",
+    sectionKey: json_keys.SLICE_SECTION_JSON_KEY,
     ...rangeLayerControl((layer) => ({
       value: layer.displayState.notSelectedAlpha,
     })),
@@ -64,6 +79,7 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     label: "Resolution (slice)",
     toolJson: json_keys.CROSS_SECTION_RENDER_SCALE_JSON_KEY,
     isValid: (layer) => layer.has2dLayer,
+    sectionKey: json_keys.SLICE_SECTION_JSON_KEY,
     ...renderScaleLayerControl((layer) => ({
       histogram: layer.sliceViewRenderScaleHistogram,
       target: layer.sliceViewRenderScaleTarget,
@@ -73,6 +89,7 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     label: "Resolution (mesh)",
     toolJson: json_keys.MESH_RENDER_SCALE_JSON_KEY,
     isValid: (layer) => layer.has3dLayer,
+    sectionKey: json_keys.MESH_SECTION_JSON_KEY,
     ...renderScaleLayerControl((layer) => ({
       histogram: layer.displayState.renderScaleHistogram,
       target: layer.displayState.renderScaleTarget,
@@ -84,6 +101,7 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     isValid: (layer) => layer.hasSpatiallyIndexedSkeletonsLayer,
     title:
       "Select the node spacing for spatially indexed skeletons in cross-section views",
+    sectionKey: json_keys.SKELETON_SECTION_JSON_KEY,
     ...renderScaleLayerControl(
       (layer) => ({
         histogram: layer.displayState.spatialSkeletonSpacingHistogram2d,
@@ -98,6 +116,7 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     isValid: (layer) => layer.hasSpatiallyIndexedSkeletonsLayer,
     title:
       "Select the node spacing for spatially indexed skeletons in projection views",
+    sectionKey: json_keys.SKELETON_SECTION_JSON_KEY,
     ...renderScaleLayerControl(
       (layer) => ({
         histogram: layer.displayState.spatialSkeletonSpacingHistogram3d,
@@ -107,19 +126,11 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     ),
   },
   {
-    label: "Opacity (3d)",
-    toolJson: json_keys.OBJECT_ALPHA_JSON_KEY,
-    isValid: (layer) => layer.has3dLayer,
-    title: "Opacity of meshes and skeletons",
-    ...rangeLayerControl((layer) => ({
-      value: layer.displayState.objectAlpha,
-    })),
-  },
-  {
     label: "Hidden Opacity (3d)",
     toolJson: json_keys.HIDDEN_OPACITY_3D_JSON_KEY,
     isValid: (layer) => layer.hasSpatiallyIndexedSkeletonsLayer,
     title: "Opacity of hidden (non-visible) skeleton nodes in 3D views",
+    sectionKey: json_keys.SKELETON_SECTION_JSON_KEY,
     ...rangeLayerControl((layer) => ({
       value: layer.displayState.hiddenObjectAlpha,
     })),
@@ -130,6 +141,7 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     isValid: (layer) => layer.has3dLayer,
     title:
       "Set to a non-zero value to increase transparency of object faces perpendicular to view direction",
+    sectionKey: json_keys.MESH_SECTION_JSON_KEY,
     ...rangeLayerControl((layer) => ({
       value: layer.displayState.silhouetteRendering,
       options: { min: 0, max: maxSilhouettePower, step: 0.1 },
@@ -139,24 +151,28 @@ export const LAYER_CONTROLS: LayerControlDefinition<SegmentationUserLayer>[] = [
     label: "Hide segment ID 0",
     toolJson: json_keys.HIDE_SEGMENT_ZERO_JSON_KEY,
     title: "Disallow selection and display of segment id 0",
+    sectionKey: json_keys.VISIBILITY_SECTION_JSON_KEY,
     ...checkboxLayerControl((layer) => layer.displayState.hideSegmentZero),
   },
   {
     label: "Base segment coloring",
     toolJson: json_keys.BASE_SEGMENT_COLORING_JSON_KEY,
     title: "Color base segments individually",
+    sectionKey: json_keys.APPEARANCE_SECTION_JSON_KEY,
     ...checkboxLayerControl((layer) => layer.displayState.baseSegmentColoring),
   },
   {
     label: "Show all by default",
     title: "Show all segments if none are selected",
     toolJson: json_keys.IGNORE_NULL_VISIBLE_SET_JSON_KEY,
+    sectionKey: json_keys.VISIBILITY_SECTION_JSON_KEY,
     ...checkboxLayerControl((layer) => layer.displayState.ignoreNullVisibleSet),
   },
   {
     label: "Highlight on hover",
     toolJson: json_keys.HOVER_HIGHLIGHT_JSON_KEY,
     title: "Highlight the segment under the mouse pointer",
+    sectionKey: json_keys.APPEARANCE_SECTION_JSON_KEY,
     ...checkboxLayerControl((layer) => layer.displayState.hoverHighlight),
   },
   ...getViewSpecificSkeletonRenderingControl("2d"),
@@ -172,6 +188,7 @@ function getViewSpecificSkeletonRenderingControl(
     {
       label: `Skeleton mode (${viewName})`,
       toolJson: `${json_keys.SKELETON_RENDERING_JSON_KEY}.mode${viewName}`,
+      sectionKey: json_keys.SKELETON_SECTION_JSON_KEY,
       isValid: (layer) => layer.hasSkeletonsLayer,
       ...enumLayerControl(
         (layer) =>
@@ -183,6 +200,7 @@ function getViewSpecificSkeletonRenderingControl(
     {
       label: `Line width (${viewName})`,
       toolJson: `${json_keys.SKELETON_RENDERING_JSON_KEY}.lineWidth${viewName}`,
+      sectionKey: json_keys.SKELETON_SECTION_JSON_KEY,
       isValid: (layer) => layer.hasSkeletonsLayer,
       toolDescription: `Skeleton line width (${viewName})`,
       title: `Skeleton line width (${viewName})`,

@@ -33,3 +33,8 @@ export const ANCHOR_SEGMENT_JSON_KEY = "anchorSegment";
 export const SKELETON_RENDERING_SHADER_CONTROL_TOOL_ID =
   "skeletonShaderControl";
 export const SHADER_CONTROLS_JSON_KEY = "shaderControls";
+export const VISIBILITY_SECTION_JSON_KEY = "visibilityExpanded";
+export const APPEARANCE_SECTION_JSON_KEY = "appearanceExpanded";
+export const SLICE_SECTION_JSON_KEY = "sliceRenderingExpanded";
+export const MESH_SECTION_JSON_KEY = "meshRenderingExpanded";
+export const SKELETON_SECTION_JSON_KEY = "skeletonsExpanded";
