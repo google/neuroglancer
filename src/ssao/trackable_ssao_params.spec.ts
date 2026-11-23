@@ -21,6 +21,7 @@ import {
   SSAO_RADIUS_RANGE,
   TrackableSSAO,
 } from "#src/ssao/trackable_ssao_params.js";
+import { CompoundTrackable, getCachedJson } from "#src/util/trackable.js";
 
 describe("TrackableSSAO", () => {
   it("has the documented defaults", () => {
@@ -31,9 +32,17 @@ describe("TrackableSSAO", () => {
     expect(ssao.depthCue.value).toBe(0);
   });
 
-  it("omits itself from JSON at defaults", () => {
+  it("is omitted from its parent's JSON at defaults", () => {
     // Keeps an untouched viewer from adding an `ssao` key to the URL.
-    expect(new TrackableSSAO().toJSON()).toBeUndefined();
+    const parent = new CompoundTrackable();
+    const ssao = new TrackableSSAO();
+    parent.add("ssao", ssao);
+    expect(parent.toJSON()).toEqual({});
+    expect(getCachedJson(parent).value).toEqual({});
+
+    ssao.depthCue.value = 0.3;
+    expect(parent.toJSON()).toEqual({ ssao: { depthCue: 0.3 } });
+    expect(getCachedJson(parent).value).toEqual({ ssao: { depthCue: 0.3 } });
   });
 
   it("round-trips a partial state and keeps other defaults", () => {
