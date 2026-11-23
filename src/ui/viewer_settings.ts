@@ -21,7 +21,10 @@ import {
   SSAO_INTENSITY_RANGE,
   SSAO_RADIUS_RANGE,
 } from "#src/ssao/trackable_ssao_params.js";
-import { TrackableBooleanCheckbox } from "#src/trackable_boolean.js";
+import {
+  ElementVisibilityFromTrackableBoolean,
+  TrackableBooleanCheckbox,
+} from "#src/trackable_boolean.js";
 import type {
   TrackableValue,
   WatchableValueInterface,
@@ -164,6 +167,7 @@ export class ViewerSettingsPanel extends SidePanel {
       );
       if (tooltip !== undefined) widget.element.title = tooltip;
       scroll.appendChild(widget.element);
+      return widget.element;
     };
 
     addCheckbox(
@@ -171,24 +175,32 @@ export class ViewerSettingsPanel extends SidePanel {
       viewer.ssao.enabled,
       "Screen-space ambient occlusion: more realistic shading/shadows on mesh surfaces.",
     );
-    addRange(
-      "SSAO intensity",
-      viewer.ssao.intensity,
-      SSAO_INTENSITY_RANGE,
-      "Higher values give darker shading/shadows.",
-    );
-    addRange(
-      "SSAO radius",
-      viewer.ssao.radius,
-      SSAO_RADIUS_RANGE,
-      "Higher values give broader, softer shadows.",
-    );
-    addRange(
-      "SSAO depth cue",
-      viewer.ssao.depthCue,
-      SSAO_DEPTH_CUE_RANGE,
-      "0 = standard (ground-truth) ambient occlusion; higher values darken " +
-        "concavities more strongly for a clearer depth cue.",
-    );
+    const ssaoSliders = [
+      addRange(
+        "SSAO intensity",
+        viewer.ssao.intensity,
+        SSAO_INTENSITY_RANGE,
+        "Higher values give darker shading/shadows.",
+      ),
+      addRange(
+        "SSAO radius",
+        viewer.ssao.radius,
+        SSAO_RADIUS_RANGE,
+        "Higher values give broader, softer shadows.",
+      ),
+      addRange(
+        "SSAO depth cue",
+        viewer.ssao.depthCue,
+        SSAO_DEPTH_CUE_RANGE,
+        "0 = standard (ground-truth) ambient occlusion; higher values darken " +
+          "concavities more strongly for a clearer depth cue.",
+      ),
+    ];
+    // Shown only while SSAO is enabled.
+    for (const element of ssaoSliders) {
+      this.registerDisposer(
+        new ElementVisibilityFromTrackableBoolean(viewer.ssao.enabled, element),
+      );
+    }
   }
 }

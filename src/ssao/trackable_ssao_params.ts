@@ -16,7 +16,7 @@
 
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import { TrackableValue } from "#src/trackable_value.js";
-import { verifyFiniteFloat } from "#src/util/json.js";
+import { emptyToUndefined, verifyFiniteFloat } from "#src/util/json.js";
 import { CompoundTrackable } from "#src/util/trackable.js";
 
 // Slider / clamp range for the SSAO sampling radius. max should not exceed
@@ -66,6 +66,6 @@ export class TrackableSSAO extends CompoundTrackable {
     for (const key of Object.keys(result)) {
       if (result[key] === undefined) delete result[key];
     }
-    return Object.keys(result).length === 0 ? undefined : result;
+    return emptyToUndefined(result);
   }
 }
