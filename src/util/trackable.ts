@@ -84,7 +84,7 @@ export class CompoundTrackable extends RefCounted implements Trackable {
   }
 
   toJSON() {
-    return jsonFromCompound(this, (child) => child.toJSON());
+    return compoundToJson(this, (child) => child.toJSON());
   }
 
   baseJSON() {
@@ -157,16 +157,16 @@ export class PersistentCompoundTrackable extends CompoundTrackable {
   }
 }
 
-function jsonFromCompound(
+function compoundToJson(
   compound: CompoundTrackable,
   getChildJson: (child: Trackable) => any,
-): { [key: string]: any } {
+) {
   const result = compound.baseJSON();
   for (const [key, child] of compound.children) {
-    let childJson = getChildJson(child);
-    if (child instanceof CompoundTrackable) {
-      childJson = emptyToUndefined(childJson);
-    }
+    const childJson =
+      child instanceof CompoundTrackable
+        ? emptyToUndefined(getChildJson(child))
+        : getChildJson(child);
     if (childJson !== undefined) {
       result[key] = childJson;
     }
@@ -200,7 +200,7 @@ export function getCachedJson(root: Trackable): {
   }
   let value: any;
   if (root instanceof CompoundTrackable) {
-    value = jsonFromCompound(root, (child) => getCachedJson(child).value);
+    value = compoundToJson(root, (child) => getCachedJson(child).value);
   } else {
     value = root.toJSON();
   }
