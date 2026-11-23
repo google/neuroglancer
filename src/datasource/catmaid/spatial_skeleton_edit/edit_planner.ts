@@ -909,7 +909,7 @@ function getDirection(
 }
 
 // CATMAID IDs are Postgres int8, so an ID from 2^63 is never a real one.
-const CATMAID_FIRST_PROVISIONAL_ID = 2n ** 63n;
+const CATMAID_FIRST_PROVISIONAL_ID = 1n << 63n;
 
 /** Deterministic, state-free policy; the generic identity service owns use. */
 export const CATMAID_PROVISIONAL_NUMERIC_ID_POLICY: SpatialSkeletonProvisionalNumericIdPolicy =
