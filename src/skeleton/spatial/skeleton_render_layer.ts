@@ -995,6 +995,10 @@ gl_Position = uChunkToClip * vec4(uTranslation + boxVertex * uChunkDataSize, 1.0
     return !opaque;
   }
 
+  get transparentPickEnabled() {
+    return this.base.displayState.transparentPickEnabled.value;
+  }
+
   getValueAt(_position: Float32Array) {
     return undefined;
   }

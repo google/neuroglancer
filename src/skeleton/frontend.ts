@@ -1195,6 +1195,10 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
     );
   }
 
+  get transparentPickEnabled() {
+    return this.base.displayState.transparentPickEnabled.value;
+  }
+
   draw(
     renderContext: PerspectiveViewRenderContext,
     attachment: VisibleLayerInfo<
