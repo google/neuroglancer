@@ -57,5 +57,7 @@
   width: 1px;
   background-color: #333;
   background-clip: content-box;
+  padding-right: 2px;
+  padding-left: 2px;
   cursor: col-resize;
 }
