@@ -136,6 +136,67 @@ class SourceUrlAutocomplete extends AutocompleteTextInput {
   }
 }
 
+/**
+ * The data source's "warp": the URL of a displacement field (an OME-Zarr
+ * warpfield group) that the source is resampled through. Shown and wrapped
+ * like the source URL. Committing a new value (Enter or leaving the field)
+ * reloads the source; an empty value removes the warp. Escape reverts to the
+ * current value.
+ */
+class WarpUrlInput extends AutocompleteTextInput {
+  row = document.createElement("div");
+
+  constructor(public source: Borrowed<LayerDataSource>) {
+    super({
+      completer: () => null,
+      syntaxHighlighter: dataSourceUrlSyntaxHighlighter,
+      delay: 0,
+    });
+    this.placeholder = "Displacement field URL (none)";
+    const { row, element } = this;
+    row.classList.add("neuroglancer-layer-data-source-warp");
+    row.title =
+      "Warp this source through a displacement field: the URL of a warpfield " +
+      'OME-Zarr group (the layer JSON source "warp"). With a warp, the ' +
+      "transform below places the source before it is warped. Leave empty " +
+      "for no warp.";
+    const label = document.createElement("span");
+    label.classList.add("neuroglancer-layer-data-source-warp-label");
+    label.textContent = "warp";
+    row.appendChild(label);
+    element.classList.add("neuroglancer-layer-data-source-url-input");
+    row.appendChild(element);
+    this.onCommit.add((value) => this.commit(value));
+    this.registerDisposer(() => removeFromParent(row));
+    this.updateView();
+  }
+
+  private commit(value: string) {
+    const trimmed = value.trim();
+    const warp = trimmed.length === 0 ? undefined : trimmed;
+    const { source } = this;
+    const spec = source.spec;
+    if (spec.warp === warp) return;
+    // Adding a warp keeps the current placement for the moving source, and
+    // removing one keeps the moving placement as the source's own.
+    source.spec = { ...spec, warp };
+  }
+
+  cancel() {
+    this.value = this.source.spec.warp ?? "";
+    this.inputElement.blur();
+    return true;
+  }
+
+  updateView() {
+    const { spec } = this.source;
+    this.row.style.display = spec.url.length === 0 ? "none" : "";
+    if (document.activeElement !== this.inputElement) {
+      this.value = spec.warp ?? "";
+    }
+  }
+}
+
 export class MessagesView extends RefCounted {
   element = document.createElement("ul");
   generation = -1;
@@ -348,8 +409,26 @@ export class LoadedDataSourceView extends RefCounted {
           .element,
       );
     }
-    const { transform } = source;
-    if (transform.mutableSourceRank || transform.value.sourceRank !== 0) {
+    const { transform, movingTransform } = source;
+    if (movingTransform !== undefined) {
+      // With a warp, the editable transform is the moving source's placement
+      // (the layer JSON "transform"), applied before the warp.
+      const heading = document.createElement("div");
+      heading.classList.add("neuroglancer-layer-data-source-warp-heading");
+      heading.textContent = "Placement before warp";
+      this.element.appendChild(heading);
+      const transformWidget = this.registerDisposer(
+        new CoordinateSpaceTransformWidget(
+          movingTransform,
+          source.layer.localCoordinateSpaceCombiner,
+          source.layer.manager.root.coordinateSpaceCombiner,
+        ),
+      );
+      this.element.appendChild(transformWidget.element);
+    } else if (
+      transform.mutableSourceRank ||
+      transform.value.sourceRank !== 0
+    ) {
       const transformWidget = this.registerDisposer(
         new CoordinateSpaceTransformWidget(
           source.transform,
@@ -366,6 +445,7 @@ export class LoadedDataSourceView extends RefCounted {
 export class DataSourceView extends RefCounted {
   element = document.createElement("div");
   urlInput: SourceUrlAutocomplete;
+  warpInput: WarpUrlInput;
 
   seenGeneration = 0;
   generation = -1;
@@ -414,6 +494,8 @@ export class DataSourceView extends RefCounted {
     const { element } = this;
     element.classList.add("neuroglancer-layer-data-source");
     element.appendChild(urlInput.element);
+    this.warpInput = this.registerDisposer(new WarpUrlInput(source));
+    element.appendChild(this.warpInput.row);
     element.appendChild(
       this.registerDisposer(new MessagesView(source.messages)).element,
     );
@@ -432,6 +514,7 @@ export class DataSourceView extends RefCounted {
     this.generation = generation;
     this.urlInput.value = this.source.spec.url;
     this.urlInput.dirty.value = false;
+    this.warpInput.updateView();
     const { loadState } = this.source;
     let { loadedView } = this;
     if (loadedView !== undefined) {

@@ -130,3 +130,25 @@ li.neuroglancer-message-info {
 .neuroglancer-layer-data-sources-tab .neuroglancer-progress > li {
   color: #ccc;
 }
+
+.neuroglancer-layer-data-source-warp {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  margin: 2px 0;
+}
+
+.neuroglancer-layer-data-source-warp-label {
+  color: #aaa;
+  flex: none;
+}
+
+.neuroglancer-layer-data-source-warp > .neuroglancer-multiline-autocomplete {
+  flex: 1;
+  min-width: 0;
+}
+
+.neuroglancer-layer-data-source-warp-heading {
+  color: #aaa;
+  margin-top: 4px;
+}

@@ -42,6 +42,7 @@ import {
 } from "#src/sliceview/volume/warp/field.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Borrowed, Owned } from "#src/util/disposable.js";
 import { disposableOnce, RefCounted } from "#src/util/disposable.js";
@@ -266,6 +267,10 @@ export class LoadedLayerDataSource extends RefCounted {
   activatedSubsourcesChanged = new NullarySignal();
   messages = new MessageList();
   transform: WatchableCoordinateSpaceTransform;
+  // With a warp: the placement of the moving source before it is warped (the
+  // spec's "transform"). `transform` is then the warped output's, in the
+  // displacement field's space.
+  movingTransform: WatchableCoordinateSpaceTransform | undefined;
   subsources: LoadedDataSubsource[];
   enableDefaultSubsources: boolean;
   get enabledSubsources() {
@@ -278,8 +283,10 @@ export class LoadedLayerDataSource extends RefCounted {
     public layerDataSource: LayerDataSource,
     public dataSource: DataSource,
     spec: DataSourceSpecification,
+    movingTransform?: WatchableCoordinateSpaceTransform,
   ) {
     super();
+    this.movingTransform = movingTransform;
     if (dataSource.canChangeModelSpaceRank) {
       this.transform = new WatchableCoordinateSpaceTransform(
         makeIdentityTransform(
@@ -433,6 +440,7 @@ export class LayerDataSource extends RefCounted {
     this.spec_ = spec;
     const registry = layer.manager.dataSourceProviderRegistry;
     const abortController = new AbortController();
+    let movingTransform: WatchableCoordinateSpaceTransform | undefined;
     registry
       .get({
         url: spec.url,
@@ -451,7 +459,7 @@ export class LayerDataSource extends RefCounted {
             progressListener: this.progressListener,
           });
           // The layer transform places the moving source before warping.
-          const movingTransform = new WatchableCoordinateSpaceTransform(
+          movingTransform = new WatchableCoordinateSpaceTransform(
             source.modelTransform,
           );
           if (spec.transform !== undefined) {
@@ -473,8 +481,20 @@ export class LayerDataSource extends RefCounted {
         if (refCounted.wasDisposed) return;
         this.messages.clearMessages();
         const loaded = refCounted.registerDisposer(
-          new LoadedLayerDataSource(this, source, spec),
+          new LoadedLayerDataSource(this, source, spec, movingTransform),
         );
+        if (movingTransform !== undefined) {
+          // The warped chunks are computed from the moving source as placed
+          // when the source was loaded, so a new placement reloads it.
+          const moving = movingTransform;
+          const reload = loaded.registerCancellable(
+            animationFrameDebounce(() => {
+              if (refCounted.wasDisposed) return;
+              this.spec = { ...this.spec, transform: moving.spec };
+            }),
+          );
+          loaded.registerDisposer(moving.changed.add(reload));
+        }
         loaded.registerDisposer(
           layer.addCoordinateSpace(loaded.transform.outputSpace),
         );
