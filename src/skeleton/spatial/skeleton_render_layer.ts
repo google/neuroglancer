@@ -436,11 +436,14 @@ export class SpatiallyIndexedSkeletonLayer
       ),
     );
     const { skeletonRenderingOptions: renderingOptions } = displayState;
-    const { shaderError } = renderingOptions;
-    shaderError.value = undefined;
+    const resetShaderErrors = () => {
+      renderingOptions.edgeShaderError.value = undefined;
+      renderingOptions.nodeShaderError.value = undefined;
+    };
+    resetShaderErrors();
     this.registerDisposer(
       renderingOptions.shader.changed.add(() => {
-        shaderError.value = undefined;
+        resetShaderErrors();
         this.redrawNeeded.dispatch();
       }),
     );
@@ -939,11 +942,13 @@ gl_Position = uChunkToClip * vec4(uTranslation + boxVertex * uChunkDataSize, 1.0
         },
       },
     );
-    this.renderHelper = this.registerDisposer(new RenderHelper(base, false));
-    this.browseRenderHelper = this.registerDisposer(
-      new RenderHelper(base.browsePassLayerView, false),
-    );
     this.renderOptions = base.displayState.skeletonRenderingOptions.params3d;
+    this.renderHelper = this.registerDisposer(
+      new RenderHelper(base, false, this.renderOptions),
+    );
+    this.browseRenderHelper = this.registerDisposer(
+      new RenderHelper(base.browsePassLayerView, false, this.renderOptions),
+    );
 
     this.backend = makeSpatialSkeletonRenderLayerBackend(
       this,
@@ -1055,7 +1060,7 @@ gl_Position = uChunkToClip * vec4(uTranslation + boxVertex * uChunkDataSize, 1.0
       this,
       this.renderHelper,
       this.browseRenderHelper,
-      { modelMatrix, renderOptions: this.renderOptions, binding: attachment },
+      { modelMatrix, binding: attachment },
       visibleChunks,
     );
     if (renderContext.wireFrame) {
@@ -1119,11 +1124,13 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
   backend: ChunkRenderLayerFrontend;
   constructor(public base: SpatiallyIndexedSkeletonLayer) {
     super();
-    this.renderHelper = this.registerDisposer(new RenderHelper(base, true));
-    this.browseRenderHelper = this.registerDisposer(
-      new RenderHelper(base.browsePassLayerView, true),
-    );
     this.renderOptions = base.displayState.skeletonRenderingOptions.params2d;
+    this.renderHelper = this.registerDisposer(
+      new RenderHelper(base, true, this.renderOptions),
+    );
+    this.browseRenderHelper = this.registerDisposer(
+      new RenderHelper(base.browsePassLayerView, true, this.renderOptions),
+    );
     this.backend = makeSpatialSkeletonRenderLayerBackend(
       this,
       base,
@@ -1215,7 +1222,7 @@ export class SliceViewPanelSpatiallyIndexedSkeletonLayer extends SliceViewPanelR
       this,
       this.renderHelper,
       this.browseRenderHelper,
-      { modelMatrix, renderOptions: this.renderOptions, binding: attachment },
+      { modelMatrix, binding: attachment },
       visibleChunks,
     );
   }

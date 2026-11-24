@@ -1,5 +1,6 @@
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import * as json_keys from "#src/layer/segmentation/json_keys.js";
+import type { SkeletonRenderMode } from "#src/skeleton/frontend.js";
 import type { LayerControlDefinition } from "#src/widget/layer_control.js";
 import { registerLayerControl } from "#src/widget/layer_control.js";
 import { checkboxLayerControl } from "#src/widget/layer_control_checkbox.js";
@@ -190,7 +191,7 @@ function getViewSpecificSkeletonRenderingControl(
       toolJson: `${json_keys.SKELETON_RENDERING_JSON_KEY}.mode${viewName}`,
       sectionKey: json_keys.SKELETON_SECTION_JSON_KEY,
       isValid: (layer) => layer.hasSkeletonsLayer,
-      ...enumLayerControl(
+      ...enumLayerControl<SegmentationUserLayer, SkeletonRenderMode>(
         (layer) =>
           layer.displayState.skeletonRenderingOptions[
             `params${viewName}` as const

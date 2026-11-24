@@ -33,12 +33,12 @@ import {
   SkeletonGeometryKind,
   type SkeletonGPUGeometry,
   SkeletonLayer,
-  SkeletonRenderMode,
+  SkeletonRenderMode3d,
   SkeletonSegmentState,
   type SkeletonShaderContext,
   SkeletonSource,
   TrackableSkeletonLineWidth,
-  TrackableSkeletonRenderMode,
+  TrackableSkeletonRenderMode3d,
   uploadSkeletonChunkToGPU,
   vertexPositionAttribute,
 } from "#src/skeleton/frontend.js";
@@ -142,6 +142,8 @@ function makeRenderHelper(
   resources: RefCounted,
   options: {
     geometryKind: SkeletonGeometryKind;
+    mode?: SkeletonRenderMode3d;
+    lineWidth?: number;
     targetIsSliceView?: boolean;
     segmentStates?: [bigint, SkeletonSegmentState][];
   },
@@ -158,7 +160,12 @@ function makeRenderHelper(
     segmentStatesHashMap,
   } as unknown as SkeletonShaderContext;
   return resources.registerDisposer(
-    new RenderHelper(base, options.targetIsSliceView ?? false),
+    new RenderHelper(base, options.targetIsSliceView ?? false, {
+      mode: new TrackableSkeletonRenderMode3d(
+        options.mode ?? SkeletonRenderMode3d.LINES,
+      ),
+      lineWidth: new TrackableSkeletonLineWidth(options.lineWidth ?? 1),
+    }),
   );
 }
 
@@ -220,25 +227,21 @@ function makeRenderContext(
     emitter,
     projectionParameters: {
       viewProjectionMat: mat4.create(),
+      invViewMatrix: mat4.create(),
+      displayDimensionRenderInfo: {
+        canonicalVoxelFactors: Float64Array.of(1, 1, 1),
+      },
       width: size,
       height: size,
     },
+    lightDirection: vec3.fromValues(0, 0, 1),
+    ambientLighting: 0,
+    directionalLighting: 1,
   } as unknown as PerspectiveViewRenderContext;
 }
 
-function makeDrawOptions(
-  mode: SkeletonRenderMode,
-  lineWidth: number,
-  binding: RefCounted,
-) {
-  return {
-    modelMatrix: mat4.create(),
-    renderOptions: {
-      mode: new TrackableSkeletonRenderMode(mode),
-      lineWidth: new TrackableSkeletonLineWidth(lineWidth),
-    },
-    binding,
-  };
+function makeDrawOptions(binding: RefCounted) {
+  return { modelMatrix: mat4.create(), binding };
 }
 
 function makeGeometry(
@@ -271,6 +274,8 @@ describe("skeleton render helper", () => {
     segmentationLayerTest((displayState, gl, resources) => {
       const framebuffer = makeOffscreenFramebuffer(gl, 16);
       const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        mode: SkeletonRenderMode3d.LINES_AND_POINTS,
+        lineWidth: 2,
         geometryKind: SkeletonGeometryKind.SINGLE_SEGMENT,
       });
       setSegmentColor(displayState, 3n, vec3.fromValues(0, 0, 1));
@@ -285,7 +290,7 @@ describe("skeleton render helper", () => {
 
       renderHelper.draw(
         makeRenderContext(perspectivePanelEmit, 16),
-        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2, resources),
+        makeDrawOptions(resources),
         (drawSkeleton) =>
           drawSkeleton(skeleton, { colorSegmentId: 3n, pickIds: 5 }),
       );
@@ -305,6 +310,8 @@ describe("skeleton render helper", () => {
     segmentationLayerTest((displayState, gl, resources) => {
       const framebuffer = makeOffscreenFramebuffer(gl, 16);
       const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        mode: SkeletonRenderMode3d.LINES_AND_POINTS,
+        lineWidth: 2,
         geometryKind: SkeletonGeometryKind.SINGLE_SEGMENT,
       });
       setSegmentColor(displayState, 1n, vec3.fromValues(1, 0, 0));
@@ -314,7 +321,7 @@ describe("skeleton render helper", () => {
 
       renderHelper.draw(
         makeRenderContext(perspectivePanelEmit, 16),
-        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2, resources),
+        makeDrawOptions(resources),
         (drawSkeleton) => {
           drawSkeleton(left, { colorSegmentId: 1n });
           drawSkeleton(right, { colorSegmentId: 2n });
@@ -334,6 +341,8 @@ describe("skeleton render helper", () => {
     segmentationLayerTest((displayState, gl, resources) => {
       const framebuffer = makeOffscreenFramebuffer(gl, 16);
       const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        mode: SkeletonRenderMode3d.LINES,
+        lineWidth: 3,
         geometryKind: SkeletonGeometryKind.SEGMENT_PER_VERTEX,
       });
       displayState.segmentationGroupState.value.visibleSegments.add(7n);
@@ -350,7 +359,7 @@ describe("skeleton render helper", () => {
 
       renderHelper.draw(
         makeRenderContext(perspectivePanelEmit, 16),
-        makeDrawOptions(SkeletonRenderMode.LINES, 3, resources),
+        makeDrawOptions(resources),
         (drawSkeleton) =>
           drawSkeleton(chunk, {
             pickIds: { firstEdgePickId: 10, firstNodePickId: 20 },
@@ -373,6 +382,8 @@ describe("skeleton render helper", () => {
     segmentationLayerTest((displayState, gl, resources) => {
       const framebuffer = makeOffscreenFramebuffer(gl, 16);
       const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        mode: SkeletonRenderMode3d.LINES_AND_POINTS,
+        lineWidth: 2,
         geometryKind: SkeletonGeometryKind.SINGLE_SEGMENT,
       });
       const draggedChunk = makeGeometry(gl, [[-0.5, 0, 0]], []);
@@ -380,7 +391,7 @@ describe("skeleton render helper", () => {
 
       renderHelper.draw(
         makeRenderContext(perspectivePanelEmit, 16),
-        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2, resources),
+        makeDrawOptions(resources),
         (drawSkeleton) => {
           drawSkeleton(draggedChunk, {
             colorSegmentId: 1n,
@@ -406,6 +417,8 @@ describe("skeleton render helper", () => {
     segmentationLayerTest((displayState, gl, resources) => {
       const framebuffer = makeOffscreenFramebuffer(gl, 16);
       const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        mode: SkeletonRenderMode3d.LINES_AND_POINTS,
+        lineWidth: 2,
         geometryKind: SkeletonGeometryKind.SPATIAL_INDEX_CHUNK,
         segmentStates: [[2n, SkeletonSegmentState.EXCLUDED_FROM_CHUNKS]],
       });
@@ -422,7 +435,7 @@ describe("skeleton render helper", () => {
 
       renderHelper.draw(
         makeRenderContext(perspectivePanelEmit, 16),
-        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2, resources),
+        makeDrawOptions(resources),
         (drawSkeleton) =>
           drawSkeleton(chunk, {
             chunkBounds: {
@@ -445,6 +458,8 @@ describe("skeleton render helper", () => {
     segmentationLayerTest((displayState, gl, resources) => {
       const framebuffer = makeOffscreenFramebuffer(gl, 16);
       const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        mode: SkeletonRenderMode3d.LINES_AND_POINTS,
+        lineWidth: 2,
         geometryKind: SkeletonGeometryKind.SEGMENT_PER_VERTEX,
         segmentStates: [[2n, SkeletonSegmentState.EXCLUDED_FROM_CHUNKS]],
       });
@@ -453,7 +468,7 @@ describe("skeleton render helper", () => {
 
       renderHelper.draw(
         makeRenderContext(perspectivePanelEmit, 16),
-        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2, resources),
+        makeDrawOptions(resources),
         (drawSkeleton) => drawSkeleton(skeleton, {}),
       );
 
@@ -467,6 +482,8 @@ describe("skeleton render helper", () => {
     segmentationLayerTest((displayState, gl, resources) => {
       const framebuffer = makeOffscreenFramebuffer(gl, 16);
       const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        mode: SkeletonRenderMode3d.LINES_AND_POINTS,
+        lineWidth: 2,
         geometryKind: SkeletonGeometryKind.SEGMENT_PER_VERTEX,
         segmentStates: [
           [
@@ -481,7 +498,7 @@ describe("skeleton render helper", () => {
 
       renderHelper.draw(
         makeRenderContext(perspectivePanelEmit, 16),
-        makeDrawOptions(SkeletonRenderMode.LINES_AND_POINTS, 2, resources),
+        makeDrawOptions(resources),
         (drawSkeleton) => drawSkeleton(skeleton, {}),
       );
 
@@ -495,6 +512,8 @@ describe("skeleton render helper", () => {
     segmentationLayerTest((displayState, gl, resources) => {
       const framebuffer = makeOffscreenFramebuffer(gl, 16);
       const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        mode: SkeletonRenderMode3d.LINES,
+        lineWidth: 4,
         geometryKind: SkeletonGeometryKind.SPATIAL_INDEX_CHUNK,
       });
       displayState.segmentationGroupState.value.visibleSegments.add(1n);
@@ -513,7 +532,7 @@ describe("skeleton render helper", () => {
 
       renderHelper.draw(
         makeRenderContext(perspectivePanelEmit, 16),
-        makeDrawOptions(SkeletonRenderMode.LINES, 4, resources),
+        makeDrawOptions(resources),
         (drawSkeleton) => {
           drawSkeleton(edge, {
             chunkBounds: {
@@ -536,6 +555,204 @@ describe("skeleton render helper", () => {
       );
       expect(readPixel(framebuffer, OffscreenTextures.COLOR, 0.4, 0)[3]).toBe(
         0.5,
+      );
+    });
+  });
+
+  it("reports the picked edge and node of a chunk drawn as cylinders and spheres", () => {
+    segmentationLayerTest((displayState, gl, resources) => {
+      const framebuffer = makeOffscreenFramebuffer(gl, 16);
+      const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        mode: SkeletonRenderMode3d.CYLINDERS_AND_SPHERES,
+        lineWidth: 3,
+        geometryKind: SkeletonGeometryKind.SEGMENT_PER_VERTEX,
+      });
+      displayState.segmentationGroupState.value.visibleSegments.add(7n);
+      const chunk = makeGeometry(
+        gl,
+        [
+          [-0.6, -0.5, 0],
+          [0.6, -0.5, 0],
+          [0, 0.5, 0],
+        ],
+        [[0, 1]],
+        [7n, 7n, 7n],
+      );
+
+      renderHelper.draw(
+        makeRenderContext(perspectivePanelEmit, 16),
+        makeDrawOptions(resources),
+        (drawSkeleton) =>
+          drawSkeleton(chunk, {
+            pickIds: { firstEdgePickId: 10, firstNodePickId: 20 },
+          }),
+      );
+
+      expect(readPixel(framebuffer, OffscreenTextures.PICK, 0, -0.5)[0]).toBe(
+        10,
+      );
+      expect(readPixel(framebuffer, OffscreenTextures.PICK, 0.6, -0.5)[0]).toBe(
+        21,
+      );
+      expect(readPixel(framebuffer, OffscreenTextures.PICK, 0, 0.5)[0]).toBe(
+        22,
+      );
+    });
+  });
+
+  it("draws edges and nodes as round surfaces that bulge towards the viewer", () => {
+    segmentationLayerTest((displayState, gl, resources) => {
+      const framebuffer = makeOffscreenFramebuffer(gl, 16);
+      const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        mode: SkeletonRenderMode3d.CYLINDERS_AND_SPHERES,
+        lineWidth: 3,
+        geometryKind: SkeletonGeometryKind.SEGMENT_PER_VERTEX,
+      });
+      displayState.segmentationGroupState.value.visibleSegments.add(7n);
+      const chunk = makeGeometry(
+        gl,
+        [
+          [-0.6, -0.5, 0],
+          [0.6, -0.5, 0],
+          [0, 0.5, 0],
+        ],
+        [[0, 1]],
+        [7n, 7n, 7n],
+      );
+
+      renderHelper.draw(
+        makeRenderContext(perspectivePanelEmit, 16),
+        makeDrawOptions(resources),
+        (drawSkeleton) => drawSkeleton(chunk, {}),
+      );
+
+      // A flat line would lie at depth 0.5, so z = 1 - depth would be 0.5.
+      expect(
+        readPixel(framebuffer, OffscreenTextures.Z, 0, -0.5)[0],
+      ).toBeGreaterThan(0.5);
+      expect(
+        readPixel(framebuffer, OffscreenTextures.Z, 0, 0.5)[0],
+      ).toBeGreaterThan(0.5);
+    });
+  });
+
+  it("draws a cylinder held by two chunks only once", () => {
+    segmentationLayerTest((displayState, gl, resources) => {
+      const framebuffer = makeOffscreenFramebuffer(gl, 16);
+      const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        mode: SkeletonRenderMode3d.CYLINDERS,
+        lineWidth: 4,
+        geometryKind: SkeletonGeometryKind.SPATIAL_INDEX_CHUNK,
+      });
+      displayState.segmentationGroupState.value.visibleSegments.add(1n);
+      displayState.objectAlpha.value = 0.5;
+      const edge = makeGeometry(
+        gl,
+        [
+          [-0.8, 0, 0],
+          [0.8, 0, 0],
+        ],
+        [[0, 1]],
+        [1n, 1n],
+      );
+      gl.enable(WebGL2RenderingContext.BLEND);
+      gl.blendFunc(WebGL2RenderingContext.ONE, WebGL2RenderingContext.ONE);
+
+      renderHelper.draw(
+        makeRenderContext(perspectivePanelEmit, 16),
+        makeDrawOptions(resources),
+        (drawSkeleton) => {
+          drawSkeleton(edge, {
+            chunkBounds: {
+              origin: Float32Array.of(-1, -1, -1),
+              upperBound: Float32Array.of(0, 1, 1),
+            },
+          });
+          drawSkeleton(edge, {
+            chunkBounds: {
+              origin: Float32Array.of(0, -1, -1),
+              upperBound: Float32Array.of(1, 1, 1),
+            },
+          });
+        },
+      );
+      gl.disable(WebGL2RenderingContext.BLEND);
+
+      for (const clipX of [-0.4, -0.0625, 0, 0.4]) {
+        expect(
+          readPixel(framebuffer, OffscreenTextures.COLOR, clipX, 0)[3],
+        ).toBe(0.5);
+      }
+    });
+  });
+
+  it("draws a node on a chunk boundary as a whole sphere in its own chunk", () => {
+    segmentationLayerTest((displayState, gl, resources) => {
+      const framebuffer = makeOffscreenFramebuffer(gl, 16);
+      const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        mode: SkeletonRenderMode3d.CYLINDERS_AND_SPHERES,
+        lineWidth: 4,
+        geometryKind: SkeletonGeometryKind.SPATIAL_INDEX_CHUNK,
+      });
+      displayState.segmentationGroupState.value.visibleSegments.add(1n);
+      // A diameter of 8 pixels reaches 0.5 either side of the centre.
+      const node = makeGeometry(gl, [[0.1, 0, 0]], [], [1n]);
+
+      renderHelper.draw(
+        makeRenderContext(perspectivePanelEmit, 16),
+        makeDrawOptions(resources),
+        (drawSkeleton) =>
+          drawSkeleton(node, {
+            chunkBounds: {
+              origin: Float32Array.of(0, -1, -1),
+              upperBound: Float32Array.of(1, 1, 1),
+            },
+          }),
+      );
+
+      for (const clipX of [-0.25, 0.1, 0.4]) {
+        expect(
+          readPixel(framebuffer, OffscreenTextures.COLOR, clipX, 0)[3],
+        ).toBe(1);
+      }
+    });
+  });
+
+  it("moves a dragged node and the cylinders that meet it", () => {
+    segmentationLayerTest((displayState, gl, resources) => {
+      const framebuffer = makeOffscreenFramebuffer(gl, 16);
+      const renderHelper = makeRenderHelper(displayState, gl, resources, {
+        mode: SkeletonRenderMode3d.CYLINDERS_AND_SPHERES,
+        lineWidth: 2,
+        geometryKind: SkeletonGeometryKind.SINGLE_SEGMENT,
+      });
+      const skeleton = makeGeometry(
+        gl,
+        [
+          [-0.6, 0, 0],
+          [0.6, 0, 0],
+        ],
+        [[0, 1]],
+      );
+
+      renderHelper.draw(
+        makeRenderContext(perspectivePanelEmit, 16),
+        makeDrawOptions(resources),
+        (drawSkeleton) =>
+          drawSkeleton(skeleton, {
+            colorSegmentId: 1n,
+            nodePositionOverride: { vertexIndex: 1, position: [0.6, 0.6, 0] },
+          }),
+      );
+
+      expect(readPixel(framebuffer, OffscreenTextures.COLOR, 0.6, 0.6)[3]).toBe(
+        1,
+      );
+      expect(readPixel(framebuffer, OffscreenTextures.COLOR, 0, 0.3)[3]).toBe(
+        1,
+      );
+      expect(readPixel(framebuffer, OffscreenTextures.COLOR, 0.6, 0)[3]).toBe(
+        0,
       );
     });
   });
@@ -685,6 +902,8 @@ describe.each([true, false])(
       (useDefaultColor) => {
         segmentationLayerTest((displayState, gl, resources) => {
           const renderHelper = makeRenderHelper(displayState, gl, resources, {
+            mode: SkeletonRenderMode3d.LINES,
+            lineWidth: 3,
             geometryKind: SkeletonGeometryKind.SINGLE_SEGMENT,
             targetIsSliceView,
           });
@@ -718,7 +937,7 @@ vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
 
               renderHelper.draw(
                 makeRenderContext(emitColor, 9),
-                makeDrawOptions(SkeletonRenderMode.LINES, 3, resources),
+                makeDrawOptions(resources),
                 (drawSkeleton) => drawSkeleton(edge, { colorSegmentId: 1n }),
               );
 
