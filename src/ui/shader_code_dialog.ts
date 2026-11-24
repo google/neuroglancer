@@ -42,6 +42,7 @@ export class ShaderCodeEditorDialog<
     }
     this.body.appendChild(codeWidget.element);
 
+    codeWidget.textEditor.setOption("lineNumbers", true);
     codeWidget.textEditor.refresh();
   }
 }

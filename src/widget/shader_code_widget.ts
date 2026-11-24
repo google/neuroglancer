@@ -87,7 +87,6 @@ export class ShaderCodeWidget extends RefCounted {
       mode: "glsl",
       theme: "material-darker",
       gutters: ["CodeMirror-lint-markers"],
-      lineNumbers: true,
     });
     this.element.style.colorScheme = "dark";
     this.textEditor.on("change", () => {
