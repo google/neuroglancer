@@ -18,15 +18,16 @@
  * @file Shared definitions for warped volumes: a moving volume resampled
  * through a displacement field, chunk by chunk, without copying the data.
  *
- * All matrices are row-major 4x4 (homogeneous) or 3x3, as plain number arrays.
+ * All matrices are row-major, as plain number arrays. The warp is computed
+ * over F field dimensions (3 in the common case: 4x4 homogeneous matrices).
  *
  * Coordinate frames:
  *  - "warped": continuous voxel coordinates of the warped chunk grid
  *    (Neuroglancer convention: the sample of voxel m is at m + 0.5);
  *  - "output": the layer output space shared by the fixed image, the field and
  *    the moving image (for example "mm RAS");
- *  - "field index": array index of the displacement field, spatial axes only,
- *    in zarr (C) order, sample n at index n;
+ *  - "field index": voxel index of the displacement field's chunk source
+ *    (any layout: zarr, NIfTI, ...), per chunk dimension, sample n at n;
  *  - "moving": continuous voxel coordinates of a moving chunk source
  *    (sample n at n + 0.5).
  */
@@ -45,15 +46,35 @@ export interface ZarrArrayAccess {
   chunkShape: number[];
 }
 
-export interface DisplacementFieldAccess {
-  // The field level used for this warped scale.
-  array: ZarrArrayAccess;
-  // Array axis that holds the vector components.
-  vectorAxis: number;
-  // output coordinates -> field index (row-major 4x4).
+/**
+ * How to read one level of a displacement field through a Neuroglancer volume
+ * chunk source of any layout (zarr, NIfTI, ...). Indices are chunk-source
+ * voxel indices, with sample n at index n; chunk data is in Fortran order
+ * (chunk dimension 0 fastest).
+ */
+export interface FieldAccess {
+  // rpcId of the backend volume chunk source.
+  source: number;
+  rank: number;
+  chunkDataSize: number[];
+  baseVoxelOffset: number[];
+  lowerVoxelBound: number[];
+  upperVoxelBound: number[];
+  // Chunk dimension that holds the vector components.
+  vectorDim: number;
+  numComponents: number;
+  // Warped output coordinates (the F field dimensions) -> field index, per
+  // chunk dimension: row-major rank x (F + 1). Dimensions the field is
+  // constant along have a zero row and a constant index; the vector
+  // dimension's row is unused.
   outputToIndex: number[];
-  // vector components -> displacement in output coordinates (row-major 3x3).
+  // Components -> displacement in warped output coordinates (row-major
+  // F x numComponents).
   vectorToOutput: number[];
+}
+
+export interface DisplacementFieldAccess extends FieldAccess {
+  // Block bounds of x + u(x) (warpfield stores, 3-d only).
   bounds?: {
     array: ZarrArrayAccess;
     // Finest-level field samples per block along each spatial axis.
@@ -66,17 +87,31 @@ export interface DisplacementFieldAccess {
   };
 }
 
+/** A moving chunk dimension that the warp passes through unchanged. */
+export interface WarpPassthroughDimension {
+  // Moving chunk dimension.
+  dim: number;
+  // Carried whole in every warped chunk (channels); otherwise the warped
+  // chunk has size 1 along it.
+  whole: boolean;
+  // Moving voxel = warped voxel + offset.
+  offset: number;
+}
+
 export class WarpedVolumeChunkSourceParameters {
   // rpcId of the moving volume chunk source.
   movingSource: number;
-  // output coordinates -> moving voxel coordinates (row-major 4x4).
-  // Moving chunk dimensions that are spatial (in the order of the rows of
-  // outputToMoving) and channel dimensions, carried whole into every warped
-  // chunk (which has the 3 spatial dimensions, then the channels).
+  // Warped chunk dimensions 0 .. numFieldDims - 1 are the field dimensions;
+  // the rest are movingPassDims, in order.
+  numFieldDims: number;
+  // Moving chunk dimensions sampled through the field (rows of
+  // outputToMoving), in ascending order.
   movingSpatialDims: number[];
-  movingChannelDims: number[];
+  movingPassDims: WarpPassthroughDimension[];
+  // output coordinates (F dims) -> moving voxel coordinates of
+  // movingSpatialDims: row-major movingSpatialDims.length x (F + 1).
   outputToMoving: number[];
-  // warped voxel coordinates -> output coordinates (row-major 4x4).
+  // warped voxel coordinates -> output coordinates: row-major (F + 1)^2.
   warpedToOutput: number[];
   field: DisplacementFieldAccess;
   interpolation: WarpInterpolation;

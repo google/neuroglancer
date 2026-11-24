@@ -16,6 +16,7 @@ Neuroglancer
    concepts/coordinate_spaces
    concepts/data_views
    concepts/layers
+   concepts/transform_sources
 
 .. toctree::
    :hidden:

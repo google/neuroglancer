@@ -56,6 +56,10 @@ export interface OmeMultiscaleMetadata {
     baseScales: Float64Array;
     baseTransform: Float64Array;
   };
+  // The transformation from the intrinsic system to the output system, when
+  // it has a displacement field: the image is then in its intrinsic system
+  // (`coordinateSpace`), and the layer applies the chain.
+  transformChain?: OmeTransformChain;
 }
 
 export interface OmeMetadata {
@@ -418,6 +422,579 @@ function parseOmeCoordinateTransforms(
   return transform;
 }
 
+// --- Transformation chains: linear transformations and at most one
+// displacement field (RFC-5).
+//
+// A transformation from an input coordinate system to an output system may
+// combine linear transformations with one displacement field: e.g.
+// sequence[affine, inverseOf(displacements), affine]. It is split into
+//   input -> output = post ∘ W ∘ pre,
+// with `pre` and `post` linear and W the field's map, in the field's own
+// coordinates. Rendering pulls output points back into the source, so W must
+// be given by its inverse D(p) = p + u(p) (the field sampled on the output
+// side): inverseOf(displacements), or a bijection whose inverse is one. The
+// split is found by inverting the transformation symbolically into
+//   input <- after ∘ D ∘ before <- output,
+// so that pre = after⁻¹ and post = before⁻¹. Without a field, pre is the
+// identity and post the whole transformation.
+
+/** An axis of an RFC-5 coordinate system (OME JSON). */
+export interface OmeChainAxis {
+  name: string;
+  type?: string;
+  unit?: string;
+}
+
+/**
+ * A transformation between two coordinate systems of the same rank, as
+ * post ∘ W ∘ pre (see above).
+ */
+export interface OmeTransformChain {
+  inputAxes: OmeChainAxis[];
+  outputAxes: OmeChainAxis[];
+  // Homogeneous (rank + 1)^2 column-major matrices, in the coordinate
+  // systems' own units: input -> field coordinates, and field coordinates ->
+  // output.
+  pre: Float64Array;
+  post: Float64Array;
+  field?: {
+    // URL of the field group (an OME-Zarr multiscale with a displacement
+    // axis).
+    url: string;
+    // The axes (indices into the chain's axes) the field acts on, in order:
+    // the field's own spatial axes.
+    spaceAxes: number[];
+  };
+}
+
+/** Neuroglancer base unit and scale of an OME unit (none: "", 1). */
+export function parseOmeUnit(unit: string | undefined) {
+  if (unit === undefined) return { unit: "", scale: 1 };
+  const x = OME_UNITS.get(unit);
+  if (x === undefined) {
+    throw new Error(`Unsupported unit: ${JSON.stringify(unit)}`);
+  }
+  return x;
+}
+
+/** Neuroglancer's name for an OME axis (channel-like axes are local). */
+export function omeAxisDimensionName(axis: OmeChainAxis) {
+  return isChannelLikeAxisType(axis.type) ? `${axis.name}'` : axis.name;
+}
+
+export function parseOmeChainAxes(x: unknown): OmeChainAxis[] {
+  return parseArray(x, (a) => ({
+    name: verifyObjectProperty(a, "name", verifyString),
+    type: verifyOptionalObjectProperty(a, "type", verifyString),
+    unit: verifyOptionalObjectProperty(a, "unit", verifyString),
+  }));
+}
+
+const LINEAR_TRANSFORM_TYPES = new Set([
+  "identity",
+  "scale",
+  "translation",
+  "rotation",
+  "mapAxis",
+  "affine",
+]);
+
+/**
+ * Whether a transformation needs the RFC-5 chain parser: it has a
+ * displacement or coordinate field, or an inverseOf / bijection.
+ */
+function isChainTransform(t: unknown): boolean {
+  if (typeof t !== "object" || t === null) return false;
+  const { type } = t as { type?: unknown };
+  switch (type) {
+    case "displacements":
+    case "coordinates":
+    case "inverseOf":
+    case "bijection":
+    case "byDimension":
+      return true;
+    case "sequence": {
+      const members = (t as { transformations?: unknown }).transformations;
+      return Array.isArray(members) && members.some(isChainTransform);
+    }
+    default:
+      return false;
+  }
+}
+
+interface ChainContext {
+  // Rank of the image's coordinate systems.
+  rank: number;
+  // Indices of the output system's space axes: a transformation of that many
+  // dimensions (a field's own affines) acts on them.
+  spaceAxes: number[];
+  // URL of the group whose metadata holds the transformation.
+  baseUrl: string;
+}
+
+/** Rank of a linear transformation from its parameters, if they say. */
+function linearTransformRank(t: unknown): number | undefined {
+  const length = (key: string) => {
+    const v = (t as Record<string, unknown>)[key];
+    return Array.isArray(v) ? v.length : undefined;
+  };
+  switch (verifyObjectProperty(t, "type", verifyString)) {
+    case "scale":
+      return length("scale");
+    case "translation":
+      return length("translation");
+    case "affine":
+      return length("affine");
+    case "rotation":
+      return length("rotation");
+    case "mapAxis":
+      return length("mapAxis");
+    default:
+      return undefined;
+  }
+}
+
+function homogeneousMultiply(rank: number, a: Float64Array, b: Float64Array) {
+  return matrix.multiply(
+    new Float64Array((rank + 1) ** 2),
+    rank + 1,
+    a,
+    rank + 1,
+    b,
+    rank + 1,
+    rank + 1,
+    rank + 1,
+    rank + 1,
+  );
+}
+
+function homogeneousInverse(rank: number, a: Float64Array) {
+  const out = new Float64Array((rank + 1) ** 2);
+  const det = matrix.inverse(out, rank + 1, a, rank + 1, rank + 1);
+  if (det === 0 || !Number.isFinite(det)) {
+    throw new Error("A transformation in the chain is not invertible");
+  }
+  return out;
+}
+
+/**
+ * A homogeneous matrix of rank `r` acting on the chain's space axes (a field's
+ * own affines act on the field's spatial axes only), as one of the chain's
+ * rank.
+ */
+function embedLinear(ctx: ChainContext, r: number, m: Float64Array) {
+  const { rank, spaceAxes } = ctx;
+  if (r === rank) return m;
+  if (r !== spaceAxes.length) {
+    throw new Error(
+      `A transformation of ${r} dimensions does not fit a coordinate system ` +
+        `of ${rank} dimensions (${spaceAxes.length} of them space axes)`,
+    );
+  }
+  const out = matrix.createIdentity(Float64Array, rank + 1);
+  for (let i = 0; i < r; ++i) {
+    for (let j = 0; j < r; ++j) {
+      out[spaceAxes[j] * (rank + 1) + spaceAxes[i]] = m[j * (r + 1) + i];
+    }
+    out[rank * (rank + 1) + spaceAxes[i]] = m[r * (r + 1) + i];
+  }
+  return out;
+}
+
+/** The matrix of a linear transformation, or undefined if it is not linear. */
+function parseChainLinear(
+  ctx: ChainContext,
+  t: unknown,
+): Float64Array | undefined {
+  verifyObject(t);
+  const type = verifyObjectProperty(t, "type", verifyString);
+  if (LINEAR_TRANSFORM_TYPES.has(type)) {
+    const r = linearTransformRank(t) ?? ctx.rank;
+    const parser = coordinateTransformParsers.get(type)!;
+    return embedLinear(ctx, r, parser(r, t) as Float64Array);
+  }
+  switch (type) {
+    case "sequence": {
+      let m: Float64Array = matrix.createIdentity(Float64Array, ctx.rank + 1);
+      for (const member of verifyObjectProperty(t, "transformations", (x) =>
+        parseArray(x, (y) => y),
+      )) {
+        const next = parseChainLinear(ctx, member);
+        if (next === undefined) return undefined;
+        m = homogeneousMultiply(ctx.rank, next, m);
+      }
+      return m;
+    }
+    case "inverseOf": {
+      const inner = parseChainLinear(
+        ctx,
+        verifyObjectProperty(t, "transformation", (x) => x),
+      );
+      return inner === undefined
+        ? undefined
+        : homogeneousInverse(ctx.rank, inner);
+    }
+    case "bijection":
+      return parseChainLinear(
+        ctx,
+        verifyObjectProperty(t, "forward", (x) => x),
+      );
+    case "displacements":
+    case "coordinates":
+      return undefined;
+    default:
+      throw new Error(
+        `Unsupported coordinate transform type: ${JSON.stringify(type)}`,
+      );
+  }
+}
+
+/** A transformation after ∘ D ∘ before, with D a displacement field. */
+interface FieldForm {
+  before: Float64Array;
+  url: string;
+  after: Float64Array;
+}
+
+function resolveTransformPath(baseUrl: string, path: string) {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(path)) {
+    return kvstoreEnsureDirectoryPipelineUrl(path);
+  }
+  const m = baseUrl.match(/^([a-z][a-z0-9+.-]*:\/\/[^/]*)(\/.*)?$/i);
+  const [origin, basePath] = m === null ? ["", baseUrl] : [m[1], m[2] ?? "/"];
+  const parts = basePath.split("/").filter((x) => x !== "");
+  for (const part of path.split("/")) {
+    if (part === "..") {
+      if (parts.length === 0) {
+        throw new Error(
+          `Invalid relative path ${JSON.stringify(path)} from ${baseUrl}`,
+        );
+      }
+      parts.pop();
+    } else if (part !== "." && part !== "") {
+      parts.push(part);
+    }
+  }
+  return `${origin}/${parts.join("/")}/`;
+}
+
+/**
+ * Combines transformations applied in order, of which exactly one is a field
+ * (a FieldForm) and the others matrices.
+ */
+function combineFieldForm(
+  ctx: ChainContext,
+  members: (Float64Array | FieldForm)[],
+): FieldForm {
+  const { rank } = ctx;
+  let before: Float64Array = matrix.createIdentity(Float64Array, rank + 1);
+  let after: Float64Array = matrix.createIdentity(Float64Array, rank + 1);
+  let field: FieldForm | undefined;
+  for (const m of members) {
+    if (m instanceof Float64Array) {
+      if (field === undefined) before = homogeneousMultiply(rank, m, before);
+      else after = homogeneousMultiply(rank, m, after);
+    } else {
+      if (field !== undefined) {
+        throw new Error(
+          "Only one displacement field per transformation is supported",
+        );
+      }
+      field = m;
+    }
+  }
+  if (field === undefined) {
+    throw new Error("Expected a displacement field");
+  }
+  return {
+    before: homogeneousMultiply(rank, field.before, before),
+    url: field.url,
+    after: homogeneousMultiply(rank, after, field.after),
+  };
+}
+
+function parseFieldMembers(t: unknown) {
+  return verifyObjectProperty(t, "transformations", (x) =>
+    parseArray(x, (y) => y),
+  );
+}
+
+function checkInterpolation(t: unknown) {
+  const interpolation = verifyOptionalObjectProperty(
+    t,
+    "interpolation",
+    verifyString,
+  );
+  if (interpolation !== undefined && interpolation !== "linear") {
+    throw new Error(
+      `Unsupported displacement field interpolation: ${JSON.stringify(
+        interpolation,
+      )} (only "linear")`,
+    );
+  }
+}
+
+/** The transformation `t` itself as after ∘ D ∘ before. */
+function forwardFieldForm(ctx: ChainContext, t: unknown): FieldForm {
+  const type = verifyObjectProperty(t, "type", verifyString);
+  switch (type) {
+    case "displacements": {
+      checkInterpolation(t);
+      const identity = matrix.createIdentity(Float64Array, ctx.rank + 1);
+      return {
+        before: identity,
+        url: resolveTransformPath(
+          ctx.baseUrl,
+          verifyObjectProperty(t, "path", verifyString),
+        ),
+        after: identity,
+      };
+    }
+    case "sequence":
+      return combineFieldForm(
+        ctx,
+        parseFieldMembers(t).map(
+          (m) => parseChainLinear(ctx, m) ?? forwardFieldForm(ctx, m),
+        ),
+      );
+    case "bijection":
+      return forwardFieldForm(
+        ctx,
+        verifyObjectProperty(t, "forward", (x) => x),
+      );
+    case "inverseOf":
+      return inverseFieldForm(
+        ctx,
+        verifyObjectProperty(t, "transformation", (x) => x),
+      );
+    default:
+      throw new Error(
+        `Unsupported coordinate transform type: ${JSON.stringify(type)}`,
+      );
+  }
+}
+
+/** The inverse of the transformation `t` as after ∘ D ∘ before. */
+function inverseFieldForm(ctx: ChainContext, t: unknown): FieldForm {
+  const type = verifyObjectProperty(t, "type", verifyString);
+  switch (type) {
+    case "displacements": {
+      const path = verifyObjectProperty(t, "path", verifyString);
+      throw new Error(
+        `The displacement field ${JSON.stringify(path)} maps the image's ` +
+          "points to the output space, and drawing the image needs the " +
+          "inverse: give the field of the inverse direction (sampled on the " +
+          'output side) with "inverseOf", or both fields with "bijection"',
+      );
+    }
+    case "sequence":
+      // (m_k ∘ ... ∘ m_0)⁻¹ = m_0⁻¹ ∘ ... ∘ m_k⁻¹: the inverses in reverse.
+      return combineFieldForm(
+        ctx,
+        parseFieldMembers(t)
+          .reverse()
+          .map((m) => {
+            const linear = parseChainLinear(ctx, m);
+            return linear === undefined
+              ? inverseFieldForm(ctx, m)
+              : homogeneousInverse(ctx.rank, linear);
+          }),
+      );
+    case "bijection":
+      return forwardFieldForm(
+        ctx,
+        verifyObjectProperty(t, "inverse", (x) => x),
+      );
+    case "inverseOf":
+      return forwardFieldForm(
+        ctx,
+        verifyObjectProperty(t, "transformation", (x) => x),
+      );
+    default:
+      throw new Error(
+        `Unsupported coordinate transform type: ${JSON.stringify(type)}`,
+      );
+  }
+}
+
+/** The space axes of a coordinate system: type "space", else length units. */
+function spaceAxesOf(axes: OmeChainAxis[]) {
+  const space = axes
+    .map((a, i) => (a.type === "space" ? i : -1))
+    .filter((i) => i !== -1);
+  if (space.length !== 0) return space;
+  return axes
+    .map((a, i) =>
+      a.unit !== undefined && OME_UNITS.get(a.unit)?.unit === "m" ? i : -1,
+    )
+    .filter((i) => i !== -1);
+}
+
+/**
+ * Parses a transformation from the coordinate system with axes `inputAxes`
+ * to the one with `outputAxes` (OME JSON; with `inverse`, the transformation
+ * is used from its output system to its input system) into
+ * post ∘ W ∘ pre. Relative field paths resolve against `baseUrl`, the URL of
+ * the group whose metadata holds the transformation.
+ */
+export function parseOmeTransformChain(
+  transformation: unknown,
+  inputAxes: OmeChainAxis[],
+  outputAxes: OmeChainAxis[],
+  baseUrl: string,
+  inverse = false,
+): OmeTransformChain {
+  if (inverse) [inputAxes, outputAxes] = [outputAxes, inputAxes];
+  const rank = outputAxes.length;
+  if (inputAxes.length !== rank) {
+    throw new Error(
+      `Transformations between coordinate systems of different ranks ` +
+        `(${inputAxes.length} and ${rank}) are not supported`,
+    );
+  }
+  let spaceAxes = spaceAxesOf(outputAxes);
+  if (spaceAxes.length === 0) spaceAxes = spaceAxesOf(inputAxes);
+  const ctx: ChainContext = { rank, spaceAxes, baseUrl };
+  const identity = matrix.createIdentity(Float64Array, rank + 1);
+  const linear = parseChainLinear(ctx, transformation);
+  if (linear !== undefined) {
+    return {
+      inputAxes,
+      outputAxes,
+      pre: identity,
+      post: inverse ? homogeneousInverse(rank, linear) : linear,
+    };
+  }
+  // The pull-back (output -> input) is after ∘ D ∘ before.
+  const { before, url, after } = inverse
+    ? forwardFieldForm(ctx, transformation)
+    : inverseFieldForm(ctx, transformation);
+  const pre = homogeneousInverse(rank, after);
+  const post = homogeneousInverse(rank, before);
+  // The field acts on the space axes: its placements must not mix them with
+  // the others.
+  const isSpace = (i: number) => spaceAxes.includes(i);
+  for (const m of [pre, post]) {
+    for (let i = 0; i < rank; ++i) {
+      for (let j = 0; j < rank; ++j) {
+        if (isSpace(i) !== isSpace(j) && m[j * (rank + 1) + i] !== 0) {
+          throw new Error(
+            "The transformation mixes the displacement field's space axes " +
+              "with other axes",
+          );
+        }
+      }
+    }
+  }
+  return { inputAxes, outputAxes, pre, post, field: { url, spaceAxes } };
+}
+
+/** pre and post of a chain without a field, as one matrix. */
+export function omeTransformChainLinear(chain: OmeTransformChain) {
+  return homogeneousMultiply(chain.outputAxes.length, chain.post, chain.pre);
+}
+
+/** A transformation of an OME-Zarr document and its coordinate systems. */
+export interface OmeTransformationEntry {
+  transformation: unknown;
+  name?: string;
+  input: { name?: string; path?: string };
+  output: { name?: string; path?: string };
+}
+
+/**
+ * The transformations of an OME-Zarr group's "ome" metadata that a transform
+ * source can use, with the coordinate systems they refer to by name:
+ * - a scene ("scene": coordinateSystems and coordinateTransformations);
+ * - a group of transformations (coordinateSystems and
+ *   coordinateTransformations directly in "ome");
+ * - an image (its multiscale's transformations from the intrinsic system).
+ * Undefined if the metadata has none of these.
+ */
+export function getOmeTransformations(ome: unknown):
+  | {
+      kind: "scene" | "transformations" | "image";
+      systems: { name: string; axes: OmeChainAxis[] }[];
+      transformations: OmeTransformationEntry[];
+    }
+  | undefined {
+  if (typeof ome !== "object" || ome === null) return undefined;
+  const parseSystems = (x: unknown) =>
+    parseArray(x ?? [], (c) => ({
+      name: verifyObjectProperty(c, "name", verifyString),
+      axes: verifyObjectProperty(c, "axes", parseOmeChainAxes),
+    }));
+  const parseEntries = (x: unknown) =>
+    parseArray(x, (t) => {
+      verifyObject(t);
+      return {
+        transformation: t,
+        name: verifyOptionalObjectProperty(t, "name", verifyString),
+        input: verifyOptionalObjectProperty(t, "input", parseOmeInputOutput, {
+          name: undefined,
+          path: undefined,
+        }),
+        output: verifyOptionalObjectProperty(t, "output", parseOmeInputOutput, {
+          name: undefined,
+          path: undefined,
+        }),
+      };
+    });
+  const o = ome as Record<string, unknown>;
+  const scene = o.scene as Record<string, unknown> | undefined;
+  if (scene?.coordinateTransformations !== undefined) {
+    return {
+      kind: "scene",
+      systems: parseSystems(scene.coordinateSystems),
+      transformations: parseEntries(scene.coordinateTransformations),
+    };
+  }
+  if (o.coordinateTransformations !== undefined) {
+    return {
+      kind: "transformations",
+      systems: parseSystems(o.coordinateSystems),
+      transformations: parseEntries(o.coordinateTransformations),
+    };
+  }
+  const multiscale = Array.isArray(o.multiscales)
+    ? (o.multiscales[0] as Record<string, unknown> | undefined)
+    : undefined;
+  if (multiscale?.coordinateSystems === undefined) return undefined;
+  const intrinsic = verifyObjectProperty(multiscale, "datasets", (x) =>
+    parseArray(x, parseMultiscaleOutput),
+  )[0]?.name;
+  if (intrinsic === undefined) return undefined;
+  return {
+    kind: "image",
+    systems: parseSystems(multiscale.coordinateSystems),
+    transformations: parseEntries(
+      multiscale.coordinateTransformations ?? [],
+    ).filter((t) => t.input.name === intrinsic && t.output.name !== undefined),
+  };
+}
+
+/**
+ * The name of an OME-Zarr image's intrinsic coordinate system: the output of
+ * its datasets' transformations.
+ */
+export function getOmeIntrinsicSystem(ome: unknown) {
+  const multiscale = verifyObjectProperty(
+    ome,
+    "multiscales",
+    (x) => parseArray(x, verifyObject)[0],
+  );
+  const name = verifyObjectProperty(multiscale, "datasets", (x) =>
+    parseArray(x, parseMultiscaleOutput),
+  )[0]?.name;
+  const systems = verifyObjectProperty(multiscale, "coordinateSystems", (x) =>
+    parseArray(x, (c) => ({
+      name: verifyObjectProperty(c, "name", verifyString),
+      axes: verifyObjectProperty(c, "axes", parseOmeChainAxes),
+    })),
+  );
+  return { name, systems };
+}
+
 function validateCoordinateTransformations(
   transformations: unknown,
   expectedInput: string,
@@ -649,6 +1226,10 @@ function parseOmeMultiscale(
     (x) => x,
   );
   let coordinateTransformsToApply: unknown = coordinateTransformsJson;
+  // An RFC-5 chain to the output system: linear (applied like the others), or
+  // with a displacement field.
+  let chainLinear: Float64Array | undefined;
+  let transformChain: OmeTransformChain | undefined;
 
   if (
     coordinateSystemsJson !== undefined &&
@@ -708,16 +1289,47 @@ function parseOmeMultiscale(
       );
     }
     coordinateSpace = coordinateSystems[coordinateSpaceMatch];
+    const applied = applicableCoordinateTransforms[0]?.transformation;
+    if (applied !== undefined && isChainTransform(applied)) {
+      const intrinsicMatch = coordinateSystemsJson.findIndex(
+        (x) => x.name === intrinsicCoordinateSystemName,
+      );
+      if (intrinsicMatch === -1) {
+        throw new Error(
+          `Could not find any coordinate system for the intrinsic system ${intrinsicCoordinateSystemName}`,
+        );
+      }
+      const axesOf = (i: number) =>
+        verifyObjectProperty(
+          coordinateSystemsJson[i],
+          "axes",
+          parseOmeChainAxes,
+        );
+      const chain = parseOmeTransformChain(
+        applied,
+        axesOf(intrinsicMatch),
+        axesOf(coordinateSpaceMatch),
+        url,
+      );
+      if (chain.field === undefined) {
+        chainLinear = omeTransformChainLinear(chain);
+      } else {
+        // The image stays in its intrinsic system; the layer applies the
+        // chain (see `layer/layer_data_source.ts`).
+        transformChain = chain;
+        coordinateSpace = coordinateSystems[intrinsicMatch];
+      }
+      coordinateTransformsToApply = undefined;
+    }
   } else {
     // OME-ZARR 0.4/0.5: Use axes directly
     coordinateSpace = verifyObjectProperty(multiscale, "axes", parseOmeAxes);
   }
 
   const rank = coordinateSpace.rank;
-  const transform = parseOmeCoordinateTransforms(
-    rank,
-    coordinateTransformsToApply,
-  );
+  const transform =
+    chainLinear ??
+    parseOmeCoordinateTransforms(rank, coordinateTransformsToApply);
   const scales = verifyObjectProperty(multiscale, "datasets", (obj) =>
     parseArray(obj, (x) => {
       const scale = parseMultiscaleScale(
@@ -813,6 +1425,7 @@ function parseOmeMultiscale(
       coordinateSpace,
       scales,
       baseInfo: { baseScales, baseTransform: baseTransformWithoutScale },
+      transformChain,
     };
   } else {
     // Old behavior (< 0.6): identity base transform, translations

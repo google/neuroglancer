@@ -15,7 +15,11 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { parseOmeMetadata } from "#src/datasource/zarr/ome.js";
+import {
+  parseOmeMetadata,
+  getOmeTransformations,
+  parseOmeTransformChain,
+} from "#src/datasource/zarr/ome.js";
 import { createIdentity } from "#src/util/matrix.js";
 
 const intrinsicCoordinateSystem = {
@@ -1416,4 +1420,354 @@ it("should handle anisotropic scales with rotations for 0.6 (issue #952)", () =>
   expect(baseTransform.slice(8, 12)).toEqual(new Float64Array([0, 0, 1, 0]));
   // Column 4 - [0, 0, 0, 1]
   expect(baseTransform.slice(12)).toEqual(new Float64Array([0, 0, 0, 1]));
+});
+
+describe("OME-Zarr 0.6 transformations with a displacement field (RFC-5)", () => {
+  const space = (name: string) => ({
+    name,
+    type: "space",
+    unit: "micrometer",
+  });
+  const zyx = [space("z"), space("y"), space("x")];
+  // Without signed zeros (inverses give -0).
+  const plain = (a: ArrayLike<number>) => Array.from(a, (v) => v + 0);
+  // Rows [linear | translation] -> homogeneous column-major, rank n.
+  const homogeneous = (rows: number[][]) => {
+    const n = rows.length;
+    const m = createIdentity(Float64Array, n + 1);
+    rows.forEach((row, i) => row.forEach((v, j) => (m[j * (n + 1) + i] = v)));
+    return m;
+  };
+  const swapYX = [
+    [1, 0, 0, 0],
+    [0, 0, 1, 0],
+    [0, 1, 0, 0],
+  ];
+  const mirrorX = [
+    [1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, -1, 64],
+  ];
+  const field = (path: string) => ({
+    type: "sequence",
+    transformations: [
+      { type: "affine", affine: swapYX },
+      { type: "displacements", path, interpolation: "linear" },
+      { type: "affine", affine: swapYX },
+    ],
+  });
+  const chain = (step: unknown) => ({
+    type: "sequence",
+    transformations: [
+      { type: "translation", translation: [1, -2, 1.5] },
+      step,
+      { type: "affine", affine: mirrorX },
+    ],
+  });
+
+  const parse = (
+    t: unknown,
+    axes: { name: string; type?: string; unit?: string }[] = zyx,
+    inverse = false,
+  ) =>
+    parseOmeTransformChain(
+      t,
+      axes,
+      axes,
+      "http://host/data/img.zarr/",
+      inverse,
+    );
+
+  it("splits linear parts and an inverseOf field", () => {
+    const {
+      pre,
+      post,
+      field: f,
+    } = parse(chain({ type: "inverseOf", transformation: field("../f.zarr") }));
+    // input -> output = post ∘ W ∘ pre: pre = swap ∘ translation (into the
+    // field's coordinates), post = mirror ∘ swap: y = f_x, x = 64 - f_y.
+    expect(plain(pre)).toEqual(
+      plain(
+        homogeneous([
+          [1, 0, 0, 1],
+          [0, 0, 1, 1.5],
+          [0, 1, 0, -2],
+        ]),
+      ),
+    );
+    expect(plain(post)).toEqual(
+      plain(
+        homogeneous([
+          [1, 0, 0, 0],
+          [0, 0, 1, 0],
+          [0, -1, 0, 64],
+        ]),
+      ),
+    );
+    expect(f).toEqual({
+      url: "http://host/data/f.zarr/",
+      spaceAxes: [0, 1, 2],
+    });
+  });
+
+  it("uses the inverse of a bijection, or its forward when inverted", () => {
+    const t = chain({
+      type: "bijection",
+      forward: field("fwd"),
+      inverse: field("inv"),
+    });
+    expect(parse(t).field?.url).toBe("http://host/data/img.zarr/inv/");
+    // Inverted: drawn from the output system into the input system, so the
+    // pull-back is the transformation itself.
+    const inverted = parse(t, zyx, true);
+    expect(inverted.field?.url).toBe("http://host/data/img.zarr/fwd/");
+    // pre: (mirror ∘ swap)⁻¹ = swap ∘ mirror; post: translation⁻¹ ∘ swap:
+    // (z, y, x) -> (z - 1, x + 2, y - 1.5).
+    expect(plain(inverted.pre)).toEqual(
+      plain(
+        homogeneous([
+          [1, 0, 0, 0],
+          [0, 0, -1, 64],
+          [0, 1, 0, 0],
+        ]),
+      ),
+    );
+    expect(plain(inverted.post)).toEqual(
+      plain(
+        homogeneous([
+          [1, 0, 0, -1],
+          [0, 0, 1, 2],
+          [0, 1, 0, -1.5],
+        ]),
+      ),
+    );
+  });
+
+  it("keeps the last linear part after the field as post", () => {
+    // intrinsic -> scale 2 -> inverseOf(displacements): the chain ends with
+    // the field, so post is the identity.
+    const { pre, post } = parse({
+      type: "sequence",
+      transformations: [
+        { type: "scale", scale: [2, 2, 2] },
+        {
+          type: "inverseOf",
+          transformation: { type: "displacements", path: "f" },
+        },
+      ],
+    });
+    expect(plain(pre)).toEqual(
+      plain(
+        homogeneous([
+          [2, 0, 0, 0],
+          [0, 2, 0, 0],
+          [0, 0, 2, 0],
+        ]),
+      ),
+    );
+    expect(plain(post)).toEqual(plain(createIdentity(Float64Array, 4)));
+  });
+
+  it("embeds the field's affines on the space axes", () => {
+    const {
+      pre,
+      post,
+      field: f,
+    } = parse(
+      {
+        type: "sequence",
+        transformations: [
+          { type: "translation", translation: [0, 1, -2, 1.5] },
+          { type: "inverseOf", transformation: field("f") },
+          {
+            type: "affine",
+            affine: [
+              [1, 0, 0, 0, 0],
+              [0, 1, 0, 0, 0],
+              [0, 0, 1, 0, 0],
+              [0, 0, 0, -1, 64],
+            ],
+          },
+        ],
+      },
+      [{ name: "c", type: "channel" }, ...zyx],
+    );
+    expect(plain(pre)).toEqual(
+      plain(
+        homogeneous([
+          [1, 0, 0, 0, 0],
+          [0, 1, 0, 0, 1],
+          [0, 0, 0, 1, 1.5],
+          [0, 0, 1, 0, -2],
+        ]),
+      ),
+    );
+    expect(plain(post)).toEqual(
+      plain(
+        homogeneous([
+          [1, 0, 0, 0, 0],
+          [0, 1, 0, 0, 0],
+          [0, 0, 0, 1, 0],
+          [0, 0, -1, 0, 64],
+        ]),
+      ),
+    );
+    expect(f?.spaceAxes).toEqual([1, 2, 3]);
+  });
+
+  it("inverts linear inverseOf and bijection without a field", () => {
+    const {
+      pre,
+      post,
+      field: f,
+    } = parse({
+      type: "inverseOf",
+      transformation: { type: "scale", scale: [2, 4, 8] },
+    });
+    expect(f).toBeUndefined();
+    expect(plain(pre)).toEqual(plain(createIdentity(Float64Array, 4)));
+    expect(plain(post)).toEqual(
+      plain(
+        homogeneous([
+          [0.5, 0, 0, 0],
+          [0, 0.25, 0, 0],
+          [0, 0, 0.125, 0],
+        ]),
+      ),
+    );
+  });
+
+  it("refuses a forward field, two fields, and coordinates", () => {
+    expect(() => parse({ type: "displacements", path: "f" })).toThrow(
+      /needs the inverse/,
+    );
+    expect(() =>
+      parse({
+        type: "sequence",
+        transformations: [
+          { type: "inverseOf", transformation: field("a") },
+          { type: "inverseOf", transformation: field("b") },
+        ],
+      }),
+    ).toThrow(/Only one displacement field/);
+    expect(() =>
+      parse({
+        type: "inverseOf",
+        transformation: { type: "coordinates", path: "c" },
+      }),
+    ).toThrow(/Unsupported coordinate transform type: "coordinates"/);
+  });
+
+  it("finds the transformations of a scene, a group and an image", () => {
+    const system = { name: "a", axes: zyx };
+    const scene = getOmeTransformations({
+      scene: {
+        coordinateSystems: [system, { ...system, name: "b" }],
+        coordinateTransformations: [
+          {
+            type: "scale",
+            scale: [1, 2, 3],
+            name: "a to b",
+            input: { name: "a" },
+            output: { name: "b" },
+          },
+        ],
+      },
+    });
+    expect(scene?.kind).toBe("scene");
+    expect(scene?.systems.map((c) => c.name)).toEqual(["a", "b"]);
+    expect(scene?.transformations[0].name).toBe("a to b");
+    expect(
+      getOmeTransformations({
+        coordinateSystems: [system],
+        coordinateTransformations: [],
+      })?.kind,
+    ).toBe("transformations");
+    const image = getOmeTransformations({
+      multiscales: [
+        {
+          coordinateSystems: [system, { ...system, name: "world" }],
+          datasets: [
+            {
+              path: "0",
+              coordinateTransformations: [
+                { type: "scale", scale: [1, 1, 1], output: { name: "a" } },
+              ],
+            },
+          ],
+          coordinateTransformations: [
+            { type: "scale", scale: [2, 2, 2], input: "a", output: "world" },
+            { type: "scale", scale: [2, 2, 2], input: "world", output: "a" },
+          ],
+        },
+      ],
+    });
+    expect(image?.kind).toBe("image");
+    // Only the transformations from the intrinsic system.
+    expect(image?.transformations.map((t) => t.output.name)).toEqual(["world"]);
+    expect(getOmeTransformations({ version: "0.6" })).toBeUndefined();
+  });
+
+  it("leaves the image in its intrinsic system with a field", () => {
+    const attrs = (transformation: unknown) => ({
+      ome: {
+        version: "0.6",
+        multiscales: [
+          {
+            coordinateSystems: [
+              { name: "img", axes: zyx },
+              { name: "world", axes: zyx },
+            ],
+            datasets: [
+              {
+                path: "0",
+                coordinateTransformations: [
+                  {
+                    type: "scale",
+                    scale: [1, 1, 1],
+                    input: { path: "0" },
+                    output: { name: "img" },
+                  },
+                ],
+              },
+            ],
+            coordinateTransformations: [
+              {
+                ...(transformation as object),
+                input: { name: "img" },
+                output: { name: "world" },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const warped = parseOmeMetadata(
+      "http://host/a/img.zarr/",
+      attrs(chain({ type: "inverseOf", transformation: field("../f.zarr") })),
+      3,
+    );
+    expect(warped!.multiscale.transformChain?.field?.url).toBe(
+      "http://host/a/f.zarr/",
+    );
+    // The image's transform is its datasets' alone.
+    expect(plain(warped!.multiscale.baseInfo.baseTransform)).toEqual(
+      plain(createIdentity(Float64Array, 4)),
+    );
+    const linear = parseOmeMetadata(
+      "http://host/a/img.zarr/",
+      attrs({ type: "affine", affine: mirrorX }),
+      3,
+    );
+    expect(linear!.multiscale.transformChain).toBeUndefined();
+    expect(plain(linear!.multiscale.baseInfo.baseTransform)).toEqual(
+      plain(
+        homogeneous([
+          [1, 0, 0, 0],
+          [0, 1, 0, 0],
+          [0, 0, -1, 64],
+        ]),
+      ),
+    );
+  });
 });

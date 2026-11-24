@@ -34,8 +34,8 @@ import {
   getWarpGeometry,
   movingModelToOutput,
   mul4,
+  fieldLevelAccess,
   rowMajorFromColumnMajor,
-  zarrArrayAccess,
 } from "#src/sliceview/volume/warp/field.js";
 import type { FieldLevelAccess } from "#src/sliceview/volume/warp/field_sampler.js";
 
@@ -100,16 +100,10 @@ export function makeWarpedMeshSource(
     g: WarpGeometry,
     level: number,
   ): FieldLevelAccess => {
-    const volume = f.fields[level];
-    const source = volume.getSources(canonicalSourceOptions(4))[0][0]
-      .chunkSource;
-    dependencies.push(source);
-    return {
-      array: zarrArrayAccess(volume, source),
-      vectorAxis: f.metadata.vectorAxis,
-      outputToIndex: g.levels[level].outputToIndex,
-      vectorToOutput: g.vectorToOutput,
-    };
+    const volume = f.levels[level].volume;
+    const entry = volume.getSources(canonicalSourceOptions(f.modelRank))[0][0];
+    dependencies.push(entry.chunkSource);
+    return fieldLevelAccess(g, level, entry);
   };
   const coarse = access(field, geometry, geometry.levels.length - 1);
   const fine = access(fineField, fineGeometry, pickFine(fineGeometry.levels));

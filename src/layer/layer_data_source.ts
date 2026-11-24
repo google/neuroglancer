@@ -36,10 +36,13 @@ import { makeEmptyDataSourceSpecification } from "#src/datasource/index.js";
 import type { UserLayer } from "#src/layer/index.js";
 import { getWatchableRenderLayerTransform } from "#src/render_coordinate_transform.js";
 import type { RenderLayer } from "#src/renderlayer.js";
+import type { ResolvedTransformSource } from "#src/sliceview/volume/warp/transform_source.js";
 import {
-  getDisplacementField,
-  getWarpedDataSourceFactory,
-} from "#src/sliceview/volume/warp/field.js";
+  applyTransformSource,
+  parseTransformSourceSpecification,
+  resolveTransformSource,
+  transformSourceSpecificationToJson,
+} from "#src/sliceview/volume/warp/transform_source.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
@@ -115,7 +118,16 @@ export function layerDataSourceSpecificationFromJson(
       new Map<string, DataSubsourceSpecification>(),
     ),
     state: verifyOptionalObjectProperty(obj, "state", verifyObject),
-    warp: verifyOptionalObjectProperty(obj, "warp", verifyString),
+    transformSource: verifyOptionalObjectProperty(
+      obj,
+      "transformSource",
+      parseTransformSourceSpecification,
+    ),
+    prependTransform: verifyOptionalObjectProperty(
+      obj,
+      "prependTransform",
+      verifyBoolean,
+    ),
   };
 }
 
@@ -145,7 +157,8 @@ export function layerDataSourceSpecificationToJson(
     emptySubsources &&
     spec.enableDefaultSubsources === true &&
     spec.state === undefined &&
-    spec.warp === undefined
+    spec.transformSource === undefined &&
+    spec.prependTransform !== true
   ) {
     return spec.url;
   }
@@ -156,7 +169,8 @@ export function layerDataSourceSpecificationToJson(
     enableDefaultSubsources:
       spec.enableDefaultSubsources === true ? undefined : false,
     state: spec.state,
-    warp: spec.warp,
+    transformSource: transformSourceSpecificationToJson(spec.transformSource),
+    prependTransform: spec.prependTransform === true ? true : undefined,
   };
 }
 
@@ -267,9 +281,9 @@ export class LoadedLayerDataSource extends RefCounted {
   activatedSubsourcesChanged = new NullarySignal();
   messages = new MessageList();
   transform: WatchableCoordinateSpaceTransform;
-  // With a warp: the placement of the moving source before it is warped (the
-  // spec's "transform"). `transform` is then the warped output's, in the
-  // displacement field's space.
+  // With "prependTransform" and a transform source: the source's placement
+  // before the transform source (the spec's "transform"). `transform` is then
+  // the transform source's last linear part, which is not edited.
   movingTransform: WatchableCoordinateSpaceTransform | undefined;
   subsources: LoadedDataSubsource[];
   enableDefaultSubsources: boolean;
@@ -305,8 +319,8 @@ export class LoadedLayerDataSource extends RefCounted {
         dataSource.modelTransform,
       );
     }
-    // With a warp, spec.transform was applied to the moving source instead.
-    if (spec.transform !== undefined && spec.warp === undefined) {
+    // With a prepended transform, spec.transform places the source instead.
+    if (spec.transform !== undefined && movingTransform === undefined) {
       this.transform.spec = spec.transform;
     }
     const subsourceSpecs = spec.subsources;
@@ -373,10 +387,12 @@ export class LayerDataSource extends RefCounted {
         const prev = this.spec_;
         this.spec_ = {
           url: prev.url,
-          // With a warp, the transform places the moving source; the warped
-          // output is in the displacement field's space.
+          // A prepended transform places the source before the transform
+          // source.
           transform:
-            prev.warp !== undefined ? prev.transform : loadState.transform.spec,
+            loadState.movingTransform !== undefined
+              ? prev.transform
+              : loadState.transform.spec,
           enableDefaultSubsources: loadState.enableDefaultSubsources,
           subsources: new Map(
             Array.from(loadState.subsources, (loadedSubsource) => {
@@ -395,7 +411,8 @@ export class LayerDataSource extends RefCounted {
             }),
           ),
           state: this.spec.state,
-          warp: this.spec.warp,
+          transformSource: this.spec.transformSource,
+          prependTransform: this.spec.prependTransform,
         };
       }
     }
@@ -441,51 +458,74 @@ export class LayerDataSource extends RefCounted {
     const registry = layer.manager.dataSourceProviderRegistry;
     const abortController = new AbortController();
     let movingTransform: WatchableCoordinateSpaceTransform | undefined;
+    let transformMessages: string[] = [];
+    const options = {
+      globalCoordinateSpace: layer.manager.root.coordinateSpace,
+      signal: abortController.signal,
+      progressListener: this.progressListener,
+    };
     registry
       .get({
         url: spec.url,
-        signal: abortController.signal,
-        globalCoordinateSpace: layer.manager.root.coordinateSpace,
         transform: spec.transform,
         state: spec.state,
-        progressListener: this.progressListener,
+        ...options,
       })
       .then(async (source: DataSourceWithRedirectInfo) => {
-        if (spec.warp !== undefined && !refCounted.wasDisposed) {
-          const makeWarpedDataSource = getWarpedDataSourceFactory();
-          const field = await getDisplacementField(registry, spec.warp, {
-            globalCoordinateSpace: layer.manager.root.coordinateSpace,
-            signal: abortController.signal,
-            progressListener: this.progressListener,
-          });
-          // The layer transform places the moving source before warping.
+        // The transform source: the specification's, else the one from the
+        // source's own metadata.
+        const ownChain = source.transformChain;
+        let resolved: ResolvedTransformSource | undefined;
+        if (spec.transformSource !== undefined) {
+          resolved = await resolveTransformSource(
+            registry,
+            spec.transformSource,
+            options,
+          );
+        } else if (ownChain !== undefined) {
+          resolved = { kind: "chain", chain: ownChain };
+        }
+        if (resolved === undefined || refCounted.wasDisposed) return source;
+        let { modelTransform } = source;
+        if (spec.prependTransform === true) {
+          // The layer's transform places the source before the transform
+          // source.
           movingTransform = new WatchableCoordinateSpaceTransform(
-            source.modelTransform,
+            modelTransform,
           );
           if (spec.transform !== undefined) {
             movingTransform.spec = spec.transform;
           }
-          source = {
-            ...makeWarpedDataSource(
-              registry.chunkManager,
-              { ...source, modelTransform: movingTransform.value },
-              field,
-            ),
-            originalCanonicalUrl: source.originalCanonicalUrl,
-            redirectLog: source.redirectLog,
-          };
+          modelTransform = movingTransform.value;
         }
-        return source;
+        const applied = await applyTransformSource(
+          registry,
+          registry.chunkManager,
+          { ...source, modelTransform },
+          resolved,
+          options,
+        );
+        transformMessages = applied.messages;
+        return {
+          ...applied.source,
+          originalCanonicalUrl: source.originalCanonicalUrl,
+          redirectLog: source.redirectLog,
+          transformChain: ownChain,
+        };
       })
       .then((source: DataSourceWithRedirectInfo) => {
         if (refCounted.wasDisposed) return;
         this.messages.clearMessages();
+        for (const message of transformMessages) {
+          this.messages.addMessage({ severity: MessageSeverity.info, message });
+        }
         const loaded = refCounted.registerDisposer(
           new LoadedLayerDataSource(this, source, spec, movingTransform),
         );
         if (movingTransform !== undefined) {
-          // The warped chunks are computed from the moving source as placed
-          // when the source was loaded, so a new placement reloads it.
+          // The source is placed before the transform source when it is
+          // loaded (warped chunks are computed from it), so a new placement
+          // reloads it.
           const moving = movingTransform;
           const reload = loaded.registerCancellable(
             animationFrameDebounce(() => {
@@ -557,7 +597,7 @@ export class LayerDataSource extends RefCounted {
     return layerDataSourceSpecificationToJson({
       url: this.spec.url,
       transform:
-        this.spec.warp !== undefined
+        loadState.movingTransform !== undefined
           ? this.spec.transform
           : loadState.transform.spec,
       enableDefaultSubsources: loadState.enableDefaultSubsources,
@@ -581,7 +621,8 @@ export class LayerDataSource extends RefCounted {
         }),
       ),
       state: this.spec.state,
-      warp: this.spec.warp,
+      transformSource: this.spec.transformSource,
+      prependTransform: this.spec.prependTransform,
     });
   }
 }

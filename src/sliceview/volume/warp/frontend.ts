@@ -53,6 +53,7 @@ import type {
 import {
   registerWarpedDataSourceFactory,
   canonicalSourceOptions,
+  fieldLevelAccess,
   getWarpGeometry,
   inverseAffine4,
   movingModelToOutput,
@@ -69,14 +70,69 @@ const MAX_COARSEST_EXTENT = 256;
 const MIN_CHUNK_EDGE = 8;
 const COARSE_CHUNK_SCALING = 1;
 
-// Warped chunk shape (a single layout).
-const WARPED_CHUNK_SHAPES = [[32, 32, 32]];
+/**
+ * Warped chunk edge along each displaced dimension: about 32^3 voxels per
+ * chunk whatever the number of displaced dimensions (32 for 3).
+ */
+function warpedChunkEdge(numDisplaced: number) {
+  return Math.min(1024, 2 ** Math.round(15 / Math.max(1, numDisplaced)));
+}
 
 class WarpedVolumeChunkSource extends WithParameters(
   VolumeChunkSource,
   WarpedVolumeChunkSourceParameters,
 ) {
   dependencies: VolumeChunkSource[] | undefined;
+}
+
+/** Row-major affine helpers on [linear | translation] rows. */
+function composeRows(a: number[][], b: number[][]): number[][] {
+  const n = b.length;
+  const cols = b[0].length;
+  return a.map((row) =>
+    Array.from({ length: cols }, (_, j) => {
+      let s = j === cols - 1 ? row[n] : 0;
+      for (let k = 0; k < n; ++k) s += row[k] * b[k][j];
+      return s;
+    }),
+  );
+}
+
+function invertRows(rows: number[][]): number[][] {
+  const n = rows.length;
+  if (n === 3) {
+    const m = new Array<number>(16).fill(0);
+    rows.forEach((row, i) => row.forEach((v, j) => (m[i * 4 + j] = v)));
+    m[15] = 1;
+    const inv = inverseAffine4(m);
+    return [0, 1, 2].map((i) => inv.slice(i * 4, i * 4 + 4));
+  }
+  // Gauss-Jordan on [A | I], then the translation.
+  const a = rows.map((row, i) => [
+    ...row.slice(0, n),
+    ...Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)),
+  ]);
+  for (let c = 0; c < n; ++c) {
+    let p = c;
+    for (let r = c + 1; r < n; ++r) {
+      if (Math.abs(a[r][c]) > Math.abs(a[p][c])) p = r;
+    }
+    if (a[p][c] === 0) throw new Error("warp: singular transform");
+    [a[c], a[p]] = [a[p], a[c]];
+    const d = a[c][c];
+    a[c] = a[c].map((v) => v / d);
+    for (let r = 0; r < n; ++r) {
+      if (r === c) continue;
+      const f = a[r][c];
+      if (f !== 0) a[r] = a[r].map((v, j) => v - f * a[c][j]);
+    }
+  }
+  return a.map((row) => {
+    const inv = row.slice(n);
+    let t = 0;
+    for (let k = 0; k < n; ++k) t -= inv[k] * rows[k][n];
+    return [...inv, t];
+  });
 }
 
 export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
@@ -87,7 +143,7 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
     return this.moving.volumeType;
   }
   get rank() {
-    return 3 + this.geometry.channelDims.length;
+    return this.geometry.modelSpace.rank;
   }
 
   constructor(
@@ -104,6 +160,7 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
     options: VolumeSourceOptions,
   ): SliceViewSingleResolutionSource<VolumeChunkSource>[][] {
     const { field, geometry, movingTransform } = this;
+    const F = geometry.numFieldDims;
     const movingRank = movingTransform.sourceRank;
     const [movingScales, ...otherAlternatives] = this.moving.getSources(
       canonicalSourceOptions(movingRank),
@@ -112,41 +169,91 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
       for (const s of alternative) s.chunkSource.dispose();
     }
     const modelToOutput = movingModelToOutput(movingTransform, geometry);
-    // Moving chunk dimensions that are spatial (natural order) and channels.
-    const { spatialChunkDims, channelChunkDims } = splitChunkDims(
+    // Moving chunk dimensions sampled through the field (natural order), and
+    // the passthrough ones in the geometry's order.
+    const { spatialChunkDims, channelChunkDims: otherChunkDims } =
+      splitChunkDims(
+        movingScales[0].chunkToMultiscaleTransform,
+        movingRank,
+        geometry.spatialInputDims,
+      );
+    const c2m0 = fullRowMajor(
       movingScales[0].chunkToMultiscaleTransform,
       movingRank,
-      geometry.spatialInputDims,
     );
+    const passChunkDims = geometry.passInputDims.map((j) => {
+      const d = otherChunkDims.find(
+        (d) => c2m0[j * (movingRank + 1) + d] !== 0,
+      );
+      if (d === undefined) {
+        throw new Error("warp: unexpected moving chunk dimensions");
+      }
+      return d;
+    });
+    const n = spatialChunkDims.length;
+    // Moving chunk voxel coordinates (spatialChunkDims) -> warped model
+    // coordinates: rows per field dimension (zero for those it lacks).
     const chunkToModelOf = (
       movingScale: SliceViewSingleResolutionSource<VolumeChunkSource>,
-    ) =>
-      mul4(
-        modelToOutput,
-        spatialSubmatrix(
-          fullRowMajor(movingScale.chunkToMultiscaleTransform, movingRank),
-          movingRank,
-          geometry.spatialInputDims,
-          spatialChunkDims,
-        ),
+    ): number[][] => {
+      const c2m = fullRowMajor(
+        movingScale.chunkToMultiscaleTransform,
+        movingRank,
       );
-    // Channels are carried whole in every warped chunk.
+      if (geometry.isSpatial3d) {
+        const m = mul4(
+          modelToOutput,
+          spatialSubmatrix(
+            c2m,
+            movingRank,
+            geometry.spatialInputDims,
+            spatialChunkDims,
+          ),
+        );
+        return [0, 1, 2].map((i) => m.slice(i * 4, i * 4 + 4));
+      }
+      const sub = geometry.spatialInputDims.map((j) => [
+        ...spatialChunkDims.map((d) => c2m[j * (movingRank + 1) + d]),
+        c2m[j * (movingRank + 1) + movingRank],
+      ]);
+      const rows = [...Array(F).keys()].map((k) =>
+        modelToOutput.slice(k * (n + 1), (k + 1) * (n + 1)),
+      );
+      return composeRows(rows, sub);
+    };
+    // Passthrough dimensions: moving chunk voxel -> moving output coordinate
+    // (scale a, offset b); the warped chunk keeps the moving voxel grid.
     const movingSpec = movingScales[0].chunkSource.spec;
-    const channelLower = channelChunkDims.map(
-      (d) => movingSpec.lowerVoxelBound[d],
+    const fullMoving = fullRowMajor(
+      movingTransform.transform,
+      movingTransform.rank,
+      movingRank,
     );
-    const channelExtent = channelChunkDims.map(
+    const { inputSpace, outputSpace } = movingTransform;
+    const passLower = passChunkDims.map((d) => movingSpec.lowerVoxelBound[d]);
+    const passExtent = passChunkDims.map(
       (d) => movingSpec.upperVoxelBound[d] - movingSpec.lowerVoxelBound[d],
     );
-    const rank = 3 + channelChunkDims.length;
-    const voxelSizeOf = (chunkToModel: number[]) =>
-      [0, 1, 2].map((i) =>
-        Math.hypot(
-          chunkToModel[i * 4],
-          chunkToModel[i * 4 + 1],
-          chunkToModel[i * 4 + 2],
-        ),
+    const passAffine = geometry.passOutputDims.map((o, p) => {
+      const j = geometry.passInputDims[p];
+      const d = passChunkDims[p];
+      const coef =
+        (fullMoving[o * (movingRank + 1) + j] * inputSpace.scales[j]) /
+        outputSpace.scales[o];
+      const a = coef * c2m0[j * (movingRank + 1) + d];
+      const b =
+        coef * c2m0[j * (movingRank + 1) + movingRank] +
+        fullMoving[o * (movingRank + 1) + movingRank];
+      return { a, b };
+    });
+    const rank = F + passChunkDims.length;
+    const voxelSizeOf = (chunkToModel: number[][]) =>
+      chunkToModel.map((row, k) =>
+        geometry.movingOutputDims[k] === -1
+          ? geometry.fieldSpacing[k]
+          : Math.hypot(...row.slice(0, n)),
       );
+    const numDisplaced = geometry.displaced.filter((d) => d).length;
     // Warped scales: one per moving scale, then coarser ones sampled from the
     // coarsest moving scale until the warped grid is small, so that zoomed-out
     // views compute few voxels even when the moving volume has one scale.
@@ -159,9 +266,12 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
       const size = voxelSizeOf(chunkToModelOf(coarsest));
       const extent = (factor: number) =>
         Math.max(
-          ...[0, 1, 2].map(
-            (i) => (geometry.upper[i] - geometry.lower[i]) / (size[i] * factor),
-          ),
+          ...[...Array(F).keys()]
+            .filter((i) => geometry.displaced[i])
+            .map(
+              (i) =>
+                (geometry.upper[i] - geometry.lower[i]) / (size[i] * factor),
+            ),
         );
       for (
         let factor = 2;
@@ -174,55 +284,77 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
     }
     const sources = levels.map(({ movingScale, factor }) => {
       const chunkToModel = chunkToModelOf(movingScale);
-      // Voxel size of this scale along each output axis.
-      const voxelSize = voxelSizeOf(chunkToModel).map((v) => v * factor);
+      // Voxel size of this scale along each field dimension; coarser scales
+      // coarsen the displaced dimensions only.
+      const voxelSize = voxelSizeOf(chunkToModel).map((v, i) =>
+        geometry.displaced[i] ? v * factor : v,
+      );
       const upperVoxelBound = Float32Array.from([
-        ...[0, 1, 2].map((i) =>
+        ...[...Array(F).keys()].map((i) =>
           Math.max(
             1,
-            Math.ceil((geometry.upper[i] - geometry.lower[i]) / voxelSize[i]),
+            // Tolerate rounding (e.g. NIfTI's float32 spacing).
+            Math.ceil(
+              ((geometry.upper[i] - geometry.lower[i]) / voxelSize[i]) *
+                (1 - 1e-6),
+            ),
           ),
         ),
-        ...channelExtent,
+        ...passExtent,
       ]);
-      const warpedToOutput = [
-        voxelSize[0],
-        0,
-        0,
-        geometry.lower[0],
-        0,
-        voxelSize[1],
-        0,
-        geometry.lower[1],
-        0,
-        0,
-        voxelSize[2],
-        geometry.lower[2],
-        0,
-        0,
-        0,
-        1,
-      ];
-      // Column-major (rank + 1)^2: the spatial block, then identity channels
-      // (offset to the moving volume's channel lower bounds).
+      // Row-major (F + 1)^2.
+      const warpedToOutput = new Array<number>((F + 1) ** 2).fill(0);
+      for (let i = 0; i < F; ++i) {
+        warpedToOutput[i * (F + 1) + i] = voxelSize[i];
+        warpedToOutput[i * (F + 1) + F] = geometry.lower[i];
+      }
+      warpedToOutput[F * (F + 1) + F] = 1;
+      // Column-major (rank + 1)^2: the field block, then the passthrough
+      // dimensions on the moving voxel grid.
       const chunkToMultiscaleTransform = new Float32Array((rank + 1) ** 2);
       const at = (i: number, j: number) =>
-        (j === 3 ? rank : j) * (rank + 1) + (i === 3 ? rank : i);
-      for (let i = 0; i < 4; ++i) {
-        for (let j = 0; j < 4; ++j) {
-          chunkToMultiscaleTransform[at(i, j)] = warpedToOutput[i * 4 + j];
+        (j === F ? rank : j) * (rank + 1) + (i === F ? rank : i);
+      for (let i = 0; i <= F; ++i) {
+        for (let j = 0; j <= F; ++j) {
+          chunkToMultiscaleTransform[at(i, j)] =
+            warpedToOutput[i * (F + 1) + j];
         }
       }
-      channelExtent.forEach((_, c) => {
-        chunkToMultiscaleTransform[(3 + c) * (rank + 1) + 3 + c] = 1;
-        chunkToMultiscaleTransform[rank * (rank + 1) + 3 + c] = channelLower[c];
+      passAffine.forEach(({ a, b }, p) => {
+        chunkToMultiscaleTransform[(F + p) * (rank + 1) + F + p] = a;
+        chunkToMultiscaleTransform[rank * (rank + 1) + F + p] =
+          a * passLower[p] + b;
       });
       const movingSource = movingScale.chunkSource;
+      // output (F dims) -> moving voxel coordinates of spatialChunkDims.
+      let outputToMoving: number[];
+      if (geometry.isSpatial3d) {
+        const m = new Array<number>(16).fill(0);
+        chunkToModel.forEach((row, i) =>
+          row.forEach((v, j) => (m[i * 4 + j] = v)),
+        );
+        m[15] = 1;
+        outputToMoving = inverseAffine4(m).slice(0, 12);
+      } else {
+        const matched = [...Array(F).keys()].filter(
+          (k) => geometry.movingOutputDims[k] !== -1,
+        );
+        const inv = invertRows(matched.map((k) => chunkToModel[k]));
+        outputToMoving = inv.flatMap((row) => {
+          const out = new Array<number>(F + 1).fill(0);
+          matched.forEach((k, c) => (out[k] = row[c]));
+          out[F] = row[n];
+          return out;
+        });
+      }
       // The coarsest field level accurate enough for this scale: its measured
       // interpolation error is at most half a voxel (or, if not measured, its
       // spacing is at most a voxel).
+      const lengths = voxelSize
+        .map((v, i) => ({ v, i }))
+        .filter(({ i }) => geometry.modelSpace.units[i] === "m");
       const warpedVoxelMeters = Math.max(
-        ...voxelSize.map((v, i) => v * geometry.scales[i]),
+        ...lengths.map(({ v, i }) => v * geometry.scales[i]),
       );
       let level = 0;
       while (level + 1 < geometry.levels.length) {
@@ -234,30 +366,35 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
         if (!ok) break;
         ++level;
       }
-      const fieldVolume = field.fields[level];
+      const fieldVolume = field.levels[level].volume;
       const parameters = (
-        fieldSource: VolumeChunkSource,
+        fieldEntry: SliceViewSingleResolutionSource<VolumeChunkSource>,
         boundsSource: VolumeChunkSource | undefined,
       ): WarpedVolumeChunkSourceParameters => ({
         movingSource: movingSource.rpcId!,
+        numFieldDims: F,
         movingSpatialDims: spatialChunkDims,
-        movingChannelDims: channelChunkDims,
-        outputToMoving: inverseAffine4(chunkToModel),
+        movingPassDims: passChunkDims.map((dim, p) => ({
+          dim,
+          whole: geometry.passWhole[p],
+          offset: passLower[p],
+        })),
+        outputToMoving,
         warpedToOutput,
         field: {
-          array: zarrArrayAccess(fieldVolume, fieldSource),
-          vectorAxis: field.metadata.vectorAxis,
-          outputToIndex: geometry.levels[level].outputToIndex,
-          vectorToOutput: geometry.vectorToOutput,
+          ...fieldLevelAccess(geometry, level, fieldEntry),
           bounds:
             boundsSource === undefined
               ? undefined
               : {
                   array: zarrArrayAccess(field.bounds!, boundsSource),
-                  blockShape: field.metadata.bounds!.blockShape,
-                  outputToIndex: geometry.levels[0].outputToIndex,
+                  blockShape: field.metadata!.bounds!.blockShape,
+                  outputToIndex: geometry.levels[0].outputToIndex
+                    .filter((_, d) => d !== geometry.vectorModelDim)
+                    .flat()
+                    .concat([0, 0, 0, 1]),
                   unitToOutput: geometry.scales.map(
-                    (s) => field.metadata.unitMeters / s,
+                    (s) => field.metadata!.unitMeters / s,
                   ),
                 },
         } satisfies DisplacementFieldAccess,
@@ -269,60 +406,60 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
             ? WarpInterpolation.NEAREST
             : WarpInterpolation.LINEAR,
       });
-      // One alternative per orientation: chunks thin along one axis, so that a
-      // cross section only computes (and fetches moving data for) a thin slab.
-      return WARPED_CHUNK_SHAPES.map((chunkDataSize, alternative) => {
-        const spec = makeDefaultVolumeChunkSpecifications({
-          rank,
-          chunkToMultiscaleTransform,
-          dataType: this.dataType,
-          upperVoxelBound,
-          volumeType: this.volumeType,
-          // Scales added above the moving ones keep the base scale's physical
-          // chunk size (down to a minimum edge), so a cross section still
-          // needs only a thin slab of moving data.
-          chunkDataSizes: [
-            Uint32Array.from([
-              ...chunkDataSize.map((c) =>
-                Math.max(
-                  MIN_CHUNK_EDGE,
-                  Math.round(c / (factor * COARSE_CHUNK_SCALING)),
-                ),
-              ),
-              ...channelExtent,
-            ]),
-          ],
-          volumeSourceOptions: options,
-        })[0];
-        // Each alternative holds its own references to its dependencies.
-        if (alternative > 0) movingSource.addRef();
-        const fieldSource = fieldVolume.getSources(
-          canonicalSourceOptions(4),
-        )[0][0].chunkSource;
-        const boundsSource =
-          field.bounds === undefined || field.metadata.bounds === undefined
-            ? undefined
-            : field.bounds.getSources(canonicalSourceOptions(4))[0][0]
-                .chunkSource;
-        const dependencies = [movingSource, fieldSource];
-        if (boundsSource !== undefined) dependencies.push(boundsSource);
-        const chunkSource = this.chunkManager.getChunkSource(
-          WarpedVolumeChunkSource,
-          { spec, parameters: parameters(fieldSource, boundsSource) },
-        );
-        // The warped source keeps its dependencies alive; a memoized one
-        // already holds its own references.
-        if (chunkSource.dependencies === undefined) {
-          chunkSource.dependencies = dependencies;
-          for (const d of dependencies) chunkSource.registerDisposer(d);
-        } else {
-          for (const d of dependencies) d.dispose();
-        }
-        return { chunkSource, chunkToMultiscaleTransform };
-      });
+      const edge = warpedChunkEdge(numDisplaced);
+      const spec = makeDefaultVolumeChunkSpecifications({
+        rank,
+        chunkToMultiscaleTransform,
+        dataType: this.dataType,
+        upperVoxelBound,
+        volumeType: this.volumeType,
+        // Scales added above the moving ones keep the base scale's physical
+        // chunk size (down to a minimum edge), so a cross section still
+        // needs only a thin slab of moving data. Indexed and sliced
+        // passthrough dimensions are one voxel thick.
+        chunkDataSizes: [
+          Uint32Array.from([
+            ...[...Array(F).keys()].map((i) =>
+              geometry.displaced[i]
+                ? Math.max(
+                    MIN_CHUNK_EDGE,
+                    Math.round(edge / (factor * COARSE_CHUNK_SCALING)),
+                  )
+                : 1,
+            ),
+            ...passExtent.map((e, p) => (geometry.passWhole[p] ? e : 1)),
+          ]),
+        ],
+        volumeSourceOptions: options,
+      })[0];
+      const fieldEntry = fieldVolume.getSources(
+        canonicalSourceOptions(field.modelRank),
+      )[0][0];
+      const fieldSource = fieldEntry.chunkSource;
+      const boundsSource =
+        field.bounds === undefined ||
+        field.metadata?.bounds === undefined ||
+        !geometry.isSpatial3d
+          ? undefined
+          : field.bounds.getSources(canonicalSourceOptions(4))[0][0]
+              .chunkSource;
+      const dependencies = [movingSource, fieldSource];
+      if (boundsSource !== undefined) dependencies.push(boundsSource);
+      const chunkSource = this.chunkManager.getChunkSource(
+        WarpedVolumeChunkSource,
+        { spec, parameters: parameters(fieldEntry, boundsSource) },
+      );
+      // The warped source keeps its dependencies alive; a memoized one
+      // already holds its own references.
+      if (chunkSource.dependencies === undefined) {
+        chunkSource.dependencies = dependencies;
+        for (const d of dependencies) chunkSource.registerDisposer(d);
+      } else {
+        for (const d of dependencies) d.dispose();
+      }
+      return { chunkSource, chunkToMultiscaleTransform };
     });
-    // [scale][alternative] -> [alternative][scale]
-    return WARPED_CHUNK_SHAPES.map((_, a) => sources.map((s) => s[a]));
+    return [sources];
   }
 }
 
@@ -336,12 +473,22 @@ export function makeWarpedDataSource(
   chunkManager: ChunkManager,
   moving: DataSource,
   field: DisplacementField,
-): DataSource {
+): { source: DataSource; messages: string[] } {
   const geometry = getWarpGeometry(moving.modelTransform, field);
+  const messages = geometry.messages.slice();
   const subsources: DataSubsourceEntry[] = [];
   for (const entry of moving.subsources) {
     const { volume, segmentPropertyMap, mesh } = entry.subsource;
     if (mesh !== undefined) {
+      // Meshes move point by point through the field, which needs the
+      // 3 spatial dimensions displaced.
+      if (!geometry.isSpatial3d) {
+        messages.push(
+          "warp: meshes are not warped (the field does not displace exactly " +
+            "the 3 spatial dimensions of the source)",
+        );
+        continue;
+      }
       const warpedMesh = makeWarpedMeshSource(
         chunkManager,
         mesh,
@@ -386,9 +533,12 @@ export function makeWarpedDataSource(
     throw new Error("warp: the data source has no volume to warp");
   }
   return {
-    subsources,
-    modelTransform: makeIdentityTransform(geometry.modelSpace),
-    channelMetadata: moving.channelMetadata,
+    source: {
+      subsources,
+      modelTransform: makeIdentityTransform(geometry.modelSpace),
+      channelMetadata: moving.channelMetadata,
+    },
+    messages,
   };
 }
 

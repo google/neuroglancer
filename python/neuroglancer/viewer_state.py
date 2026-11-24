@@ -640,6 +640,14 @@ class LayerDataSubsource(JsonObjectWrapper):
 
 
 @export
+def _transform_source_json(value):
+    if isinstance(value, str | dict):
+        return value
+    raise TypeError(
+        f"Expected a URL or an object for transformSource, but received: {value!r}"
+    )
+
+
 class LayerDataSource(JsonObjectWrapper):
     __slots__ = ()
 
@@ -656,6 +664,18 @@ class LayerDataSource(JsonObjectWrapper):
     enable_default_subsources = enableDefaultSubsources = wrapped_property(
         "enableDefaultSubsources", optional(bool, True)
     )
+    transform_source = transformSource = wrapped_property(
+        "transformSource", optional(_transform_source_json)
+    )
+    """Transformation from the source's space to the layer's, applied before
+    :py:obj:`.transform`: the URL of an OME-Zarr (RFC-5) transformation or of
+    a displacement field, or an object with ``url`` and options (``name``,
+    ``inverse``, ...)."""
+    prepend_transform = prependTransform = wrapped_property(
+        "prependTransform", optional(bool, False)
+    )
+    """Apply :py:obj:`.transform` before :py:obj:`.transform_source` instead of
+    after it."""
 
 
 if typing.TYPE_CHECKING or _BUILDING_DOCS:

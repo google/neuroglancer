@@ -92,8 +92,8 @@ export class WarpedMeshSource extends WithParameters(
     super(rpc, options);
     const { parameters } = this;
     this.underlying = rpc.get(parameters.meshSource);
-    this.coarseField = rpc.get(parameters.coarse.array.source);
-    this.fineField = rpc.get(parameters.fine.array.source);
+    this.coarseField = rpc.get(parameters.coarse.source);
+    this.fineField = rpc.get(parameters.fine.source);
   }
 
   // Computed from other chunks: they use the compute queue, so waiting for

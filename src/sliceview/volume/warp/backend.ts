@@ -35,7 +35,10 @@ import {
   VolumeChunk,
   VolumeChunkSource,
 } from "#src/sliceview/volume/backend.js";
-import type { ZarrArrayAccess } from "#src/sliceview/volume/warp/base.js";
+import type {
+  FieldAccess,
+  ZarrArrayAccess,
+} from "#src/sliceview/volume/warp/base.js";
 import {
   WarpedVolumeChunkSourceParameters,
   WarpInterpolation,
@@ -88,6 +91,38 @@ function transformBox(
       outLo[i] = Math.min(outLo[i], p[i]);
       outHi[i] = Math.max(outHi[i], p[i]);
     }
+  }
+  return [outLo, outHi];
+}
+
+/**
+ * Bounding box of the axis-aligned box [lo, hi] (n dims) mapped through the
+ * row-major rows x (n + 1) affine `m`.
+ */
+function transformBoxN(
+  m: number[],
+  rows: number,
+  n: number,
+  lo: ArrayLike<number>,
+  hi: ArrayLike<number>,
+): [number[], number[]] {
+  const outLo = new Array<number>(rows).fill(Infinity);
+  const outHi = new Array<number>(rows).fill(-Infinity);
+  for (let i = 0; i < rows; ++i) {
+    let l = m[i * (n + 1) + n];
+    let h = l;
+    for (let j = 0; j < n; ++j) {
+      const c = m[i * (n + 1) + j];
+      if (c >= 0) {
+        l += c * lo[j];
+        h += c * hi[j];
+      } else {
+        l += c * hi[j];
+        h += c * lo[j];
+      }
+    }
+    outLo[i] = l;
+    outHi[i] = h;
   }
   return [outLo, outHi];
 }
@@ -182,6 +217,96 @@ function assembleZarrBox(
   return out;
 }
 
+// --- Fields read through any volume chunk source (Fortran-order chunks).
+
+/** Chunk grid positions covering the index box [lo, hi] (inclusive). */
+function chunksInBox(
+  source: VolumeChunkSource,
+  access: FieldAccess,
+  lo: number[],
+  hi: number[],
+): { dep: VolumeDependency; grid: number[] }[] {
+  const { rank, chunkDataSize: cds, baseVoxelOffset: base } = access;
+  const gLo = lo.map((v, d) => Math.floor((v - base[d]) / cds[d]));
+  const gHi = hi.map((v, d) => Math.floor((v - base[d]) / cds[d]));
+  const out: { dep: VolumeDependency; grid: number[] }[] = [];
+  const g = gLo.slice();
+  while (true) {
+    out.push({ dep: volumeDependency(source, g), grid: g.slice() });
+    let d = 0;
+    while (d < rank && ++g[d] > gHi[d]) {
+      g[d] = gLo[d];
+      ++d;
+    }
+    if (d === rank) return out;
+  }
+}
+
+/**
+ * Copies the index box [lo, hi] (inclusive) of a field whose chunks have
+ * been fetched into a dense Fortran-order (dimension 0 fastest)
+ * Float32Array; missing chunks are 0.
+ */
+function assembleFieldBox(
+  access: FieldAccess,
+  chunks: { grid: number[] }[],
+  data: ChunkData[],
+  lo: number[],
+  hi: number[],
+): Float32Array {
+  const { rank, chunkDataSize: cds, baseVoxelOffset: base } = access;
+  const ub = access.upperVoxelBound;
+  const extent = lo.map((l, d) => hi[d] - l + 1);
+  const outStrides = new Array<number>(rank);
+  for (let d = 0, m = 1; d < rank; ++d) {
+    outStrides[d] = m;
+    m *= extent[d];
+  }
+  const out = new Float32Array(extent.reduce((a, b) => a * b, 1));
+  const fullSize = cds.reduce((a, b) => a * b, 1);
+  chunks.forEach(({ grid }, ci) => {
+    const d0 = data[ci] as ArrayLike<number> | null;
+    if (d0 === null || d0.length === 0) return;
+    const origin = grid.map((g, d) => g * cds[d] + base[d]);
+    // Chunks may be stored clipped at the upper bound.
+    const stored =
+      d0.length === fullSize
+        ? cds
+        : origin.map((o, d) => Math.min(cds[d], ub[d] - o));
+    const strides = new Array<number>(rank);
+    for (let d = 0, m = 1; d < rank; ++d) {
+      strides[d] = m;
+      m *= stored[d];
+    }
+    const cLo = new Array<number>(rank);
+    const cHi = new Array<number>(rank);
+    for (let d = 0; d < rank; ++d) {
+      cLo[d] = Math.max(lo[d], origin[d]);
+      cHi[d] = Math.min(hi[d], origin[d] + stored[d] - 1);
+      if (cLo[d] > cHi[d]) return;
+    }
+    const idx = cLo.slice();
+    const w = cHi[0] - cLo[0] + 1;
+    while (true) {
+      let src = 0;
+      let dst = 0;
+      for (let d = 0; d < rank; ++d) {
+        src += (idx[d] - origin[d]) * strides[d];
+        dst += (idx[d] - lo[d]) * outStrides[d];
+      }
+      const s0 = strides[0];
+      for (let k = 0; k < w; ++k) out[dst + k] = d0[src + k * s0];
+      let d = 1;
+      while (d < rank && ++idx[d] > cHi[d]) {
+        idx[d] = cLo[d];
+        ++d;
+      }
+      if (d >= rank) break;
+    }
+  });
+  return out;
+}
+
 // --- Compressed segmentation.
 
 /**
@@ -271,69 +396,104 @@ export class WarpedVolumeChunkSource extends WithParameters(
   moving: VolumeChunkSource;
   fieldSource: VolumeChunkSource;
   boundsSource: VolumeChunkSource | undefined;
+  // Non-vector field chunk dimensions, ascending.
+  fieldSpatialDims: number[];
+  // Moving chunk dimensions carried whole (channels), in warped order.
+  channelDims: number[];
+  // The 3-d case (3 field dimensions, a rank-4 field with 3 components,
+  // passthrough channels only): the original coordinate kernel.
+  fast: boolean;
+  // 3 moving dimensions sampled, passthrough channels only: the original
+  // sampling kernels (which also read compressed segmentation).
+  fastSampling: boolean;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     const { parameters } = this;
     this.moving = rpc.get(parameters.movingSource);
-    this.fieldSource = rpc.get(parameters.field.array.source);
+    this.fieldSource = rpc.get(parameters.field.source);
     const { bounds } = parameters.field;
     this.boundsSource =
       bounds === undefined ? undefined : rpc.get(bounds.array.source);
     const { spec } = this.moving;
-    const { movingSpatialDims: S, movingChannelDims: C } = parameters;
-    if (spec.rank !== 3 + C.length || S.length !== 3) {
+    const { movingSpatialDims: S, movingPassDims: P, field } = parameters;
+    if (spec.rank !== S.length + P.length) {
       throw new Error("warp: unexpected moving chunk dimensions");
     }
+    this.fieldSpatialDims = [...Array(field.rank).keys()].filter(
+      (d) => d !== field.vectorDim,
+    );
+    this.channelDims = P.filter((p) => p.whole).map((p) => p.dim);
+    this.fast =
+      parameters.numFieldDims === 3 &&
+      S.length === 3 &&
+      field.rank === 4 &&
+      field.numComponents === 3 &&
+      P.every((p) => p.whole);
+    this.fastSampling = S.length === 3 && P.every((p) => p.whole);
   }
 
-  /** Spatial field index box [lo, hi] needed to sample the field in `out`. */
+  /** Field index box [lo, hi] (all chunk dimensions) needed for the box. */
   private fieldIndexBox(warpedLo: number[], warpedHi: number[]) {
-    const { field, warpedToOutput } = this.parameters;
-    const [oLo, oHi] = transformBox(warpedToOutput, warpedLo, warpedHi);
-    const [iLo, iHi] = transformBox(field.outputToIndex, oLo, oHi);
-    const shape = this.spatialFieldShape();
-    const lo = iLo.map((v, a) =>
-      Math.min(Math.max(Math.floor(v), 0), shape[a] - 1),
+    const { field, warpedToOutput: W, numFieldDims: F } = this.parameters;
+    const [oLo, oHi] = transformBoxN(W, F, F, warpedLo, warpedHi);
+    const [iLo, iHi] = transformBoxN(
+      field.outputToIndex,
+      field.rank,
+      F,
+      oLo,
+      oHi,
     );
-    const hi = iHi.map((v, a) =>
-      Math.min(Math.max(Math.floor(v) + 1, 0), shape[a] - 1),
+    const lb = field.lowerVoxelBound;
+    const ub = field.upperVoxelBound;
+    // The box starts at or below the interpolation base, which is at most
+    // ub - 2 (the last two samples interpolate the last one).
+    const lo = iLo.map((v, d) =>
+      d === field.vectorDim
+        ? lb[d]
+        : Math.max(Math.min(Math.floor(v), ub[d] - 2), lb[d]),
+    );
+    const hi = iHi.map((v, d) =>
+      d === field.vectorDim
+        ? ub[d] - 1
+        : Math.min(Math.max(Math.floor(v) + 1, lb[d]), ub[d] - 1),
     );
     return { lo, hi };
   }
 
-  private spatialFieldShape() {
-    const { array, vectorAxis } = this.parameters.field;
-    return array.shape.filter((_, a) => a !== vectorAxis);
-  }
-
-  private withVectorAxis(spatial: number[], vector: number) {
-    const v = spatial.slice();
-    v.splice(this.parameters.field.vectorAxis, 0, vector);
-    return v;
-  }
-
-  /** Moving chunks covering the moving voxel box [lo, hi] (inclusive). */
   /**
-   * Moving chunks covering the moving voxel box [lo, hi] (inclusive; spatial
-   * dimensions, in movingSpatialDims order) and every channel.
+   * Moving chunks covering the moving voxel box [lo, hi] (inclusive; in
+   * movingSpatialDims order), every channel, and the warped chunk's voxel of
+   * each sliced passthrough dimension.
    */
-  private movingChunksInBox(lo: number[], hi: number[]) {
+  private movingChunksInBox(lo: number[], hi: number[], origin: number[]) {
     const { spec } = this.moving;
     const { chunkDataSize, baseVoxelOffset, lowerVoxelBound, upperVoxelBound } =
       spec;
-    const { movingSpatialDims: S } = this.parameters;
+    const {
+      movingSpatialDims: S,
+      movingPassDims: P,
+      numFieldDims: F,
+    } = this.parameters;
     const rank = spec.rank;
     const gLo = new Array<number>(rank);
     const gHi = new Array<number>(rank);
     for (let d = 0; d < rank; ++d) {
       const i = S.indexOf(d);
-      const l =
-        i === -1 ? lowerVoxelBound[d] : Math.max(lo[i], lowerVoxelBound[d]);
-      const h =
-        i === -1
-          ? upperVoxelBound[d] - 1
-          : Math.min(hi[i], upperVoxelBound[d] - 1);
+      let l: number;
+      let h: number;
+      if (i !== -1) {
+        l = Math.max(lo[i], lowerVoxelBound[d]);
+        h = Math.min(hi[i], upperVoxelBound[d] - 1);
+      } else {
+        const p = P.findIndex((x) => x.dim === d);
+        if (p === -1 || P[p].whole) {
+          l = lowerVoxelBound[d];
+          h = upperVoxelBound[d] - 1;
+        } else {
+          l = h = origin[F + p] + P[p].offset;
+        }
+      }
       if (l > h) return [];
       gLo[d] = Math.floor((l - baseVoxelOffset[d]) / chunkDataSize[d]);
       gHi[d] = Math.floor((h - baseVoxelOffset[d]) / chunkDataSize[d]);
@@ -354,7 +514,7 @@ export class WarpedVolumeChunkSource extends WithParameters(
 
   /**
    * Moving voxel box from the precomputed per-block bounds of x + u(x), for
-   * requesting moving chunks before the field itself has arrived.
+   * requesting moving chunks before the field itself has arrived (3-d).
    */
   private async movingBoxFromBounds(
     warpedLo: number[],
@@ -416,19 +576,15 @@ export class WarpedVolumeChunkSource extends WithParameters(
   async download(chunk: VolumeChunk, signal: AbortSignal) {
     const origin = Array.from(computeChunkBounds(this, chunk as any));
     const size = Array.from(chunk.chunkDataSize!);
-    const n = size[0] * size[1] * size[2];
-    const { field } = this.parameters;
+    const { field, numFieldDims: F, movingSpatialDims: S } = this.parameters;
+    let n = 1;
+    for (let k = 0; k < F; ++k) n *= size[k];
 
     // Field samples needed by the voxel centers of this chunk.
-    const warpedLo = origin.map((o) => o + 0.5);
-    const warpedHi = origin.map((o, i) => o + size[i] - 0.5);
+    const warpedLo = origin.slice(0, F).map((o) => o + 0.5);
+    const warpedHi = origin.slice(0, F).map((o, i) => o + size[i] - 0.5);
     const { lo: fLo, hi: fHi } = this.fieldIndexBox(warpedLo, warpedHi);
-    const fieldChunks = zarrChunksInBox(
-      this.fieldSource,
-      field.array,
-      this.withVectorAxis(fLo, 0),
-      this.withVectorAxis(fHi, field.array.shape[field.vectorAxis] - 1),
-    );
+    const fieldChunks = chunksInBox(this.fieldSource, field, fLo, fHi);
     const fieldDeps = fieldChunks.map((c) => c.dep);
 
     const requests = getDependencyRequests(this.chunkManager);
@@ -438,6 +594,7 @@ export class WarpedVolumeChunkSource extends WithParameters(
       // the moving chunks at the same time.
       if (
         PREFETCH_FROM_BOUNDS &&
+        this.fast &&
         !fieldDeps.every(isAvailable) &&
         this.boundsSource !== undefined
       ) {
@@ -450,34 +607,37 @@ export class WarpedVolumeChunkSource extends WithParameters(
         if (box !== undefined) {
           requests.set(request, [
             ...fieldDeps,
-            ...this.movingChunksInBox(box[0], box[1]),
+            ...this.movingChunksInBox(box[0], box[1], origin),
           ]);
         }
       }
       const fieldData = await Promise.all(
         fieldDeps.map((dep) => getDependencyData(dep, signal)),
       );
-      const fieldBox = assembleZarrBox(
-        field.array,
+      const fieldBox = assembleFieldBox(
+        field,
         fieldChunks,
         fieldData,
-        this.withVectorAxis(fLo, 0),
-        this.withVectorAxis(fHi, field.array.shape[field.vectorAxis] - 1),
+        fLo,
+        fHi,
       );
 
       // Pass 1: moving sample coordinates of every voxel center.
-      const coords = this.computeMovingCoordinates(
-        origin,
-        size,
-        fLo,
-        fHi,
-        fieldBox,
-      );
-      let mLo = [Infinity, Infinity, Infinity];
-      let mHi = [-Infinity, -Infinity, -Infinity];
+      const coords = this.fast
+        ? this.computeMovingCoordinates(origin, size, fLo, fHi, fieldBox)
+        : this.computeMovingCoordinatesGeneric(
+            origin,
+            size,
+            fLo,
+            fHi,
+            fieldBox,
+          );
+      const m = S.length;
+      let mLo = new Array<number>(m).fill(Infinity);
+      let mHi = new Array<number>(m).fill(-Infinity);
       for (let v = 0; v < n; ++v) {
-        for (let i = 0; i < 3; ++i) {
-          const c = coords[3 * v + i];
+        for (let i = 0; i < m; ++i) {
+          const c = coords[m * v + i];
           if (c < mLo[i]) mLo[i] = c;
           if (c > mHi[i]) mHi[i] = c;
         }
@@ -486,9 +646,10 @@ export class WarpedVolumeChunkSource extends WithParameters(
       mHi = mHi.map((v) => Math.floor(v) + 1);
 
       // Pass 2: exactly the moving chunks those samples touch.
-      const movingDeps = Number.isFinite(mLo[0])
-        ? this.movingChunksInBox(mLo, mHi)
-        : [];
+      const movingDeps =
+        m === 0 || Number.isFinite(mLo[0])
+          ? this.movingChunksInBox(mLo, mHi, origin)
+          : [];
       requests.set(request, [...fieldDeps, ...movingDeps]);
       const movingData = await Promise.all(
         movingDeps.map((dep) => getDependencyData(dep, signal)),
@@ -498,9 +659,23 @@ export class WarpedVolumeChunkSource extends WithParameters(
       const nearest =
         this.parameters.interpolation === WarpInterpolation.NEAREST ||
         this.spec.dataType === DataType.UINT64;
-      const warped = nearest
-        ? this.sampleNearest(coords, n, movingDeps, movingData)
-        : this.resample(coords, n, movingDeps, movingData, mLo, mHi);
+      let warped;
+      if (this.fastSampling) {
+        warped = nearest
+          ? this.sampleNearest(coords, n, movingDeps, movingData)
+          : this.resample(coords, n, movingDeps, movingData, mLo, mHi);
+      } else {
+        warped = this.resampleGeneric(
+          coords,
+          n,
+          movingDeps,
+          movingData,
+          mLo,
+          mHi,
+          origin,
+          nearest,
+        );
+      }
       if (this.spec.compressedSegmentationBlockSize !== undefined) {
         await postProcessRawData(chunk, signal, warped);
       } else {
@@ -513,7 +688,7 @@ export class WarpedVolumeChunkSource extends WithParameters(
 
   /**
    * For each voxel center of the chunk (x fastest), the moving sample index
-   * (continuous, sample n at n) of x + u(x).
+   * (continuous, sample n at n) of x + u(x): the 3-d kernel.
    */
   private computeMovingCoordinates(
     origin: number[],
@@ -525,16 +700,25 @@ export class WarpedVolumeChunkSource extends WithParameters(
     const { field, warpedToOutput: W, outputToMoving: M } = this.parameters;
     const A = field.outputToIndex;
     const V = field.vectorToOutput;
-    const shape = this.spatialFieldShape();
-    const ext = fLo.map((l, a) => fHi[a] - l + 1);
-    // fieldBox is C order over the zarr axes, with the vector axis inserted.
-    const boxShape = this.withVectorAxis(
-      ext,
-      field.array.shape[field.vectorAxis],
-    );
-    const boxStrides = cStrides(boxShape);
-    const cStride = boxStrides[field.vectorAxis];
-    const sStrides = boxStrides.filter((_, a) => a !== field.vectorAxis);
+    const sd = this.fieldSpatialDims;
+    const lb = sd.map((d) => field.lowerVoxelBound[d]);
+    const ub = sd.map((d) => field.upperVoxelBound[d]);
+    const lo = sd.map((d) => fLo[d]);
+    const ext = sd.map((d) => fHi[d] - fLo[d] + 1);
+    // fieldBox is Fortran order over the field's chunk dimensions.
+    const boxStrides = new Array<number>(field.rank);
+    for (let d = 0, m = 1; d < field.rank; ++d) {
+      boxStrides[d] = m;
+      m *= fHi[d] - fLo[d] + 1;
+    }
+    const cStride = boxStrides[field.vectorDim];
+    const cBase = -fLo[field.vectorDim] * cStride;
+    const [sx, sy, sz] = sd.map((d) => boxStrides[d]);
+    // Rows of A for the spatial chunk dimensions (row-major 4x4 layout).
+    const Ad = new Array<number>(12);
+    sd.forEach((d, a) => {
+      for (let j = 0; j < 4; ++j) Ad[a * 4 + j] = A[d * 4 + j];
+    });
     const n = size[0] * size[1] * size[2];
     const coords = new Float32Array(3 * n);
     const p = [0, 0, 0];
@@ -542,6 +726,9 @@ export class WarpedVolumeChunkSource extends WithParameters(
     const i0 = [0, 0, 0];
     const t = [0, 0, 0];
     const u = [0, 0, 0];
+    const ex = ext[0] > 1 ? sx : 0;
+    const ey = ext[1] > 1 ? sy : 0;
+    const ez = ext[2] > 1 ? sz : 0;
     let v = 0;
     for (let z = 0; z < size[2]; ++z) {
       for (let y = 0; y < size[1]; ++y) {
@@ -553,36 +740,30 @@ export class WarpedVolumeChunkSource extends WithParameters(
             origin[2] + z + 0.5,
             p,
           );
-          apply4(A, p[0], p[1], p[2], f);
+          apply4(Ad, p[0], p[1], p[2], f);
           // Linear inside the field grid, nearest-neighbour outside (ITK).
           for (let a = 0; a < 3; ++a) {
-            const fa = Math.min(Math.max(f[a], 0), shape[a] - 1);
+            const fa = Math.min(Math.max(f[a], lb[a]), ub[a] - 1);
             let ia = Math.floor(fa);
-            if (ia > shape[a] - 2) ia = Math.max(shape[a] - 2, 0);
+            if (ia > ub[a] - 2) ia = Math.max(ub[a] - 2, lb[a]);
             t[a] = fa - ia;
-            i0[a] = ia - fLo[a];
+            i0[a] = ia - lo[a];
           }
-          const s0 = sStrides[0];
-          const s1 = sStrides[1];
-          const s2 = sStrides[2];
-          const e0 = ext[0] > 1 ? s0 : 0;
-          const e1 = ext[1] > 1 ? s1 : 0;
-          const e2 = ext[2] > 1 ? s2 : 0;
-          const base = i0[0] * s0 + i0[1] * s1 + i0[2] * s2;
-          const [t0, t1, t2] = t;
+          const base = cBase + i0[0] * sx + i0[1] * sy + i0[2] * sz;
+          const [tx, ty, tz] = t;
           for (let c = 0; c < 3; ++c) {
             const b = base + c * cStride;
-            const c00 = fieldBox[b] * (1 - t2) + fieldBox[b + e2] * t2;
+            const c00 = fieldBox[b] * (1 - tx) + fieldBox[b + ex] * tx;
             const c01 =
-              fieldBox[b + e1] * (1 - t2) + fieldBox[b + e1 + e2] * t2;
+              fieldBox[b + ey] * (1 - tx) + fieldBox[b + ey + ex] * tx;
             const c10 =
-              fieldBox[b + e0] * (1 - t2) + fieldBox[b + e0 + e2] * t2;
+              fieldBox[b + ez] * (1 - tx) + fieldBox[b + ez + ex] * tx;
             const c11 =
-              fieldBox[b + e0 + e1] * (1 - t2) +
-              fieldBox[b + e0 + e1 + e2] * t2;
+              fieldBox[b + ez + ey] * (1 - tx) +
+              fieldBox[b + ez + ey + ex] * tx;
             u[c] =
-              (c00 * (1 - t1) + c01 * t1) * (1 - t0) +
-              (c10 * (1 - t1) + c11 * t1) * t0;
+              (c00 * (1 - ty) + c01 * ty) * (1 - tz) +
+              (c10 * (1 - ty) + c11 * ty) * tz;
           }
           const qx = p[0] + V[0] * u[0] + V[1] * u[1] + V[2] * u[2];
           const qy = p[1] + V[3] * u[0] + V[4] * u[1] + V[5] * u[2];
@@ -592,6 +773,112 @@ export class WarpedVolumeChunkSource extends WithParameters(
           coords[3 * v + 1] = f[1] - 0.5;
           coords[3 * v + 2] = f[2] - 0.5;
         }
+      }
+    }
+    return coords;
+  }
+
+  /**
+   * The same for any number F of field dimensions and any field layout:
+   * multilinear in the field over its non-constant dimensions, then the
+   * moving sample indices of movingSpatialDims (m per voxel, x fastest over
+   * the F warped dimensions).
+   */
+  private computeMovingCoordinatesGeneric(
+    origin: number[],
+    size: number[],
+    fLo: number[],
+    fHi: number[],
+    fieldBox: Float32Array,
+  ): Float32Array {
+    const {
+      field,
+      warpedToOutput: W,
+      outputToMoving: M,
+      numFieldDims: F,
+      movingSpatialDims: S,
+    } = this.parameters;
+    const A = field.outputToIndex;
+    const V = field.vectorToOutput;
+    const K = field.numComponents;
+    const R = field.rank;
+    const m = S.length;
+    const boxStrides = new Array<number>(R);
+    for (let d = 0, s = 1; d < R; ++d) {
+      boxStrides[d] = s;
+      s *= fHi[d] - fLo[d] + 1;
+    }
+    const sd = this.fieldSpatialDims;
+    const cStride = boxStrides[field.vectorDim];
+    const cBase = -fLo[field.vectorDim] * cStride;
+    let n = 1;
+    for (let k = 0; k < F; ++k) n *= size[k];
+    const coords = new Float32Array(m * n);
+    const x = new Array<number>(F).fill(0);
+    const p = new Array<number>(F).fill(0);
+    const q = new Array<number>(F).fill(0);
+    const u = new Array<number>(K).fill(0);
+    // Interpolated dimensions of this voxel: offsets and weights.
+    const steps = new Array<number>(sd.length);
+    const fracs = new Array<number>(sd.length);
+    const idx = new Array<number>(F).fill(0);
+    for (let v = 0; v < n; ++v) {
+      for (let k = 0; k < F; ++k) x[k] = origin[k] + idx[k] + 0.5;
+      for (let i = 0; i < F; ++i) {
+        let s = W[i * (F + 1) + F];
+        for (let j = 0; j < F; ++j) s += W[i * (F + 1) + j] * x[j];
+        p[i] = s;
+      }
+      let base = cBase;
+      let numSteps = 0;
+      for (const d of sd) {
+        let f = A[d * (F + 1) + F];
+        for (let j = 0; j < F; ++j) f += A[d * (F + 1) + j] * p[j];
+        const lb = field.lowerVoxelBound[d];
+        const ub = field.upperVoxelBound[d];
+        // Linear inside the field grid, nearest-neighbour outside (ITK).
+        const fa = Math.min(Math.max(f, lb), ub - 1);
+        let ia = Math.floor(fa);
+        if (ia > ub - 2) ia = Math.max(ub - 2, lb);
+        base += (ia - fLo[d]) * boxStrides[d];
+        const t = fa - ia;
+        if (fHi[d] > fLo[d] && t !== 0) {
+          steps[numSteps] = boxStrides[d];
+          fracs[numSteps] = t;
+          ++numSteps;
+        }
+      }
+      for (let c = 0; c < K; ++c) {
+        const b = base + c * cStride;
+        let sum = 0;
+        for (let corner = 0; corner < 1 << numSteps; ++corner) {
+          let w = 1;
+          let off = b;
+          for (let a = 0; a < numSteps; ++a) {
+            if (corner & (1 << a)) {
+              w *= fracs[a];
+              off += steps[a];
+            } else {
+              w *= 1 - fracs[a];
+            }
+          }
+          sum += w * fieldBox[off];
+        }
+        u[c] = sum;
+      }
+      for (let i = 0; i < F; ++i) {
+        let s = p[i];
+        for (let c = 0; c < K; ++c) s += V[i * K + c] * u[c];
+        q[i] = s;
+      }
+      for (let i = 0; i < m; ++i) {
+        let s = M[i * (F + 1) + F];
+        for (let j = 0; j < F; ++j) s += M[i * (F + 1) + j] * q[j];
+        coords[m * v + i] = s - 0.5;
+      }
+      for (let k = 0; k < F; ++k) {
+        if (++idx[k] < size[k]) break;
+        idx[k] = 0;
       }
     }
     return coords;
@@ -611,7 +898,7 @@ export class WarpedVolumeChunkSource extends WithParameters(
   ) {
     const { spec } = this.moving;
     const { dataType } = this.spec;
-    if (this.parameters.movingChannelDims.length > 0) {
+    if (this.channelDims.length > 0) {
       throw new Error("warp: labels with channel dimensions are not supported");
     }
     const out = new (DATA_TYPE_ARRAY_CONSTRUCTOR[dataType] as any)(n);
@@ -746,7 +1033,8 @@ export class WarpedVolumeChunkSource extends WithParameters(
   ) {
     const { spec } = this.moving;
     const { dataType } = this.spec;
-    const { movingSpatialDims: S, movingChannelDims: Cd } = this.parameters;
+    const { movingSpatialDims: S } = this.parameters;
+    const Cd = this.channelDims;
     const rank = spec.rank;
     const {
       chunkDataSize: cds,
@@ -922,6 +1210,189 @@ export class WarpedVolumeChunkSource extends WithParameters(
         const value =
           (c00 * (1 - ty) + c10 * ty) * (1 - tz) +
           (c01 * (1 - ty) + c11 * ty) * tz;
+        out[v + n * ch] = integer ? Math.round(value) : value;
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Resampling for any number of moving dimensions sampled through the field
+   * (multilinear, or nearest), with sliced passthrough dimensions at the
+   * warped chunk's voxel and channels carried whole. Output: the warped
+   * field dimensions (dimension 0 fastest), then the channels.
+   */
+  private resampleGeneric(
+    coords: Float32Array,
+    n: number,
+    deps: VolumeDependency[],
+    data: ChunkData[],
+    lo: number[],
+    hi: number[],
+    origin: number[],
+    nearest: boolean,
+  ) {
+    const { spec } = this.moving;
+    const { dataType } = this.spec;
+    const {
+      movingSpatialDims: S,
+      movingPassDims: P,
+      numFieldDims: F,
+    } = this.parameters;
+    const m = S.length;
+    const {
+      chunkDataSize: cds,
+      baseVoxelOffset: base,
+      lowerVoxelBound: lb,
+      upperVoxelBound: ub,
+    } = spec;
+    const rank = spec.rank;
+    const Cd = this.channelDims;
+    const chExtent = Cd.map((d) => ub[d] - lb[d]);
+    const numChannels = chExtent.reduce((a, b) => a * b, 1);
+    const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[dataType] as any;
+    const out = new Ctor(n * numChannels);
+    if (deps.length === 0) return out;
+    if (spec.compressedSegmentationBlockSize !== undefined) {
+      throw new Error(
+        "warp: compressed segmentation is supported for 3-d sources only",
+      );
+    }
+    // Sliced passthrough dimensions: the moving voxel of this warped chunk.
+    const fixed: [number, number][] = [];
+    P.forEach((p, i) => {
+      if (!p.whole) fixed.push([p.dim, origin[F + i] + p.offset]);
+    });
+    for (const [d, v] of fixed) {
+      if (v < lb[d] || v >= ub[d]) return out;
+    }
+    const slb = S.map((d) => lb[d]);
+    const sub = S.map((d) => ub[d]);
+    const rlo = S.map((_, i) => Math.max(lo[i], slb[i]));
+    const rhi = S.map((_, i) => Math.min(hi[i], sub[i] - 1));
+    const rext = rlo.map((l, i) => rhi[i] - l + 1);
+    if (rext.some((e) => e <= 0)) return out;
+    const rstr = new Array<number>(m);
+    let rsize = 1;
+    for (let i = 0; i < m; ++i) {
+      rstr[i] = rsize;
+      rsize *= rext[i];
+    }
+    // One dense region per channel; missing chunks stay 0.
+    const region = new Ctor(rsize * numChannels);
+    const fullSize = cds.reduce((a: number, b: number) => a * b, 1);
+    deps.forEach((dep, ci) => {
+      const d = data[ci] as any;
+      if (d === null || d.length === 0) return;
+      const o = Array.from(
+        { length: rank },
+        (_, k) => dep.position[k] * cds[k] + base[k],
+      );
+      // Chunks may be clipped at the upper bound (zarr chunks are not).
+      const clipped = o.map((ok, k) => Math.min(cds[k], ub[k] - ok));
+      const size = d.length === fullSize ? cds : clipped;
+      const stride = new Array<number>(rank);
+      for (let k = 0, s = 1; k < rank; ++k) {
+        stride[k] = s;
+        s *= size[k];
+      }
+      const cLo = S.map((k, i) => Math.max(rlo[i], o[k]));
+      const cHi = S.map((k, i) => Math.min(rhi[i], o[k] + clipped[k] - 1));
+      if (cLo.some((l, i) => l > cHi[i])) return;
+      let fixedOffset = 0;
+      for (const [k, v] of fixed) {
+        if (v < o[k] || v >= o[k] + clipped[k]) return;
+        fixedOffset += (v - o[k]) * stride[k];
+      }
+      const chLo = Cd.map((k) => Math.max(o[k], lb[k]));
+      const chHi = Cd.map((k) => Math.min(o[k] + clipped[k], ub[k]) - 1);
+      const c = chLo.slice();
+      const w = cHi[0] - cLo[0] + 1;
+      const sx = stride[S[0]];
+      while (true) {
+        let srcBase = fixedOffset;
+        let chIndex = 0;
+        for (let i = Cd.length - 1; i >= 0; --i) {
+          srcBase += (c[i] - o[Cd[i]]) * stride[Cd[i]];
+          chIndex = chIndex * chExtent[i] + (c[i] - lb[Cd[i]]);
+        }
+        const dstBase = chIndex * rsize;
+        const idx = cLo.slice();
+        while (true) {
+          let src = srcBase;
+          let dst = dstBase;
+          for (let i = 0; i < m; ++i) {
+            src += (idx[i] - o[S[i]]) * stride[S[i]];
+            dst += (idx[i] - rlo[i]) * rstr[i];
+          }
+          for (let k = 0; k < w; ++k) region[dst + k] = d[src + k * sx];
+          let i = 1;
+          while (i < m && ++idx[i] > cHi[i]) {
+            idx[i] = cLo[i];
+            ++i;
+          }
+          if (i >= m) break;
+        }
+        let i = 0;
+        while (i < Cd.length && ++c[i] > chHi[i]) {
+          c[i] = chLo[i];
+          ++i;
+        }
+        if (i === Cd.length) break;
+      }
+    });
+    const integer = dataType !== DataType.FLOAT32;
+    const offA = new Array<number>(m);
+    const offB = new Array<number>(m);
+    const frac = new Array<number>(m);
+    for (let v = 0; v < n; ++v) {
+      // Inside if within half a voxel of the samples (ITK); 0 outside.
+      let inside = true;
+      for (let i = 0; i < m; ++i) {
+        const c = coords[m * v + i];
+        if (!(c >= slb[i] - 0.5 && c <= sub[i] - 0.5)) {
+          inside = false;
+          break;
+        }
+      }
+      if (!inside) continue;
+      if (nearest) {
+        let at = 0;
+        for (let i = 0; i < m; ++i) {
+          const r = Math.round(coords[m * v + i] - rlo[i]);
+          at += Math.min(Math.max(r, 0), rext[i] - 1) * rstr[i];
+        }
+        for (let ch = 0; ch < numChannels; ++ch) {
+          out[v + n * ch] = region[at + rsize * ch];
+        }
+        continue;
+      }
+      // Neighbours clamped to the region, which covers [lb, ub - 1]
+      // wherever samples fall (mode "nearest" at borders).
+      for (let i = 0; i < m; ++i) {
+        const r = coords[m * v + i] - rlo[i];
+        const f = Math.floor(r);
+        frac[i] = r - f;
+        const max = rext[i] - 1;
+        offA[i] = (f < 0 ? 0 : f > max ? max : f) * rstr[i];
+        offB[i] = (f + 1 > max ? max : f + 1 < 0 ? 0 : f + 1) * rstr[i];
+      }
+      for (let ch = 0, r = 0; ch < numChannels; ++ch, r += rsize) {
+        let value = 0;
+        for (let corner = 0; corner < 1 << m; ++corner) {
+          let w = 1;
+          let at = r;
+          for (let i = 0; i < m; ++i) {
+            if (corner & (1 << i)) {
+              w *= frac[i];
+              at += offB[i];
+            } else {
+              w *= 1 - frac[i];
+              at += offA[i];
+            }
+          }
+          if (w !== 0) value += w * region[at];
+        }
         out[v + n * ch] = integer ? Math.round(value) : value;
       }
     }
