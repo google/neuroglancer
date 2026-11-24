@@ -70,6 +70,8 @@ jobs:
       - name: Run JavaScript tests (including WebGL)
         run: npm test
         if: ${{ runner.os != 'macOS' }}
+        env:
+          NEUROGLANCER_TRACE_SOURCE_TAB_REGISTRATION: ${{ runner.os == 'Windows' && '1' || '0' }}
       - name: Run JavaScript tests (excluding WebGL)
         run: npm test -- --project node
         if: ${{ runner.os == 'macOS' }}

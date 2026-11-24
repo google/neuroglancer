@@ -637,6 +637,21 @@ export class LayerDataSourcesTab extends Tab {
   }
 }
 
+declare const NEUROGLANCER_TRACE_SOURCE_TAB_REGISTRATION: boolean;
+if (
+  typeof NEUROGLANCER_TRACE_SOURCE_TAB_REGISTRATION !== "undefined" &&
+  NEUROGLANCER_TRACE_SOURCE_TAB_REGISTRATION
+) {
+  console.log(
+    "[source-tab-registration]",
+    JSON.stringify({
+      moduleUrl: import.meta.url,
+      pageUrl: location.href,
+      alreadyRegistered: USER_LAYER_TABS.some((tab) => tab.id === "source"),
+    }),
+  );
+}
+
 USER_LAYER_TABS.push({
   id: "source",
   label: "Source",

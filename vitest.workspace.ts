@@ -108,7 +108,13 @@ export default defineWorkspace([
       }),
   ),
   {
-    define: browserDefines,
+    define: {
+      ...browserDefines,
+      NEUROGLANCER_TRACE_SOURCE_TAB_REGISTRATION:
+        process.env.NEUROGLANCER_TRACE_SOURCE_TAB_REGISTRATION === "1"
+          ? "true"
+          : "false",
+    },
     esbuild: {
       target: "es2022",
     },
