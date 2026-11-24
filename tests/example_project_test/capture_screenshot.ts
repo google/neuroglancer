@@ -22,6 +22,10 @@ import { sendScreenshotServerCommand } from "#tests/example_project_test/screens
 const TEST_FRAGMENT =
   "#!%7B%22dimensions%22:%7B%22x%22:%5B8e-9%2C%22m%22%5D%2C%22y%22:%5B8e-9%2C%22m%22%5D%2C%22z%22:%5B8e-9%2C%22m%22%5D%7D%2C%22position%22:%5B22316.904296875%2C21921.87890625%2C24029.763671875%5D%2C%22crossSectionScale%22:1%2C%22crossSectionDepth%22:-37.62185354999912%2C%22projectionOrientation%22:%5B-0.1470303237438202%2C0.5691322684288025%2C0.19562694430351257%2C0.7849844694137573%5D%2C%22projectionScale%22:118020.30607575581%2C%22layers%22:%5B%7B%22type%22:%22image%22%2C%22source%22:%22precomputed://gs://neuroglancer-janelia-flyem-hemibrain/emdata/clahe_yz/jpeg%22%2C%22tab%22:%22rendering%22%2C%22crossSectionRenderScale%22:4%2C%22name%22:%22emdata%22%7D%2C%7B%22type%22:%22segmentation%22%2C%22source%22:%22precomputed://gs://neuroglancer-janelia-flyem-hemibrain/v1.0/segmentation%22%2C%22tab%22:%22rendering%22%2C%22segments%22:%5B%221944507292%22%5D%2C%22name%22:%22segmentation%22%7D%5D%2C%22showSlices%22:false%2C%22selectedLayer%22:%7B%22layer%22:%22emdata%22%7D%2C%22layout%22:%22xy-3d%22%2C%22statistics%22:%7B%22size%22:232%7D%7D";
 
+// The test data comes from a public Google Cloud Storage bucket, which on
+// GitHub Actions runners sometimes takes more than 30 s to load.
+const DATA_LOAD_TIMEOUT = 60000;
+
 async function postScreenshotResult(screenshot: Buffer, projectName: string) {
   const hash = crypto.createHash("sha256");
   hash.update(screenshot);
@@ -50,7 +54,10 @@ export async function captureNeuroglancerScreenshot(
             return false;
           }
         }),
-      { message: "Waiting for data to load in Neuroglancer", timeout: 30000 },
+      {
+        message: "Waiting for data to load in Neuroglancer",
+        timeout: DATA_LOAD_TIMEOUT,
+      },
     )
     .toBeTruthy();
 
