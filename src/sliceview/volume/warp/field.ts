@@ -246,8 +246,16 @@ export function parseDisplacementFieldMetadata(
   const levelErrors = new Map<string, number>();
   verifyOptionalObjectProperty(extras, "levels", (x) =>
     parseArray(x, (l) => {
-      const err = verifyOptionalObjectProperty(l, "interpolation_error", (e) =>
-        verifyObjectProperty(e, "max", verifyFiniteFloat),
+      // The level choice is global, so it uses the 99th percentile when the
+      // store gives one: the max is set by the worst sample anywhere (a fold,
+      // or an unconstrained field outside the tissue) and would force the
+      // finest level everywhere.
+      const err = verifyOptionalObjectProperty(
+        l,
+        "interpolation_error",
+        (e) =>
+          verifyOptionalObjectProperty(e, "p99", verifyFiniteFloat) ??
+          verifyObjectProperty(e, "max", verifyFiniteFloat),
       );
       if (err !== undefined) {
         levelErrors.set(verifyObjectProperty(l, "path", verifyString), err);
