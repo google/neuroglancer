@@ -34,8 +34,12 @@ import { getKvStorePathCompletions } from "#src/datasource/kvstore_completions.j
 import { VolumeChunkSourceParameters } from "#src/datasource/zarr/base.js";
 import { codecChainSupportsWriting } from "#src/datasource/zarr/codec/index.js";
 import "#src/datasource/zarr/codec/bytes/resolve.js";
+import "#src/datasource/zarr/codec/cast_value/resolve.js";
 import "#src/datasource/zarr/codec/crc32c/resolve.js";
 import "#src/datasource/zarr/codec/gzip/resolve.js";
+import "#src/datasource/zarr/codec/jpeg/resolve.js";
+import "#src/datasource/zarr/codec/reshape/resolve.js";
+import "#src/datasource/zarr/codec/scale_offset/resolve.js";
 import "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
 import "#src/datasource/zarr/codec/transpose/resolve.js";
 import type {
