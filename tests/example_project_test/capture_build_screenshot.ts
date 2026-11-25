@@ -21,6 +21,7 @@ import { captureNeuroglancerScreenshot } from "#tests/example_project_test/captu
 import { test } from "#tests/example_project_test/client_test_options.js";
 
 test("capture screenshot from built client", async ({
+  context,
   page,
   clientDir,
 }, testInfo) => {
@@ -36,6 +37,11 @@ test("capture screenshot from built client", async ({
       testInfo,
     );
   } finally {
-    await server[Symbol.asyncDispose]();
+    try {
+      // The browser can hold open sockets even before sending an HTTP request.
+      await context.close();
+    } finally {
+      await server[Symbol.asyncDispose]();
+    }
   }
 });
