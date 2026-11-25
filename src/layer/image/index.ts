@@ -36,7 +36,6 @@ import {
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
 import { registerVoxelEditingLayerControls } from "#src/layer/voxel_editing/controls.js";
 import { UserLayerWithVoxelEditingMixin } from "#src/layer/voxel_editing/index.js";
-import { Overlay } from "#src/overlay.js";
 import type { RenderLayerTransformOrError } from "#src/render_coordinate_transform.js";
 import { getChannelSpace } from "#src/render_coordinate_transform.js";
 import {
@@ -658,13 +657,15 @@ class RenderingOptionsTab extends AccordionTab {
     this.appendChild(
       makeShaderCodeWidgetTopRow(
         this.layer,
-        this.codeWidget,
-        ShaderCodeOverlay,
+        this.codeWidget.element,
+        makeShaderCodeWidget,
         {
-          title: "Documentation on image layer rendering",
-          href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
+          type: "Image",
+          documentation: {
+            title: "Documentation on image layer rendering",
+            href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
+          },
         },
-        "neuroglancer-image-dropdown-top-row",
       ),
     );
     this.appendChild(
@@ -688,17 +689,6 @@ class RenderingOptionsTab extends AccordionTab {
         ),
       ).element,
     );
-  }
-}
-
-class ShaderCodeOverlay extends Overlay {
-  codeWidget: ShaderCodeWidget;
-  constructor(public layer: ImageUserLayer) {
-    super();
-    this.codeWidget = this.registerDisposer(makeShaderCodeWidget(this.layer));
-    this.content.classList.add("neuroglancer-image-layer-shader-overlay");
-    this.content.appendChild(this.codeWidget.element);
-    this.codeWidget.textEditor.refresh();
   }
 }
 

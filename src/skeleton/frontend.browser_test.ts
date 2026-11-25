@@ -4,8 +4,14 @@ import { makeLayer } from "#src/layer/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import "#layer/segmentation";
 import {
+  perspectivePanelEmit,
+  perspectivePanelEmitOIT,
+  perspectivePanelEmitWithNormals,
+} from "#src/perspective_view/panel.js";
+import {
   PerspectiveViewSkeletonLayer,
   type SkeletonLayer,
+  SkeletonRenderMode3d,
   SliceViewPanelSkeletonLayer,
 } from "#src/skeleton/frontend.js";
 import { DataType } from "#src/util/data_type.js";
@@ -15,7 +21,7 @@ import { NullarySignal } from "#src/util/signal.js";
 import { Viewer } from "#src/viewer.js";
 import { VisibilityPriorityAggregator } from "#src/visibility_priority/frontend.js";
 import { GLBuffer } from "#src/webgl/buffer.js";
-import { drawLines, initializeLineShader } from "#src/webgl/lines.js";
+import { drawLines } from "#src/webgl/lines.js";
 import {
   FramebufferConfiguration,
   makeTextureBuffers,
@@ -91,7 +97,6 @@ function makeSkeletonShaderTest(
     gl,
     renderHelper: base.draw.mock.calls[0][2],
     renderContext,
-    skeletonLayer,
   };
 }
 
@@ -233,13 +238,8 @@ describe.each([true, false])(
       (useDefaultColor) => {
         const resources = new RefCounted();
         try {
-          const {
-            displayState,
-            gl,
-            renderHelper,
-            renderContext,
-            skeletonLayer,
-          } = makeSkeletonShaderTest(resources, targetIsSliceView);
+          const { displayState, gl, renderHelper, renderContext } =
+            makeSkeletonShaderTest(resources, targetIsSliceView);
           const framebuffer = resources.registerDisposer(
             new FramebufferConfiguration(gl, {
               colorBuffers: makeTextureBuffers(gl, 1),
@@ -272,7 +272,13 @@ vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
               const shader = result.shader!;
               expect(shader).not.toBeNull();
               shader.bind();
-              renderHelper.beginLayer(gl, shader, renderContext, mat4.create());
+              renderHelper.beginLayer(
+                gl,
+                shader,
+                result.extraParameters,
+                renderContext,
+                mat4.create(),
+              );
               displayState.segmentationColorUserShader.enable(
                 gl,
                 shader,
@@ -280,11 +286,13 @@ vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
                 { fallback: result.fallback, binding: resources },
                 result.parameters.segmentColorParameters,
               );
-              gl.uniform1f(shader.uniform("uLineWidth"), 3);
-              initializeLineShader(
+              renderHelper.setEdgeSizeUniforms(
+                gl,
                 shader,
+                result.extraParameters,
                 renderContext.projectionParameters,
-                targetIsSliceView ? 1 : 0,
+                /*lineWidth=*/ 3,
+                /*nodeDiameter=*/ 0,
               );
               const textureUnit = gl.getUniform(
                 shader.program,
@@ -313,7 +321,7 @@ vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
               }
               gl.vertexAttribDivisor(attribute, 0);
               gl.disableVertexAttribArray(attribute);
-              renderHelper.endLayer(gl, shader, skeletonLayer.displayState);
+              renderHelper.endLayer(gl, result);
             }
           }
         } finally {
@@ -323,3 +331,43 @@ vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
     );
   },
 );
+
+describe("skeleton raycast modes", () => {
+  it.each([
+    SkeletonRenderMode3d.CYLINDERS,
+    SkeletonRenderMode3d.CYLINDERS_AND_SPHERES,
+  ])("compile with each perspective emitter in mode %s", (mode) => {
+    const resources = new RefCounted();
+    try {
+      const { displayState, renderHelper } = makeSkeletonShaderTest(
+        resources,
+        /*targetIsSliceView=*/ false,
+      );
+      displayState.skeletonRenderingOptions.params3d.mode.value = mode;
+      const errors = [
+        displayState.skeletonRenderingOptions.edgeShaderError,
+        displayState.skeletonRenderingOptions.nodeShaderError,
+      ];
+      for (const emitter of [
+        perspectivePanelEmit,
+        perspectivePanelEmitWithNormals,
+        perspectivePanelEmitOIT,
+      ]) {
+        for (const getShader of [
+          renderHelper.edgeShaderGetter,
+          renderHelper.nodeShaderGetter,
+        ]) {
+          const result = getShader(emitter);
+          expect(result.extraParameters).toBe(true);
+          expect(result.fallback).toBe(false);
+          expect(result.shader, emitter.name).not.toBeNull();
+        }
+        for (const error of errors) {
+          expect(error.value, emitter.name).toBeNull();
+        }
+      }
+    } finally {
+      resources.dispose();
+    }
+  });
+});

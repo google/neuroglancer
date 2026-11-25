@@ -23,7 +23,6 @@ import {
   UserLayer,
 } from "#src/layer/index.js";
 import type { LoadedDataSubsource } from "#src/layer/layer_data_source.js";
-import { Overlay } from "#src/overlay.js";
 import type { VertexAttributeInfo } from "#src/single_mesh/base.js";
 import {
   getShaderAttributeType,
@@ -149,7 +148,7 @@ function makeShaderCodeWidget(layer: SingleMeshUserLayer) {
   });
 }
 
-class VertexAttributeWidget extends RefCounted {
+export class VertexAttributeWidget extends RefCounted {
   element = document.createElement("div");
   constructor(
     public attributes: WatchableValueInterface<
@@ -225,13 +224,9 @@ class DisplayOptionsTab extends Tab {
     element.appendChild(
       makeShaderCodeWidgetTopRow(
         this.layer,
-        this.codeWidget,
-        ShaderCodeOverlay,
-        {
-          title: "Documentation on image layer rendering",
-          href: "https://github.com/google/neuroglancer/blob/master/src/sliceview/image_layer_rendering.md",
-        },
-        "neuroglancer-single-mesh-dropdown-top-row",
+        this.codeWidget.element,
+        makeShaderCodeWidget,
+        { type: "Mesh" },
       ),
     );
     element.appendChild(this.attributeWidget.element);
@@ -249,22 +244,6 @@ class DisplayOptionsTab extends Tab {
         ),
       ).element,
     );
-  }
-}
-
-class ShaderCodeOverlay extends Overlay {
-  attributeWidget: VertexAttributeWidget;
-  codeWidget: ShaderCodeWidget;
-  constructor(public layer: SingleMeshUserLayer) {
-    super();
-    this.attributeWidget = this.registerDisposer(
-      makeVertexAttributeWidget(layer),
-    );
-    this.codeWidget = this.registerDisposer(makeShaderCodeWidget(layer));
-    this.content.classList.add("neuroglancer-single-mesh-layer-shader-overlay");
-    this.content.appendChild(this.attributeWidget.element);
-    this.content.appendChild(this.codeWidget.element);
-    this.codeWidget.textEditor.refresh();
   }
 }
 

@@ -124,37 +124,43 @@ enum TransparentRenderingState {
 // it writes to a different output set.
 const glslEmitBase = `
   out_color = color;
-  float zValue = 1.0 - gl_FragCoord.z;
+  float zValue = 1.0 - depth;
   out_z = vec4(zValue, zValue, zValue, 1.0);
   float pickIdFloat = float(pickId);
   out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);`;
 
 export const glsl_perspectivePanelEmit = `
-void emit(vec4 color, highp uint pickId) {
+void emit(vec4 color, highp float depth, highp uint pickId) {
   ${glslEmitBase}
+}
+void emit(vec4 color, highp uint pickId) {
+  emit(color, gl_FragCoord.z, pickId);
 }
 `;
 
-// SSAO-aware emit ABI. 3-arg form: opaque surfaces that should receive AO,
-// viewNormal in view space (right-handed, -Z forward), need not be unit.
-// 2-arg form: anything else; writes the zero-RGB sentinel that the GTAO and
-// composite shaders short-circuit on. Alpha is always 1 so the sentinel
-// survives the annotation blend mode. Only this emitter has the 3-arg form.
+// SSAO-aware emit ABI. Form with viewNormal: opaque surfaces that should
+// receive AO, viewNormal in view space (right-handed, -Z forward), need not be
+// unit. Other forms: anything else; writes the zero-RGB sentinel that the GTAO
+// and composite shaders short-circuit on. Alpha is always 1 so the sentinel
+// survives the annotation blend mode. Only this emitter has the viewNormal form.
 export const glsl_perspectivePanelEmitWithNormals = `
-void emit(vec4 color, highp uint pickId, vec3 viewNormal) {
+void emit(vec4 color, highp float depth, highp uint pickId) {
   ${glslEmitBase}
+  // Zero-RGB sentinel; alpha=1 so the source overwrites dst under
+  // blend(SRC_ALPHA, ONE_MINUS_SRC_ALPHA).
+  out_normal = vec4(0.0, 0.0, 0.0, 1.0);
+}
+void emit(vec4 color, highp uint pickId) {
+  emit(color, gl_FragCoord.z, pickId);
+}
+void emit(vec4 color, highp uint pickId, vec3 viewNormal) {
+  emit(color, gl_FragCoord.z, pickId);
   // Caller passes vec3(0) to opt out of AO (zero-RGB sentinel).
   // Guard the normalization to avoid propagating NaN into the packed normal.
   vec3 packedNormal = dot(viewNormal, viewNormal) < 1e-8
     ? vec3(0.0)
     : normalize(viewNormal) * 0.5 + 0.5;
   out_normal = vec4(packedNormal, 1.0);
-}
-void emit(vec4 color, highp uint pickId) {
-  ${glslEmitBase}
-  // Zero-RGB sentinel; alpha=1 so the source overwrites dst under
-  // blend(SRC_ALPHA, ONE_MINUS_SRC_ALPHA).
-  out_normal = vec4(0.0, 0.0, 0.0, 1.0);
 }
 `;
 
@@ -179,10 +185,13 @@ void emitAccumAndRevealage(vec4 accum, float revealage, highp uint pickId) {
   v4f_fragData0 = vec4(accum.rgb, revealage);
   v4f_fragData1 = vec4(accum.a, 0.0, 0.0, 0.0);
 }
-void emit(vec4 color, highp uint pickId) {
-  float weight = computeOITWeight(color.a, gl_FragCoord.z);
+void emit(vec4 color, highp float depth, highp uint pickId) {
+  float weight = computeOITWeight(color.a, depth);
   vec4 accum = color * weight;
   emitAccumAndRevealage(accum, color.a, pickId);
+}
+void emit(vec4 color, highp uint pickId) {
+  emit(color, gl_FragCoord.z, pickId);
 }
 `,
 ];

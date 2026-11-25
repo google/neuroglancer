@@ -62,9 +62,9 @@ SSAO is limited to mesh surfaces because `MeshLayer`, `MultiscaleMeshLayer`, and
 `SingleMeshLayer` supply a view-space normal via the three-argument `emit(color,
 pickId, viewNormal)` form. Annotations are omitted from SSAO because they are
 glyphs for which 3D shading makes little sense. Skeletons are omitted because
-they are rendered as lines without the surface normals needed for SSAO. The
-omitted types call the two-argument `emit(color, pickId)` form, which writes the
-zero sentinel `vec4(0, 0, 0, 1)` to the NORMAL attachment. The SSAO shader
+the line modes have no surfaces, and the cylinder modes do not yet pass their
+raycast normals. The omitted types call `emit(color, pickId)` or `emit(color,
+depth, pickId)`, which write the zero sentinel `vec4(0, 0, 0, 1)` to the NORMAL attachment. The SSAO shader
 treats a zero-RGB normal as a no-AO sentinel, so those pixels render at full
 brightness. Highlighted (hovered) mesh segments use the same zero-RGB sentinel
 so they also render without darkening.
@@ -118,13 +118,15 @@ overloads via the `renderContext` emitter:
 - `emit(color, pickId, viewNormal)` — opaque surfaces that should _receive_ AO.
   `viewNormal` is in view space (right-handed, camera looking down -Z), need not
   be unit length. Caller is responsible for the world→view normal transform.
-- `emit(color, pickId)` — opaque skeletons, annotations, cross-section
-  slices, etc. Internally writes the zero-RGB sentinel `(0, 0, 0)` to NORMAL
-  with alpha = 1. The composite shader skips the AO multiply for those pixels.
+- `emit(color, pickId)` and `emit(color, depth, pickId)` — opaque skeletons,
+  annotations, cross-section slices, etc. Both forms write the zero-RGB sentinel
+  `(0, 0, 0)` to NORMAL with alpha = 1, and the composite shader skips the AO
+  multiply for those pixels. The first form uses `gl_FragCoord.z` as the depth.
+  The second, used by the raycast skeleton modes, takes the depth explicitly.
 
 Highlighted (hovered) mesh segments emit a zero-RGB sentinel from
 `MeshShaderManager`'s vertex shader, gated by a `uHighlighted` uniform owned by
 the mesh layer. Any other layer that wants to exclude fragments from AO can do
 the same: emit a zero-RGB view normal. Only the SSAO emitter defines the
-three-argument form, so a layer calls it only when that emitter is active, as
+`viewNormal` form, so a layer calls it only when that emitter is active, as
 `MeshShaderManager` and `SingleMeshShaderManager` do.
