@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# ruff: noqa: I001
 
-from . import (  # noqa: I001
+from . import (
     segment_colors,  # noqa: F401
     server,  # noqa: F401
     skeleton,  # noqa: F401
