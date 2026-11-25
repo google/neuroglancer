@@ -36,6 +36,7 @@ import {
   validateOctree,
 } from "#src/mesh/multiscale.js";
 import type { PerspectivePanel } from "#src/perspective_view/panel.js";
+import { perspectivePanelEmitWithNormals } from "#src/perspective_view/panel.js";
 import type {
   PerspectiveViewReadyRenderContext,
   PerspectiveViewRenderContext,
@@ -90,6 +91,28 @@ import { registerSharedObjectOwner } from "#src/worker_rpc.js";
 
 const tempMat4 = mat4.create();
 const tempMat3 = mat3.create();
+
+// Same condition as segmentColorUserShader's uSelectedSegment comparison
+// (segment_color.ts), so AO is skipped exactly where the highlight is drawn.
+export function isSegmentHighlighted(
+  displayState: Pick<
+    SegmentationDisplayState3D,
+    "hoverHighlight" | "segmentSelectionState" | "baseSegmentHighlighting"
+  >,
+  colorObjectId: bigint,
+) {
+  const { segmentSelectionState } = displayState;
+  if (
+    !displayState.hoverHighlight.value ||
+    !segmentSelectionState.hasSelectedSegment
+  ) {
+    return false;
+  }
+  const selected = displayState.baseSegmentHighlighting.value
+    ? segmentSelectionState.baseSelectedSegment
+    : segmentSelectionState.selectedSegment;
+  return colorObjectId === selected;
+}
 
 // To validate the octrees and to determine the multiscale fragment responsible for each framebuffer
 // location, set `DEBUG_MULTISCALE_FRAGMENTS=true` and also set `DEBUG_PICKING=true` in
@@ -313,6 +336,16 @@ export class MeshShaderManager {
     mat3.invert(tempMat3, tempMat3);
     mat3.transpose(tempMat3, tempMat3);
     gl.uniformMatrix3fv(shader.uniform("uNormalMatrix"), false, tempMat3);
+    if (renderContext.emitter === perspectivePanelEmitWithNormals) {
+      // Combined model→view normal transform for SSAO. Uses `modelMat`
+      // directly, bypassing `uNormalMatrix`'s `canonicalVoxelFactors` scaling,
+      // which gives wrong oblique normals on anisotropic data.
+      mat4.multiply(tempMat4, projectionParameters.viewMatrix, modelMat);
+      mat4.invert(tempMat4, tempMat4);
+      mat3FromMat4(tempMat3, tempMat4);
+      mat3.transpose(tempMat3, tempMat3);
+      gl.uniformMatrix3fv(shader.uniform("uViewNormalMatrix"), false, tempMat3);
+    }
   }
 
   drawFragmentHelper(
@@ -420,7 +453,10 @@ export class MeshShaderManager {
           shaderBuilderState,
           silhouetteRenderingEnabled,
         },
+        _,
+        emitter,
       ) => {
+        const emitNormals = emitter === perspectivePanelEmitWithNormals;
         this.vertexPositionHandler.defineShader(builder);
         layer.displayState.segmentationColorUserShader.defineShader(
           builder,
@@ -436,6 +472,12 @@ export class MeshShaderManager {
         builder.addUniform("highp uint", "uPickID");
         builder.addUniform("highp uvec2", "uID");
         builder.addUniform("highp float", "uAlpha");
+        if (emitNormals) {
+          builder.addVarying("highp vec3", "vViewNormal");
+          builder.addUniform("highp mat3", "uViewNormalMatrix");
+          // Hover-highlighted segments opt out of AO by writing the zero-RGB sentinel to `vViewNormal`; see below.
+          builder.addUniform("highp float", "uHighlighted");
+        }
 
         if (silhouetteRenderingEnabled) {
           builder.addUniform("highp float", "uSilhouettePower");
@@ -468,6 +510,15 @@ vColor = segmentColorUserShader(uint64_t(uID));
 float alpha = uAlpha * vColor.a;
 vColor = vec4(lightingFactor * vColor.rgb * alpha, alpha);
 `;
+        if (emitNormals) {
+          // Bypass `normal` (post-uNormalMatrix); `uViewNormalMatrix`
+          // already encodes the full model→view transform. Multiply by
+          // (1 - uHighlighted) so hovered segments emit the zero sentinel.
+          vertexMain += `
+vViewNormal = (1.0 - uHighlighted) *
+              normalize(uViewNormalMatrix * (normalMultiplier * origNormal));
+`;
+        }
         if (silhouetteRenderingEnabled) {
           vertexMain += `
 vColor *= pow(1.0 - absCosAngle, uSilhouettePower);
@@ -476,7 +527,11 @@ vColor *= pow(1.0 - absCosAngle, uSilhouettePower);
         builder.setVertexMain(vertexMain);
         const shaderManager = new SegmentColorShaderManager("getColor");
         shaderManager.defineShader(builder);
-        builder.setFragmentMain("emit(vColor, uPickID);");
+        builder.setFragmentMain(
+          emitNormals
+            ? "emit(vColor, uPickID, gl_FrontFacing ? vViewNormal : -vViewNormal);"
+            : "emit(vColor, uPickID);",
+        );
       },
     });
   }
@@ -604,6 +659,12 @@ export class MeshLayer extends PerspectiveViewRenderLayer<ThreeDimensionalRender
             shader.uniform("uAlpha"),
             displayState.objectAlpha.value,
           );
+          if (renderContext.emitter === perspectivePanelEmitWithNormals) {
+            gl.uniform1f(
+              shader.uniform("uHighlighted"),
+              isSegmentHighlighted(displayState, colorObjectId) ? 1.0 : 0.0,
+            );
+          }
         }
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);
@@ -1002,6 +1063,12 @@ export class MultiscaleMeshLayer extends PerspectiveViewRenderLayer<ThreeDimensi
             shader.uniform("uAlpha"),
             displayState.objectAlpha.value,
           );
+          if (renderContext.emitter === perspectivePanelEmitWithNormals) {
+            gl.uniform1f(
+              shader.uniform("uHighlighted"),
+              isSegmentHighlighted(displayState, colorObjectId) ? 1.0 : 0.0,
+            );
+          }
         }
         if (renderContext.emitPickID) {
           meshShaderManager.setPickID(gl, shader, pickIndex!);

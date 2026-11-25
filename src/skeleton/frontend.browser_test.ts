@@ -4,8 +4,14 @@ import { makeLayer } from "#src/layer/index.js";
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
 import "#layer/segmentation";
 import {
+  perspectivePanelEmit,
+  perspectivePanelEmitOIT,
+  perspectivePanelEmitWithNormals,
+} from "#src/perspective_view/panel.js";
+import {
   PerspectiveViewSkeletonLayer,
   type SkeletonLayer,
+  SkeletonRenderMode3d,
   SliceViewPanelSkeletonLayer,
 } from "#src/skeleton/frontend.js";
 import { DataType } from "#src/util/data_type.js";
@@ -325,3 +331,43 @@ vec4 segmentColor(vec4 color, bool hasProperties, bool isStated) {
     );
   },
 );
+
+describe("skeleton raycast modes", () => {
+  it.each([
+    SkeletonRenderMode3d.CYLINDERS,
+    SkeletonRenderMode3d.CYLINDERS_AND_SPHERES,
+  ])("compile with each perspective emitter in mode %s", (mode) => {
+    const resources = new RefCounted();
+    try {
+      const { displayState, renderHelper } = makeSkeletonShaderTest(
+        resources,
+        /*targetIsSliceView=*/ false,
+      );
+      displayState.skeletonRenderingOptions.params3d.mode.value = mode;
+      const errors = [
+        displayState.skeletonRenderingOptions.edgeShaderError,
+        displayState.skeletonRenderingOptions.nodeShaderError,
+      ];
+      for (const emitter of [
+        perspectivePanelEmit,
+        perspectivePanelEmitWithNormals,
+        perspectivePanelEmitOIT,
+      ]) {
+        for (const getShader of [
+          renderHelper.edgeShaderGetter,
+          renderHelper.nodeShaderGetter,
+        ]) {
+          const result = getShader(emitter);
+          expect(result.extraParameters).toBe(true);
+          expect(result.fallback).toBe(false);
+          expect(result.shader, emitter.name).not.toBeNull();
+        }
+        for (const error of errors) {
+          expect(error.value, emitter.name).toBeNull();
+        }
+      }
+    } finally {
+      resources.dispose();
+    }
+  });
+});

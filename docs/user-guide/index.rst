@@ -16,6 +16,8 @@ Topics
   image and segmentation layers.
 - :doc:`segmentation_shaders` — writing custom GLSL shader code to color
   segmentation layers from segment ids and segment properties.
+- :doc:`rendering` — perspective-view rendering modes, including
+  screen-space ambient occlusion.
 
 .. toctree::
    :hidden:
@@ -25,3 +27,4 @@ Topics
    annotation_shaders
    voxel_annotation
    segmentation_shaders
+   rendering

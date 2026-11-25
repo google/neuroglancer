@@ -116,6 +116,12 @@ const STATIC_COMMANDS: readonly BuiltinCommand[] = [
     description: "Show or hide the default bounding-box annotations.",
   },
   {
+    id: "toggle-ssao",
+    label: "Toggle SSAO",
+    description:
+      "Turn screen-space ambient occlusion (shadows) on or off in the 3D view.",
+  },
+  {
     id: "toggle-show-statistics",
     label: "Toggle Statistics",
     description: "Show or hide the rendering statistics panel.",

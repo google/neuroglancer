@@ -63,6 +63,7 @@ import {
 import { overlaysOpen } from "#src/overlay.js";
 import { ScreenshotHandler } from "#src/python_integration/screenshots.js";
 import { allRenderLayerRoles, RenderLayerRole } from "#src/renderlayer.js";
+import { TrackableSSAO } from "#src/ssao/trackable_ssao_params.js";
 import { StatusMessage } from "#src/status.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
@@ -279,6 +280,7 @@ export class TrackableViewerState extends CompoundTrackable {
     this.add("layers", viewer.layerSpecification);
     this.add("showAxisLines", viewer.showAxisLines);
     this.add("wireFrame", viewer.wireFrame);
+    this.add("ssao", viewer.ssao);
     this.add("enableAdaptiveDownsampling", viewer.enableAdaptiveDownsampling);
     this.add("showScaleBar", viewer.showScaleBar);
     this.add("showDefaultAnnotations", viewer.showDefaultAnnotations);
@@ -454,6 +456,7 @@ export class Viewer extends RefCounted implements ViewerState {
   );
   showAxisLines = new TrackableBoolean(true, true);
   wireFrame = new TrackableBoolean(false, false);
+  ssao = this.registerDisposer(new TrackableSSAO());
   enableAdaptiveDownsampling = new TrackableBoolean(true, true);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
@@ -924,6 +927,7 @@ export class Viewer extends RefCounted implements ViewerState {
       this.showPerspectiveSliceViews.toggle(),
     );
     this.bindAction("toggle-show-statistics", () => this.showStatistics());
+    this.bindAction("toggle-ssao", () => this.ssao.enabled.toggle());
 
     this.bindAction("deactivate-active-tool", () =>
       this.globalToolBinder.deactivate(),

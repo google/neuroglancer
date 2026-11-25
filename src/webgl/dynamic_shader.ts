@@ -254,6 +254,7 @@ export interface ParameterizedEmitterDependentShaderOptions<
     builder: ShaderBuilder,
     parameters: Parameters,
     extraParameters: ExtraParameters,
+    emitter?: ShaderModule,
   ) => void;
 }
 
@@ -288,7 +289,12 @@ export function parameterizedEmitterDependentShaderGetter<
       extraParameters,
     ) => {
       builder.require(emitter);
-      return options.defineShader(builder, parameters, extraParameters);
+      return options.defineShader(
+        builder,
+        parameters,
+        extraParameters,
+        emitter,
+      );
     },
   });
 }
