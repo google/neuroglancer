@@ -16,8 +16,8 @@
 
 /**
  * @file Uses the personal CATMAID API token kept in session storage, otherwise
- * an anonymous token. Asks the user for a personal token when the server
- * rejects the current one.
+ * an anonymous token. Asks the user for a personal token when the anonymous
+ * endpoint is missing or the server rejects the current token.
  */
 
 import {
@@ -27,7 +27,7 @@ import {
 import type { CatmaidToken } from "#src/datasource/catmaid/api.js";
 import { StatusMessage } from "#src/status.js";
 import { scopedAbortCallback } from "#src/util/abort.js";
-import { fetchOk } from "#src/util/http_request.js";
+import { fetchOk, HttpError } from "#src/util/http_request.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
 
 const CATMAID_TOKEN_STORAGE_PREFIX = "neuroglancer:catmaid:api-token:v1:";
@@ -201,6 +201,29 @@ export class CatmaidCredentialsProvider extends CredentialsProvider<CatmaidToken
     }
   }
 
+  private async requestAndStorePersonalToken(
+    signal: AbortSignal,
+  ): Promise<CatmaidToken> {
+    const token = await requestPersonalToken(this.serverUrl, signal);
+    this.storePersonalToken(token);
+    return { token, kind: "personal" };
+  }
+
+  private async getInitialCredentials(
+    signal: AbortSignal,
+  ): Promise<CatmaidToken> {
+    const storedToken = this.getStoredPersonalToken();
+    if (storedToken !== undefined)
+      return { token: storedToken, kind: "personal" };
+
+    try {
+      return await getAnonymousToken(this.serverUrl, signal);
+    } catch (error) {
+      if (!(error instanceof HttpError) || error.status !== 404) throw error;
+      return this.requestAndStorePersonalToken(signal);
+    }
+  }
+
   get = makeCachedCredentialsGetter<CatmaidToken>(
     async (invalidCredentials, options) => {
       using _span = new ProgressSpan(options.progressListener, {
@@ -209,21 +232,12 @@ export class CatmaidCredentialsProvider extends CredentialsProvider<CatmaidToken
 
       let credentials: CatmaidToken;
       if (invalidCredentials === undefined) {
-        const storedToken = this.getStoredPersonalToken();
-        credentials =
-          storedToken === undefined
-            ? await getAnonymousToken(this.serverUrl, options.signal)
-            : { token: storedToken, kind: "personal" };
+        credentials = await this.getInitialCredentials(options.signal);
       } else {
         if (invalidCredentials.credentials.kind === "personal") {
           this.clearPersonalToken(invalidCredentials.credentials.token);
         }
-        const token = await requestPersonalToken(
-          this.serverUrl,
-          options.signal,
-        );
-        this.storePersonalToken(token);
-        credentials = { token, kind: "personal" };
+        credentials = await this.requestAndStorePersonalToken(options.signal);
       }
 
       return { generation: ++this.generation, credentials };

@@ -89,6 +89,55 @@ describe("CatmaidCredentialsProvider", () => {
     );
   });
 
+  it("prompts on a fresh session when the anonymous endpoint is missing and saves the token", async () => {
+    const serverUrl = "https://private-catmaid.example/catmaid";
+    const storageKey = `neuroglancer:catmaid:api-token:v1:${serverUrl}`;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 404 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const provider = new CatmaidCredentialsProvider(serverUrl);
+      const [personal] = await Promise.all([
+        provider.get(),
+        submitPersonalToken(" private-project-token "),
+      ]);
+
+      expect(personal.credentials).toEqual({
+        token: "private-project-token",
+        kind: "personal",
+      });
+      expect(sessionStorage.getItem(storageKey)).toBe("private-project-token");
+      await expect(
+        new CatmaidCredentialsProvider(`${serverUrl}/`).get(),
+      ).resolves.toMatchObject({ credentials: personal.credentials });
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${serverUrl}/accounts/anonymous-api-token`,
+        expect.objectContaining({ method: "GET" }),
+      );
+    } finally {
+      sessionStorage.removeItem(storageKey);
+    }
+  });
+
+  it("does not interpret other anonymous endpoint failures as a missing endpoint", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 403 })),
+    );
+    const provider = new CatmaidCredentialsProvider(
+      "https://catmaid.example",
+      new MemoryTokenStorage(),
+    );
+
+    await expect(provider.get()).rejects.toMatchObject({ status: 403 });
+    expect(
+      document.querySelector('input[aria-label="CATMAID API token"]'),
+    ).toBeNull();
+  });
+
   it("prompts after anonymous rejection and persists the personal token", async () => {
     const fetchMock = mockAnonymousToken();
     const storage = new MemoryTokenStorage();
