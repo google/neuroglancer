@@ -42,6 +42,13 @@ import {
 } from "#src/coordinate_transform.js";
 import type { DataSource, DataSourceRegistry } from "#src/datasource/index.js";
 import type { MultiscaleVolumeChunkSource as ZarrMultiscaleVolumeChunkSource } from "#src/datasource/zarr/frontend.js";
+import {
+  getOmeTransformations,
+  parseOmeChainAxes,
+  parseOmeCoordinateTransforms,
+  parseOmeUnit,
+  resolveTransformPath,
+} from "#src/datasource/zarr/ome.js";
 import { DataType } from "#src/sliceview/base.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
@@ -49,10 +56,14 @@ import type {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
-import type {
-  FieldAccess,
-  ZarrArrayAccess,
-} from "#src/sliceview/volume/warp/base.js";
+import {
+  composeAffine,
+  coordinateMatrix,
+  fullRowMajor,
+  invertAffine,
+  spatialSubmatrix,
+} from "#src/sliceview/volume/warp/affine.js";
+import type { FieldAccess } from "#src/sliceview/volume/warp/base.js";
 import type {
   WarpDimensionHints,
   WarpDimensionResolution,
@@ -61,50 +72,24 @@ import { resolveWarpDimensions } from "#src/sliceview/volume/warp/resolve.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import {
   parseArray,
-  parseFixedLengthArray,
   verifyFiniteFloat,
-  verifyInt,
   verifyObject,
   verifyObjectProperty,
   verifyOptionalObjectProperty,
   verifyString,
   verifyStringArray,
 } from "#src/util/json.js";
-import * as matrix from "#src/util/matrix.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
+import { parseScale } from "#src/util/si_units.js";
 
 // --- Units.
 
-/** Neuroglancer base unit and its amount per unit, for OME axis units. */
-const UNITS: Record<string, { unit: string; scale: number }> = {
-  meter: { unit: "m", scale: 1 },
-  millimeter: { unit: "m", scale: 1e-3 },
-  micrometer: { unit: "m", scale: 1e-6 },
-  nanometer: { unit: "m", scale: 1e-9 },
-  second: { unit: "s", scale: 1 },
-  millisecond: { unit: "s", scale: 1e-3 },
-  microsecond: { unit: "s", scale: 1e-6 },
-  minute: { unit: "s", scale: 60 },
-  hour: { unit: "s", scale: 3600 },
-};
-
-/** Short unit names accepted by "vectorUnit". */
-const SHORT_UNITS: Record<string, { unit: string; scale: number }> = {
-  m: UNITS.meter,
-  mm: UNITS.millimeter,
-  um: UNITS.micrometer,
-  µm: UNITS.micrometer,
-  nm: UNITS.nanometer,
-  s: UNITS.second,
-  ms: UNITS.millisecond,
-};
-
+/**
+ * Neuroglancer base unit and its amount per unit: an OME unit name
+ * ("micrometer") or a short one ("um", as accepted by "vectorUnit").
+ */
 function parseUnit(unit: string) {
-  const u = UNITS[unit] ?? SHORT_UNITS[unit];
-  if (u === undefined) {
-    throw new Error(`Unsupported unit: ${JSON.stringify(unit)}`);
-  }
-  return u;
+  return (unit === "" ? undefined : parseScale(unit)) ?? parseOmeUnit(unit);
 }
 
 // --- The displacement field options of a transform source.
@@ -210,62 +195,6 @@ export function warpSpecificationsEqual(
 
 // --- Warpfield OME-Zarr metadata.
 
-interface OmeAxis {
-  name: string;
-  type?: string;
-  unit?: string;
-}
-
-function parseAxes(x: unknown): OmeAxis[] {
-  return parseArray(x, (a) => ({
-    name: verifyObjectProperty(a, "name", verifyString),
-    type: verifyOptionalObjectProperty(a, "type", verifyString),
-    unit: verifyOptionalObjectProperty(a, "unit", verifyString),
-  }));
-}
-
-function parseFloats(x: unknown) {
-  return parseArray(x, verifyFiniteFloat);
-}
-
-/** Flattens "sequence" transformations into a list of their members. */
-function flattenTransforms(x: unknown): unknown[] {
-  return parseArray(x, (t) => t).flatMap((t) =>
-    verifyObjectProperty(t, "type", verifyString) === "sequence"
-      ? flattenTransforms(verifyObjectProperty(t, "transformations", (y) => y))
-      : [t],
-  );
-}
-
-/**
- * The scale and translation (array index -> coordinate system) of a
- * multiscale dataset: scale and translation transformations, possibly in a
- * sequence, applied in order.
- */
-function parseDatasetTransform(rank: number, transforms: unknown) {
-  const scale = new Array<number>(rank).fill(1);
-  const translation = new Array<number>(rank).fill(0);
-  for (const t of flattenTransforms(transforms)) {
-    const type = verifyObjectProperty(t, "type", verifyString);
-    if (type === "identity") continue;
-    if (type === "scale") {
-      const s = verifyObjectProperty(t, "scale", parseFloats);
-      for (let i = 0; i < rank; ++i) {
-        scale[i] *= s[i];
-        translation[i] *= s[i];
-      }
-    } else if (type === "translation") {
-      const v = verifyObjectProperty(t, "translation", parseFloats);
-      for (let i = 0; i < rank; ++i) translation[i] += v[i];
-    } else {
-      throw new Error(
-        `Unsupported displacement field dataset transformation: ${type}`,
-      );
-    }
-  }
-  return { scale, translation };
-}
-
 export interface DisplacementFieldMetadata {
   path: string;
   // Array axis that holds the vector components.
@@ -280,7 +209,7 @@ export interface DisplacementFieldMetadata {
   outputUnits: string[];
   outputUnitScales: number[];
   // Base units (meters) per field unit of the first length axis; the unit
-  // of interpolation errors and of the bounds.
+  // of interpolation errors.
   unitMeters: number;
   // Row-major: spatial array index (sample n at n) -> output, of "path"
   // (rows: output axes; columns: spatialAxes, then the translation).
@@ -298,7 +227,6 @@ export interface DisplacementFieldMetadata {
   systemToOutput: number[][];
   // The displaced axes (names of field system axes), if the metadata says.
   displacedAxes?: string[];
-  bounds?: { path: string; blockShape: number[] };
   // URL of the field of the inverse transformation (from the scene).
   inverse?: string;
 }
@@ -306,11 +234,11 @@ export interface DisplacementFieldMetadata {
 /**
  * Parses a displacement field: an OME-Zarr 0.6 multiscale image with one axis
  * of type "displacement" (RFC-5), whose vectors are expressed in the
- * coordinate system its datasets map to. An affine in the multiscale's
- * coordinateTransformations, from that coordinate system to another one, gives
- * the output space (otherwise the output space is that coordinate system).
- * `attributes.warpfield` adds per-level interpolation errors, the bounds
- * array, and optionally the displaced axes.
+ * coordinate system its datasets map to. A linear transformation in the
+ * multiscale's coordinateTransformations, from that coordinate system to
+ * another one, gives the output space (otherwise the output space is that
+ * coordinate system). `attributes.warpfield` adds per-level interpolation
+ * errors and optionally the displaced axes (its block bounds are not used).
  */
 export function parseDisplacementFieldMetadata(
   attributes: unknown,
@@ -325,7 +253,7 @@ export function parseDisplacementFieldMetadata(
   const systems = verifyObjectProperty(multiscale, "coordinateSystems", (x) =>
     parseArray(x, (c) => ({
       name: verifyObjectProperty(c, "name", verifyString),
-      axes: verifyObjectProperty(c, "axes", parseAxes),
+      axes: verifyObjectProperty(c, "axes", parseOmeChainAxes),
     })),
   );
   const datasets = verifyObjectProperty(multiscale, "datasets", (x) =>
@@ -363,7 +291,7 @@ export function parseDisplacementFieldMetadata(
   const spatial = fieldSystem.axes
     .map((_, i) => i)
     .filter((i) => i !== vectorAxis);
-  const axisUnits = (axes: OmeAxis[]) =>
+  const axisUnits = (axes: { name: string; unit?: string }[]) =>
     axes.map((a) => {
       if (a.unit === undefined) {
         throw new Error(
@@ -413,17 +341,23 @@ export function parseDisplacementFieldMetadata(
       verifyOptionalObjectProperty(o, "name", verifyString),
     );
     if (input !== fieldSystemName) continue;
-    if (verifyObjectProperty(t, "type", verifyString) !== "affine") continue;
+    if (
+      !["affine", "scale", "translation", "sequence"].includes(
+        verifyObjectProperty(t, "type", verifyString),
+      )
+    ) {
+      continue;
+    }
     const outputName = verifyObjectProperty(t, "output", (o) =>
       verifyObjectProperty(o, "name", verifyString),
     );
     const outputSystem = systems.find((c) => c.name === outputName);
     if (outputSystem === undefined) continue;
-    const m = verifyObjectProperty(t, "affine", (x) =>
-      parseArray(x, parseFloats),
-    );
-    // Rows and columns of the spatial axes, and the translation column.
-    affine = spatial.map((r) => [...spatial.map((c) => m[r][c]), m[r][rank]]);
+    // Column-major (rank + 1)^2: rows and columns of the spatial axes, and
+    // the translation column.
+    const m = parseOmeCoordinateTransforms(rank, [t]);
+    const at = (r: number, c: number) => m[c * (rank + 1) + r];
+    affine = spatial.map((r) => [...spatial.map((c) => at(r, c)), at(r, rank)]);
     const outAxes = outputSystem.axes.filter((a) => a.type !== "displacement");
     outputAxes = outAxes.map((a) => a.name);
     outputUnits = axisUnits(outAxes);
@@ -455,12 +389,13 @@ export function parseDisplacementFieldMetadata(
     }),
   );
   const scales = datasets.map(({ path, transforms }) => {
-    const { scale, translation } = parseDatasetTransform(rank, transforms);
-    // index -> field system: scale * n + translation; then the affine.
-    const indexToOutput = affine.map((row) => [
-      ...spatial.map((c, j) => row[j] * scale[c]),
-      row[n] + spatial.reduce((a, c, j) => a + row[j] * translation[c], 0),
+    // index -> field system (column-major), then the affine.
+    const d = parseOmeCoordinateTransforms(rank, transforms);
+    const indexToSystem = spatial.map((r) => [
+      ...spatial.map((c) => d[c * (rank + 1) + r]),
+      d[rank * (rank + 1) + r],
     ]);
+    const indexToOutput = composeAffine(affine, indexToSystem);
     return { path, indexToOutput, maxError: levelErrors.get(path) };
   });
   return {
@@ -481,12 +416,6 @@ export function parseDisplacementFieldMetadata(
       "displaced_axes",
       verifyStringArray,
     ),
-    bounds: verifyOptionalObjectProperty(extras, "bounds", (b) => ({
-      path: verifyObjectProperty(b, "path", verifyString),
-      blockShape: verifyObjectProperty(b, "block_shape", (x) =>
-        parseFixedLengthArray(new Array<number>(3), x, verifyInt),
-      ),
-    })),
   };
 }
 
@@ -530,8 +459,6 @@ export interface DisplacementField {
   // The field's own placement (model -> output), which the warp
   // specification's transform modifies.
   defaultTransform?: CoordinateSpaceTransform;
-  metadata?: DisplacementFieldMetadata;
-  bounds?: ZarrMultiscaleVolumeChunkSource;
   // The field of the inverse transformation, if the metadata names one.
   inverse?: DisplacementField;
 }
@@ -568,25 +495,47 @@ function isNiftiUrl(url: string) {
   );
 }
 
-/** Resolves `relative` (which may use "..") against a group URL ending in "/". */
-export function resolveRelativeUrl(groupUrl: string, relative: string) {
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(relative)) return relative;
-  const m = groupUrl.match(/^([a-z][a-z0-9+.-]*:\/\/[^/]*)(\/.*)$/i);
-  const [origin, path] = m === null ? ["", groupUrl] : [m[1], m[2]];
-  const parts = path.split("/").slice(0, -1);
-  for (const part of relative.split("/")) {
-    if (part === "..") parts.pop();
-    else if (part !== "." && part !== "") parts.push(part);
+/** Reads a JSON file; undefined if it does not exist or cannot be parsed. */
+export async function readJson(
+  registry: DataSourceRegistry,
+  url: string,
+  options: GetDisplacementFieldOptions,
+): Promise<unknown> {
+  const { kvStoreContext } = registry.sharedKvStoreContext;
+  try {
+    const response = await kvStoreContext.read(url, options);
+    if (response === undefined) return undefined;
+    return await response.response.json();
+  } catch (e) {
+    if (options.signal.aborted) throw e;
+    return undefined;
   }
-  return `${origin}${parts.join("/")}/`;
+}
+
+/** Whether OME metadata describes a displacement field (a warpfield group). */
+export function isDisplacementField(ome: unknown) {
+  const multiscales = (ome as { multiscales?: unknown })?.multiscales;
+  if (!Array.isArray(multiscales)) return false;
+  const systems = (multiscales[0] as { coordinateSystems?: unknown })
+    ?.coordinateSystems;
+  return (
+    Array.isArray(systems) &&
+    systems.some((c) =>
+      (c as { axes?: unknown[] })?.axes?.some(
+        (a) => (a as { type?: unknown })?.type === "displacement",
+      ),
+    )
+  );
 }
 
 /** The `displacements` path of a transformation (possibly in a sequence). */
 function displacementsPath(t: unknown): string | undefined {
-  if (t === undefined) return undefined;
-  for (const x of flattenTransforms([t])) {
-    if (verifyObjectProperty(x, "type", verifyString) === "displacements") {
-      return verifyObjectProperty(x, "path", verifyString);
+  const x = t as { type?: unknown; path?: unknown; transformations?: unknown };
+  if (x?.type === "displacements" && typeof x.path === "string") return x.path;
+  if (x?.type === "sequence" && Array.isArray(x.transformations)) {
+    for (const member of x.transformations) {
+      const path = displacementsPath(member);
+      if (path !== undefined) return path;
     }
   }
   return undefined;
@@ -599,41 +548,28 @@ function displacementsPath(t: unknown): string | undefined {
  * "bijection" whose forward or inverse transformation uses this field.
  */
 async function findInverseInScene(
-  kvStoreContext: DataSourceRegistry["sharedKvStoreContext"]["kvStoreContext"],
+  registry: DataSourceRegistry,
   groupUrl: string,
   options: GetDisplacementFieldOptions,
 ): Promise<string | undefined> {
   for (const up of ["..", "../.."]) {
-    const sceneUrl = resolveRelativeUrl(groupUrl, up);
-    let json: unknown;
+    let sceneUrl: string;
     try {
-      const response = await kvStoreContext.read(
-        `${sceneUrl}zarr.json`,
-        options,
-      );
-      if (response === undefined) continue;
-      json = await response.response.json();
+      sceneUrl = resolveTransformPath(groupUrl, up);
     } catch {
-      continue;
+      break;
     }
-    const transforms = verifyOptionalObjectProperty(json, "attributes", (a) =>
-      verifyOptionalObjectProperty(a, "ome", (o) =>
-        verifyOptionalObjectProperty(o, "scene", (s) =>
-          verifyOptionalObjectProperty(s, "coordinateTransformations", (x) =>
-            parseArray(x, (t) => t),
-          ),
-        ),
-      ),
-    );
-    for (const t of transforms ?? []) {
-      if (verifyObjectProperty(t, "type", verifyString) !== "bijection") {
-        continue;
-      }
-      const [f, i] = ["forward", "inverse"].map((k) => {
-        const p = displacementsPath(
-          verifyOptionalObjectProperty(t, k, (x) => x),
-        );
-        return p === undefined ? undefined : resolveRelativeUrl(sceneUrl, p);
+    const json = (await readJson(registry, `${sceneUrl}zarr.json`, options)) as
+      | { attributes?: { ome?: unknown } }
+      | undefined;
+    const found = getOmeTransformations(json?.attributes?.ome);
+    if (found?.kind !== "scene") continue;
+    for (const { transformation: t } of found.transformations) {
+      const { type, forward, inverse } = t as Record<string, unknown>;
+      if (type !== "bijection") continue;
+      const [f, i] = [forward, inverse].map((x) => {
+        const p = displacementsPath(x);
+        return p === undefined ? undefined : resolveTransformPath(sceneUrl, p);
       });
       if (f === groupUrl) return i;
       if (i === groupUrl) return f;
@@ -650,55 +586,6 @@ function argMaxAbs(values: ArrayLike<number>, among?: number[]) {
     if (best === -1 || Math.abs(values[i]) > Math.abs(values[best])) best = i;
   }
   return best;
-}
-
-/**
- * Coordinate matrix of a coordinate space transform: output coordinates per
- * input coordinate (row-major, rank x (sourceRank + 1), last column the
- * translation). Linear coefficients of a transform relate physical units, so
- * in coordinates they scale by input scale / output scale.
- */
-export function coordinateMatrix(t: CoordinateSpaceTransform): number[][] {
-  const { rank, sourceRank, transform, inputSpace, outputSpace } = t;
-  return Array.from({ length: rank }, (_, i) => [
-    ...Array.from(
-      { length: sourceRank },
-      (_, j) =>
-        (transform[j * (rank + 1) + i] * inputSpace.scales[j]) /
-        outputSpace.scales[i],
-    ),
-    transform[rank * (rank + 1) + i],
-  ]);
-}
-
-/** Inverse of a square affine given as rows of [linear | translation]. */
-function inverseAffineRows(rows: number[][]): number[][] {
-  const n = rows.length;
-  const m = new Float64Array((n + 1) * (n + 1));
-  for (let i = 0; i < n; ++i) {
-    for (let j = 0; j <= n; ++j) m[j * (n + 1) + i] = rows[i][j];
-  }
-  m[n * (n + 1) + n] = 1;
-  const inv = new Float64Array((n + 1) * (n + 1));
-  const det = matrix.inverse(inv, n + 1, m, n + 1, n + 1);
-  if (det === 0 || !Number.isFinite(det)) {
-    throw new Error("warp: singular transform");
-  }
-  return Array.from({ length: n }, (_, i) =>
-    Array.from({ length: n + 1 }, (_, j) => inv[j * (n + 1) + i]),
-  );
-}
-
-/** a ∘ b for affines given as rows of [linear | translation]. */
-function composeAffineRows(a: number[][], b: number[][]): number[][] {
-  const n = b.length;
-  return a.map((row) =>
-    Array.from({ length: b[0]?.length ?? 1 }, (_, j) => {
-      let s = j === b[0].length - 1 ? row[n] : 0;
-      for (let k = 0; k < n; ++k) s += row[k] * b[k][j];
-      return s;
-    }),
-  );
 }
 
 /**
@@ -720,7 +607,7 @@ function applyWarpTransform(
   }
   const d = coordinateMatrix(defaultTransform);
   const f = coordinateMatrix(finalTransform);
-  const r = composeAffineRows(f, inverseAffineRows(d));
+  const r = composeAffine(f, invertAffine(d));
   const linear = r.map((row) =>
     row.map((v, j) => (j === row.length - 1 ? 0 : v)),
   );
@@ -751,7 +638,7 @@ function applyWarpTransform(
     ),
     levels: field.levels.map((level) => ({
       ...level,
-      indexToOutput: composeAffineRows(r, level.indexToOutput),
+      indexToOutput: composeAffine(r, level.indexToOutput),
     })),
     hints: {
       ...defaultHints,
@@ -759,7 +646,7 @@ function applyWarpTransform(
       componentOrder: renamed(defaultHints.componentOrder),
     },
     vectorToOutput: (componentOutputDims: number[]) =>
-      composeAffineRows(
+      composeAffine(
         linear,
         vectorToOutputDefault(componentOutputDims.map(defaultDimOf)).map(
           (row) => [...row, 0],
@@ -801,13 +688,9 @@ async function getWarpfieldDisplacementField(
     }
     return volume;
   };
-  const [bounds, ...fields] = await Promise.all([
-    metadata.bounds === undefined
-      ? Promise.resolve(undefined)
-      : openArray(metadata.bounds.path),
-    ...metadata.scales.map((s) => openArray(s.path)),
-  ]);
-  const zarrFields = fields as ZarrMultiscaleVolumeChunkSource[];
+  const zarrFields = await Promise.all(
+    metadata.scales.map((s) => openArray(s.path)),
+  );
   for (const f of zarrFields) {
     if (f.dataType !== DataType.FLOAT32) {
       throw new Error(
@@ -903,8 +786,6 @@ async function getWarpfieldDisplacementField(
         ),
       );
     },
-    metadata,
-    bounds,
     inverse,
   };
   // A default transform for the warp's transform to modify: model
@@ -1061,15 +942,7 @@ export async function getDisplacementField(
     }
   };
   const groupUrl = normalizeGroupUrl(spec.url);
-  const { kvStoreContext } = registry.sharedKvStoreContext;
-  let groupJson: unknown;
-  try {
-    const response = await kvStoreContext.read(`${groupUrl}zarr.json`, options);
-    groupJson =
-      response === undefined ? undefined : await response.response.json();
-  } catch {
-    groupJson = undefined;
-  }
+  const groupJson = await readJson(registry, `${groupUrl}zarr.json`, options);
   const attributes = verifyOptionalObjectProperty(
     groupJson ?? {},
     "attributes",
@@ -1078,23 +951,14 @@ export async function getDisplacementField(
   );
   // A warpfield (OME displacement multiscale) group; anything else is opened
   // as an ordinary volume.
-  const isWarpfield =
-    groupJson !== undefined &&
-    JSON.stringify(
-      verifyOptionalObjectProperty(attributes, "ome", (o) => o) ?? {},
-    ).includes('"displacement"');
-  if (!isWarpfield) {
+  if (!isDisplacementField((attributes as { ome?: unknown }).ome)) {
     requireWarpfield();
     return getGenericDisplacementField(registry, spec, options);
   }
   const metadata = parseDisplacementFieldMetadata(attributes, spec.placement);
   // A scene's inverse field is in the scene's spaces, not in a placement's.
   if (loadInverse && spec.placement === undefined) {
-    metadata.inverse = await findInverseInScene(
-      kvStoreContext,
-      groupUrl,
-      options,
-    );
+    metadata.inverse = await findInverseInScene(registry, groupUrl, options);
   }
   return getWarpfieldDisplacementField(
     registry,
@@ -1104,98 +968,6 @@ export async function getDisplacementField(
     options,
     loadInverse,
   );
-}
-
-// --- Small matrix helpers (row-major).
-
-function mat4FromRows(rows: number[][]): number[] {
-  const m = new Array<number>(16).fill(0);
-  for (let i = 0; i < 3; ++i)
-    for (let j = 0; j < 4; ++j) m[i * 4 + j] = rows[i][j];
-  m[15] = 1;
-  return m;
-}
-
-export function mul4(a: number[], b: number[]): number[] {
-  const c = new Array<number>(16).fill(0);
-  for (let i = 0; i < 4; ++i)
-    for (let j = 0; j < 4; ++j)
-      for (let k = 0; k < 4; ++k) c[i * 4 + j] += a[i * 4 + k] * b[k * 4 + j];
-  return c;
-}
-
-/** Inverse of an affine row-major 4x4. */
-export function inverseAffine4(m: number[]): number[] {
-  const [a, b, c, d, e, f, g, h, i] = [
-    m[0],
-    m[1],
-    m[2],
-    m[4],
-    m[5],
-    m[6],
-    m[8],
-    m[9],
-    m[10],
-  ];
-  const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
-  if (det === 0) throw new Error("singular transform");
-  const r = [
-    (e * i - f * h) / det,
-    (c * h - b * i) / det,
-    (b * f - c * e) / det,
-    (f * g - d * i) / det,
-    (a * i - c * g) / det,
-    (c * d - a * f) / det,
-    (d * h - e * g) / det,
-    (b * g - a * h) / det,
-    (a * e - b * d) / det,
-  ];
-  const t = [m[3], m[7], m[11]];
-  const out = new Array<number>(16).fill(0);
-  for (let row = 0; row < 3; ++row) {
-    for (let col = 0; col < 3; ++col) out[row * 4 + col] = r[row * 3 + col];
-    out[row * 4 + 3] = -(
-      r[row * 3] * t[0] +
-      r[row * 3 + 1] * t[1] +
-      r[row * 3 + 2] * t[2]
-    );
-  }
-  out[15] = 1;
-  return out;
-}
-
-/** Row-major 4x4 from a column-major (rank + 1)^2 homogeneous matrix. */
-export function rowMajorFromColumnMajor(
-  m: ArrayLike<number>,
-  rank: number,
-): number[] {
-  const out = new Array<number>(16).fill(0);
-  for (let i = 0; i < 4; ++i) {
-    for (let j = 0; j < 4; ++j) {
-      const ii = i === 3 ? rank : i;
-      const jj = j === 3 ? rank : j;
-      out[i * 4 + j] = m[jj * (rank + 1) + ii];
-    }
-  }
-  return out;
-}
-
-export function zarrArrayAccess(
-  volume: ZarrMultiscaleVolumeChunkSource,
-  source: VolumeChunkSource,
-): ZarrArrayAccess {
-  const { metadata } = volume.multiscale.scales[0];
-  const layout = metadata.codecs.layoutInfo[0];
-  if (layout.physicalToLogicalDimension.some((d, i) => d !== i)) {
-    throw new Error(
-      "warp: transposed displacement field arrays are not supported",
-    );
-  }
-  return {
-    source: source.rpcId!,
-    shape: Array.from(metadata.shape),
-    chunkShape: Array.from(layout.readChunkShape),
-  };
 }
 
 export function canonicalSourceOptions(rank: number): VolumeSourceOptions {
@@ -1371,13 +1143,7 @@ export function getWarpGeometry(
       }
       return [...keptAscending.map((d) => row[d]), t];
     });
-    let inverseRows: number[][];
-    if (F === 3) {
-      const inv = inverseAffine4(mat4FromRows(block));
-      inverseRows = [0, 1, 2].map((i) => inv.slice(i * 4, i * 4 + 4));
-    } else {
-      inverseRows = inverseAffineRows(block);
-    }
+    const inverseRows = invertAffine(block);
     const outputToIndex = [...Array(field.modelRank).keys()].map((d) => {
       const i = keptAscending.indexOf(d);
       if (i !== -1) return inverseRows[i];
@@ -1550,47 +1316,6 @@ export function fieldLevelAccess(
 }
 
 /**
- * Row-major (rank + 1) x (sourceRank + 1) matrix of a column-major
- * CoordinateSpaceTransform-style homogeneous matrix (rank + 1)^2: the source
- * dimensions' columns, then the translation.
- */
-export function fullRowMajor(
-  m: ArrayLike<number>,
-  rank: number,
-  sourceRank = rank,
-): number[] {
-  const out = new Array<number>((rank + 1) * (sourceRank + 1)).fill(0);
-  for (let i = 0; i <= rank; ++i) {
-    for (let j = 0; j <= sourceRank; ++j) {
-      const jj = j === sourceRank ? rank : j;
-      out[i * (sourceRank + 1) + j] = m[jj * (rank + 1) + i];
-    }
-  }
-  return out;
-}
-
-/**
- * Row-major 4x4 of the rows `rows` and columns `cols` (and the translation)
- * of a row-major (rank + 1) x (sourceRank + 1) matrix.
- */
-export function spatialSubmatrix(
-  full: number[],
-  sourceRank: number,
-  rows: number[],
-  cols: number[],
-): number[] {
-  const out = new Array<number>(16).fill(0);
-  for (let i = 0; i < 3; ++i) {
-    for (let j = 0; j < 3; ++j) {
-      out[i * 4 + j] = full[rows[i] * (sourceRank + 1) + cols[j]];
-    }
-    out[i * 4 + 3] = full[rows[i] * (sourceRank + 1) + sourceRank];
-  }
-  out[15] = 1;
-  return out;
-}
-
-/**
  * The chunk dimensions of a moving scale that are sampled through the field
  * (those mapping to `spatialInputDims`, in natural order) and the rest.
  */
@@ -1666,7 +1391,7 @@ export type WarpedDataSourceFactory = (
   chunkManager: ChunkManager,
   moving: DataSource,
   field: DisplacementField,
-) => { source: DataSource; messages: string[] };
+) => Promise<{ source: DataSource; messages: string[] }>;
 
 let warpedDataSourceFactory: WarpedDataSourceFactory | undefined;
 

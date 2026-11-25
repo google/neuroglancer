@@ -13,9 +13,10 @@ one displacement field. The affine transform is still edited in the Source
 tab and is applied after the transform source.
 
 Displacement fields are applied without copying data. Each volume chunk shown
-is computed from the source's chunks as they are needed, and meshes are moved
-vertex by vertex. Any data source type can use a transform source: OME-Zarr,
-precomputed, N5, NIfTI, and so on.
+is computed from the source's chunks as they are needed; meshes, skeletons and
+annotations are moved point by point (see :ref:`transform-source-points`). Any
+data source type can use a transform source: OME-Zarr, precomputed, N5, NIfTI,
+and so on.
 
 This page describes each way of using one. In the diagrams, boxes are
 coordinate spaces, labelled with their dimensions, and arrows are
@@ -335,8 +336,9 @@ A field given alone has these options:
 - ``fieldTransform``: places the field. This is JSON only.
 
 When a warpfield group belongs to an OME-Zarr scene, a field of the inverse
-transformation found in the scene is used to move meshes directly. Without
-one, mesh vertices are found by solving on the field.
+transformation found in the scene is used to move points (mesh and skeleton
+vertices, annotations) directly. Without one, they are found by solving on the
+field.
 
 .. _transform-source-prepend:
 
@@ -451,6 +453,35 @@ Supported transformations
   given alone (case 6) may also be any volume.
 - **Not supported**: ``coordinates`` and ``byDimension`` transformations, and
   more than one displacement field.
+
+.. _transform-source-points:
+
+Meshes, skeletons and annotations
+---------------------------------
+
+A volume is drawn by pulling each output point back through the field. Meshes,
+skeletons and annotations are stored as points instead, so each point ``v`` is
+moved to the point ``p`` of the output with ``p + u(p) = v``: the inverse of
+the volume's warp, so that they stay on the warped image.
+
+- **Meshes**: multiscale meshes are warped at their finest level of detail.
+- **Skeletons**: vertices move; edges and vertex attributes are kept.
+- **Annotations** (precomputed annotation sources, 3-d): points, line and
+  polyline vertices, and ellipsoid centres move exactly. A bounding box becomes
+  the axis-aligned box around its 8 moved corners. Ellipsoid radii follow only
+  the linear part. Properties, relationships (segment filtering) and selection
+  by id work as on the unwarped source. The source is read-only.
+- **Not warped**: local (editable) annotations and single-resolution meshes.
+  They are left out of the warped source.
+
+All of these need a field that displaces exactly the 3 spatial dimensions of
+the source.
+
+The spatial index of an annotation source keeps the source's grid, placed by
+the linear part of the transformation and extended to where the source's
+bounding box lands. Each warped cell holds the annotations of the source's
+cells at the same level that it overlaps, keeping those whose moved geometry
+intersects it, so cross-sections show annotations where they land.
 
 The source tab
 --------------

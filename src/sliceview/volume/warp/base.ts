@@ -37,15 +37,6 @@ export enum WarpInterpolation {
   LINEAR = 1,
 }
 
-/** How to read one zarr array through a Neuroglancer volume chunk source. */
-export interface ZarrArrayAccess {
-  // rpcId of the backend volume chunk source.
-  source: number;
-  // zarr shape and chunk shape, C order.
-  shape: number[];
-  chunkShape: number[];
-}
-
 /**
  * How to read one level of a displacement field through a Neuroglancer volume
  * chunk source of any layout (zarr, NIfTI, ...). Indices are chunk-source
@@ -71,20 +62,6 @@ export interface FieldAccess {
   // Components -> displacement in warped output coordinates (row-major
   // F x numComponents).
   vectorToOutput: number[];
-}
-
-export interface DisplacementFieldAccess extends FieldAccess {
-  // Block bounds of x + u(x) (warpfield stores, 3-d only).
-  bounds?: {
-    array: ZarrArrayAccess;
-    // Finest-level field samples per block along each spatial axis.
-    blockShape: number[];
-    // output coordinates -> finest-level field index (row-major 4x4).
-    outputToIndex: number[];
-    // Bounds are stored in output units of the field metadata; multiply by
-    // these to get output coordinates, per output axis.
-    unitToOutput: number[];
-  };
 }
 
 /** A moving chunk dimension that the warp passes through unchanged. */
@@ -113,7 +90,7 @@ export class WarpedVolumeChunkSourceParameters {
   outputToMoving: number[];
   // warped voxel coordinates -> output coordinates: row-major (F + 1)^2.
   warpedToOutput: number[];
-  field: DisplacementFieldAccess;
+  field: FieldAccess;
   interpolation: WarpInterpolation;
   static RPC_ID = "warp/WarpedVolumeChunkSource";
 }

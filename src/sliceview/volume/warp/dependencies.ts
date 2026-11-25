@@ -15,7 +15,8 @@
  */
 
 /**
- * @file Chunks computed from other chunks (warped volumes and meshes).
+ * @file Chunks computed from other chunks (warped volumes, meshes, skeletons
+ * and annotations).
  *
  * A computed chunk's dependencies are ordinary chunks of other sources,
  * requested through the chunk manager at the computed chunk's priority and
@@ -30,10 +31,8 @@ import type {
   ChunkSource,
 } from "#src/chunk_manager/backend.js";
 import { ChunkPriorityTier, ChunkState } from "#src/chunk_manager/base.js";
-import type {
-  VolumeChunk,
-  VolumeChunkSource,
-} from "#src/sliceview/volume/backend.js";
+import { getObjectKey } from "#src/segmentation_display_state/base.js";
+import type { VolumeChunk } from "#src/sliceview/volume/backend.js";
 
 export interface Dependency {
   source: ChunkSource;
@@ -46,12 +45,25 @@ export interface VolumeDependency extends Dependency {
   position: Float32Array;
 }
 
+/** The chunk at a grid position of a volume or annotation spatial index. */
 export function volumeDependency(
-  source: VolumeChunkSource,
+  source: ChunkSource & { getChunk(position: Float32Array): Chunk },
   position: ArrayLike<number>,
 ): VolumeDependency {
   const p = Float32Array.from(position);
   return { source, position: p, key: p.join(), get: () => source.getChunk(p) };
+}
+
+/** The chunk of an object (a mesh manifest, a skeleton, ...). */
+export function objectDependency(
+  source: ChunkSource & { getChunk(objectId: bigint): Chunk },
+  objectId: bigint,
+): Dependency {
+  return {
+    source,
+    key: getObjectKey(objectId),
+    get: () => source.getChunk(objectId),
+  };
 }
 
 export interface DependencyRequest {
@@ -107,7 +119,7 @@ class DependencyRequests {
 
 const dependencyRequests = new WeakMap<ChunkManager, DependencyRequests>();
 
-export function getDependencyRequests(chunkManager: ChunkManager) {
+function getDependencyRequests(chunkManager: ChunkManager) {
   let r = dependencyRequests.get(chunkManager);
   if (r === undefined) {
     r = new DependencyRequests(chunkManager);
@@ -116,9 +128,23 @@ export function getDependencyRequests(chunkManager: ChunkManager) {
   return r;
 }
 
-export function isAvailable(dep: Dependency) {
-  const chunk = dep.source.chunks.get(dep.key);
-  return chunk !== undefined && chunk.state <= ChunkState.SYSTEM_MEMORY_WORKER;
+/**
+ * Runs `body` while `deps` are requested at `requester`'s priority; `body`
+ * may replace them with `setDependencies`.
+ */
+export async function withDependencies<T>(
+  chunkManager: ChunkManager,
+  requester: Chunk,
+  deps: Dependency[],
+  body: (setDependencies: (deps: Dependency[]) => void) => Promise<T>,
+): Promise<T> {
+  const requests = getDependencyRequests(chunkManager);
+  const request = requests.add(requester, deps);
+  try {
+    return await body((d) => requests.set(request, d));
+  } finally {
+    requests.remove(request);
+  }
 }
 
 /**

@@ -26,8 +26,8 @@ import type { FieldAccess } from "#src/sliceview/volume/warp/base.js";
 import type { VolumeDependency } from "#src/sliceview/volume/warp/dependencies.js";
 import {
   getDependencyData,
-  getDependencyRequests,
   volumeDependency,
+  withDependencies,
 } from "#src/sliceview/volume/warp/dependencies.js";
 
 // One field level (3 displaced spatial dimensions, 3 components).
@@ -141,14 +141,9 @@ export async function sampleDisplacements(
   const deps: VolumeDependency[] = keys.map((k) =>
     volumeDependency(source, needed.get(k)!),
   );
-  const requests = getDependencyRequests(chunkManager);
-  const request = requests.add(requester, deps);
-  let data: (ArrayLike<number> | null)[];
-  try {
-    data = await Promise.all(deps.map((d) => getDependencyData(d, signal)));
-  } finally {
-    requests.remove(request);
-  }
+  const data = await withDependencies(chunkManager, requester, deps, () =>
+    Promise.all(deps.map((d) => getDependencyData(d, signal))),
+  );
   const chunks = new Map<
     string,
     { d: ArrayLike<number>; strides: number[]; origin: number[] }

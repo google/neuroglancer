@@ -60,19 +60,21 @@ import {
   omeTransformChainLinear,
   parseOmeTransformChain,
   parseOmeUnit,
+  resolveTransformPath,
 } from "#src/datasource/zarr/ome.js";
+import { coordinateMatrix } from "#src/sliceview/volume/warp/affine.js";
 import type {
   GetDisplacementFieldOptions,
   WarpSpecification,
 } from "#src/sliceview/volume/warp/field.js";
 import {
-  coordinateMatrix,
   getDisplacementField,
   getWarpedDataSourceFactory,
+  isDisplacementField,
   isNonZarrUrl,
   normalizeGroupUrl,
   parseWarpSpecification,
-  resolveRelativeUrl,
+  readJson,
   warpSpecificationToJson,
 } from "#src/sliceview/volume/warp/field.js";
 import {
@@ -138,38 +140,6 @@ export function transformSourceSpecificationToJson(
 export type ResolvedTransformSource =
   | { kind: "chain"; chain: TransformChain }
   | { kind: "field"; spec: WarpSpecification };
-
-async function readJson(
-  registry: DataSourceRegistry,
-  url: string,
-  options: GetDisplacementFieldOptions,
-): Promise<unknown> {
-  const { kvStoreContext } = registry.sharedKvStoreContext;
-  try {
-    const response = await kvStoreContext.read(url, options);
-    if (response === undefined) return undefined;
-    return await response.response.json();
-  } catch (e) {
-    if (options.signal.aborted) throw e;
-    return undefined;
-  }
-}
-
-/** Whether OME metadata describes a displacement field (a warpfield group). */
-function isDisplacementField(ome: unknown) {
-  const multiscales = (ome as { multiscales?: unknown })?.multiscales;
-  if (!Array.isArray(multiscales)) return false;
-  const systems = (multiscales[0] as { coordinateSystems?: unknown })
-    ?.coordinateSystems;
-  return (
-    Array.isArray(systems) &&
-    systems.some((c) =>
-      (c as { axes?: unknown[] })?.axes?.some(
-        (a) => (a as { type?: unknown })?.type === "displacement",
-      ),
-    )
-  );
-}
 
 function transformationLabel(t: {
   name?: string;
@@ -261,7 +231,7 @@ export async function resolveTransformSource(
     if (system !== undefined) return system.axes;
     if (ref.path !== undefined) {
       // An image of the scene: its intrinsic system, or one named.
-      const imageUrl = resolveRelativeUrl(baseUrl, ref.path);
+      const imageUrl = resolveTransformPath(baseUrl, ref.path);
       const json = (await readJson(
         registry,
         `${imageUrl}zarr.json`,
@@ -505,7 +475,7 @@ export async function applyTransformSource(
     };
   });
   // pre: the source into the field's coordinates; then the warp.
-  const warped = getWarpedDataSourceFactory()(
+  const warped = await getWarpedDataSourceFactory()(
     chunkManager,
     {
       ...source,

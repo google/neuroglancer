@@ -399,7 +399,7 @@ function parseOmeCoordinateTransform(
   return parser(rank, transformJson) as Float64Array<ArrayBuffer>;
 }
 
-function parseOmeCoordinateTransforms(
+export function parseOmeCoordinateTransforms(
   rank: number,
   transforms: unknown,
 ): Float64Array {
@@ -656,7 +656,11 @@ interface FieldForm {
   after: Float64Array;
 }
 
-function resolveTransformPath(baseUrl: string, path: string) {
+/**
+ * Resolves a path (which may use "..") or URL against a group URL, as a
+ * directory URL ending in "/".
+ */
+export function resolveTransformPath(baseUrl: string, path: string) {
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(path)) {
     return kvstoreEnsureDirectoryPipelineUrl(path);
   }

@@ -31,6 +31,8 @@
  * constant along it); a moving dimension the field lacks passes through.
  */
 
+import { isLocalOrChannelDimension } from "#src/coordinate_transform.js";
+
 export interface WarpFieldDimension {
   name: string;
   // Neuroglancer base unit: "m", "s", "" (none), ...
@@ -102,14 +104,6 @@ function describe(names: string[]) {
 }
 
 /**
- * Channel ("^") and local ("'", e.g. an OME channel axis) dimensions: vector
- * dimension candidates, and carried whole when passed through.
- */
-export function isChannelDimensionName(name: string) {
-  return name.endsWith("^") || name.endsWith("'");
-}
-
-/**
  * Resolves the roles of the field and moving dimensions. Throws an Error
  * naming the dimensions on both sides if they cannot be matched.
  */
@@ -147,7 +141,7 @@ export function resolveWarpDimensions(
     vectorDim = fieldIndex(hints.vectorDimension, "vectorDimension");
   } else {
     const channels = field
-      .map((d, i) => (isChannelDimensionName(d.name) ? i : -1))
+      .map((d, i) => (isLocalOrChannelDimension(d.name) ? i : -1))
       .filter((i) => i !== -1);
     if (channels.length === 0) {
       fail(
@@ -293,7 +287,10 @@ export function resolveWarpDimensions(
   const passthrough: WarpPassthroughDimension[] = [];
   moving.forEach((d, i) => {
     if (matched.has(i)) return;
-    passthrough.push({ movingDim: i, whole: isChannelDimensionName(d.name) });
+    passthrough.push({
+      movingDim: i,
+      whole: isLocalOrChannelDimension(d.name),
+    });
   });
   return {
     vectorDim,

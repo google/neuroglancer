@@ -25,12 +25,19 @@
  * (`warp/backend.ts`) from field and moving chunks.
  */
 
+import { makeWarpedAnnotationSource } from "#src/annotation/warp/frontend.js";
 import type { ChunkManager } from "#src/chunk_manager/frontend.js";
 import { WithParameters } from "#src/chunk_manager/frontend.js";
 import type { CoordinateSpaceTransform } from "#src/coordinate_transform.js";
 import { makeIdentityTransform } from "#src/coordinate_transform.js";
-import type { DataSource, DataSubsourceEntry } from "#src/datasource/index.js";
+import type {
+  DataSource,
+  DataSubsource,
+  DataSubsourceEntry,
+} from "#src/datasource/index.js";
 import { makeWarpedMeshSource } from "#src/mesh/warp/frontend.js";
+import { SkeletonSource } from "#src/skeleton/frontend.js";
+import { makeWarpedSkeletonSource } from "#src/skeleton/warp/frontend.js";
 import type { SliceViewSingleResolutionSource } from "#src/sliceview/frontend.js";
 import type { VolumeSourceOptions } from "#src/sliceview/volume/base.js";
 import {
@@ -41,7 +48,14 @@ import {
   MultiscaleVolumeChunkSource,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
-import type { DisplacementFieldAccess } from "#src/sliceview/volume/warp/base.js";
+import {
+  composeAffine,
+  fullRowMajor,
+  invertAffine,
+  mul4,
+  rowsOf4,
+  spatialSubmatrix,
+} from "#src/sliceview/volume/warp/affine.js";
 import {
   WarpedVolumeChunkSourceParameters,
   WarpInterpolation,
@@ -55,14 +69,10 @@ import {
   canonicalSourceOptions,
   fieldLevelAccess,
   getWarpGeometry,
-  inverseAffine4,
   movingModelToOutput,
-  mul4,
-  fullRowMajor,
-  spatialSubmatrix,
   splitChunkDims,
-  zarrArrayAccess,
 } from "#src/sliceview/volume/warp/field.js";
+import { attachDependencies } from "#src/sliceview/volume/warp/point_warp_frontend.js";
 
 // Coarser warped scales are added until the warped grid is at most this many
 // voxels across.
@@ -83,56 +93,6 @@ class WarpedVolumeChunkSource extends WithParameters(
   WarpedVolumeChunkSourceParameters,
 ) {
   dependencies: VolumeChunkSource[] | undefined;
-}
-
-/** Row-major affine helpers on [linear | translation] rows. */
-function composeRows(a: number[][], b: number[][]): number[][] {
-  const n = b.length;
-  const cols = b[0].length;
-  return a.map((row) =>
-    Array.from({ length: cols }, (_, j) => {
-      let s = j === cols - 1 ? row[n] : 0;
-      for (let k = 0; k < n; ++k) s += row[k] * b[k][j];
-      return s;
-    }),
-  );
-}
-
-function invertRows(rows: number[][]): number[][] {
-  const n = rows.length;
-  if (n === 3) {
-    const m = new Array<number>(16).fill(0);
-    rows.forEach((row, i) => row.forEach((v, j) => (m[i * 4 + j] = v)));
-    m[15] = 1;
-    const inv = inverseAffine4(m);
-    return [0, 1, 2].map((i) => inv.slice(i * 4, i * 4 + 4));
-  }
-  // Gauss-Jordan on [A | I], then the translation.
-  const a = rows.map((row, i) => [
-    ...row.slice(0, n),
-    ...Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)),
-  ]);
-  for (let c = 0; c < n; ++c) {
-    let p = c;
-    for (let r = c + 1; r < n; ++r) {
-      if (Math.abs(a[r][c]) > Math.abs(a[p][c])) p = r;
-    }
-    if (a[p][c] === 0) throw new Error("warp: singular transform");
-    [a[c], a[p]] = [a[p], a[c]];
-    const d = a[c][c];
-    a[c] = a[c].map((v) => v / d);
-    for (let r = 0; r < n; ++r) {
-      if (r === c) continue;
-      const f = a[r][c];
-      if (f !== 0) a[r] = a[r].map((v, j) => v - f * a[c][j]);
-    }
-  }
-  return a.map((row) => {
-    const inv = row.slice(n);
-    let t = 0;
-    for (let k = 0; k < n; ++k) t -= inv[k] * rows[k][n];
-    return [...inv, t];
-  });
 }
 
 export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
@@ -201,16 +161,17 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
         movingRank,
       );
       if (geometry.isSpatial3d) {
-        const m = mul4(
-          modelToOutput,
-          spatialSubmatrix(
-            c2m,
-            movingRank,
-            geometry.spatialInputDims,
-            spatialChunkDims,
+        return rowsOf4(
+          mul4(
+            modelToOutput,
+            spatialSubmatrix(
+              c2m,
+              movingRank,
+              geometry.spatialInputDims,
+              spatialChunkDims,
+            ),
           ),
         );
-        return [0, 1, 2].map((i) => m.slice(i * 4, i * 4 + 4));
       }
       const sub = geometry.spatialInputDims.map((j) => [
         ...spatialChunkDims.map((d) => c2m[j * (movingRank + 1) + d]),
@@ -219,7 +180,7 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
       const rows = [...Array(F).keys()].map((k) =>
         modelToOutput.slice(k * (n + 1), (k + 1) * (n + 1)),
       );
-      return composeRows(rows, sub);
+      return composeAffine(rows, sub);
     };
     // Passthrough dimensions: moving chunk voxel -> moving output coordinate
     // (scale a, offset b); the warped chunk keeps the moving voxel grid.
@@ -327,26 +288,17 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
       });
       const movingSource = movingScale.chunkSource;
       // output (F dims) -> moving voxel coordinates of spatialChunkDims.
-      let outputToMoving: number[];
-      if (geometry.isSpatial3d) {
-        const m = new Array<number>(16).fill(0);
-        chunkToModel.forEach((row, i) =>
-          row.forEach((v, j) => (m[i * 4 + j] = v)),
-        );
-        m[15] = 1;
-        outputToMoving = inverseAffine4(m).slice(0, 12);
-      } else {
-        const matched = [...Array(F).keys()].filter(
-          (k) => geometry.movingOutputDims[k] !== -1,
-        );
-        const inv = invertRows(matched.map((k) => chunkToModel[k]));
-        outputToMoving = inv.flatMap((row) => {
-          const out = new Array<number>(F + 1).fill(0);
-          matched.forEach((k, c) => (out[k] = row[c]));
-          out[F] = row[n];
-          return out;
-        });
-      }
+      const matched = [...Array(F).keys()].filter(
+        (k) => geometry.movingOutputDims[k] !== -1,
+      );
+      const outputToMoving = invertAffine(
+        matched.map((k) => chunkToModel[k]),
+      ).flatMap((row) => {
+        const out = new Array<number>(F + 1).fill(0);
+        matched.forEach((k, c) => (out[k] = row[c]));
+        out[F] = row[n];
+        return out;
+      });
       // The coarsest field level accurate enough for this scale: its measured
       // interpolation error is at most half a voxel (or, if not measured, its
       // spacing is at most a voxel).
@@ -369,7 +321,6 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
       const fieldVolume = field.levels[level].volume;
       const parameters = (
         fieldEntry: SliceViewSingleResolutionSource<VolumeChunkSource>,
-        boundsSource: VolumeChunkSource | undefined,
       ): WarpedVolumeChunkSourceParameters => ({
         movingSource: movingSource.rpcId!,
         numFieldDims: F,
@@ -381,23 +332,7 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
         })),
         outputToMoving,
         warpedToOutput,
-        field: {
-          ...fieldLevelAccess(geometry, level, fieldEntry),
-          bounds:
-            boundsSource === undefined
-              ? undefined
-              : {
-                  array: zarrArrayAccess(field.bounds!, boundsSource),
-                  blockShape: field.metadata!.bounds!.blockShape,
-                  outputToIndex: geometry.levels[0].outputToIndex
-                    .filter((_, d) => d !== geometry.vectorModelDim)
-                    .flat()
-                    .concat([0, 0, 0, 1]),
-                  unitToOutput: geometry.scales.map(
-                    (s) => field.metadata!.unitMeters / s,
-                  ),
-                },
-        } satisfies DisplacementFieldAccess,
+        field: fieldLevelAccess(geometry, level, fieldEntry),
         // Labels are never interpolated. Segmentation layers request their
         // sources with discreteValues; the volume type alone is not enough
         // (zarr, for one, reports label arrays as images).
@@ -435,28 +370,11 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
       const fieldEntry = fieldVolume.getSources(
         canonicalSourceOptions(field.modelRank),
       )[0][0];
-      const fieldSource = fieldEntry.chunkSource;
-      const boundsSource =
-        field.bounds === undefined ||
-        field.metadata?.bounds === undefined ||
-        !geometry.isSpatial3d
-          ? undefined
-          : field.bounds.getSources(canonicalSourceOptions(4))[0][0]
-              .chunkSource;
-      const dependencies = [movingSource, fieldSource];
-      if (boundsSource !== undefined) dependencies.push(boundsSource);
       const chunkSource = this.chunkManager.getChunkSource(
         WarpedVolumeChunkSource,
-        { spec, parameters: parameters(fieldEntry, boundsSource) },
+        { spec, parameters: parameters(fieldEntry) },
       );
-      // The warped source keeps its dependencies alive; a memoized one
-      // already holds its own references.
-      if (chunkSource.dependencies === undefined) {
-        chunkSource.dependencies = dependencies;
-        for (const d of dependencies) chunkSource.registerDisposer(d);
-      } else {
-        for (const d of dependencies) d.dispose();
-      }
+      attachDependencies(chunkSource, [movingSource, fieldEntry.chunkSource]);
       return { chunkSource, chunkToMultiscaleTransform };
     });
     return [sources];
@@ -465,72 +383,84 @@ export class WarpedMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSour
 
 /**
  * Wraps a loaded data source so that its volumes are shown in the space of a
- * displacement field. Multiscale meshes are warped too (one level of detail);
- * segment properties are kept; other subsources (annotations, ...) are
- * dropped.
+ * displacement field. Multiscale meshes (one level of detail), skeletons and
+ * annotations are warped too; segment properties are kept; other subsources
+ * are dropped.
  */
-export function makeWarpedDataSource(
+export async function makeWarpedDataSource(
   chunkManager: ChunkManager,
   moving: DataSource,
   field: DisplacementField,
-): { source: DataSource; messages: string[] } {
+): Promise<{ source: DataSource; messages: string[] }> {
   const geometry = getWarpGeometry(moving.modelTransform, field);
   const messages = geometry.messages.slice();
   const subsources: DataSubsourceEntry[] = [];
   for (const entry of moving.subsources) {
-    const { volume, segmentPropertyMap, mesh } = entry.subsource;
-    if (mesh !== undefined) {
-      // Meshes move point by point through the field, which needs the
-      // 3 spatial dimensions displaced.
-      if (!geometry.isSpatial3d) {
-        messages.push(
-          "warp: meshes are not warped (the field does not displace exactly " +
-            "the 3 spatial dimensions of the source)",
-        );
-        continue;
-      }
-      const warpedMesh = makeWarpedMeshSource(
-        chunkManager,
-        mesh,
-        entry.subsourceToModelSubspaceTransform,
-        moving.modelTransform,
-        field,
-        geometry,
-      );
-      if (warpedMesh !== undefined) {
-        subsources.push({
-          id: entry.id,
-          default: entry.default,
-          subsource: { mesh: warpedMesh },
-        });
-      }
-      continue;
-    }
-    if (volume === undefined) {
-      if (segmentPropertyMap !== undefined) {
-        subsources.push({
-          id: entry.id,
-          default: entry.default,
-          subsource: { segmentPropertyMap },
-        });
-      }
-      continue;
-    }
-    const warped = new WarpedMultiscaleVolumeChunkSource(
-      chunkManager,
-      volume,
+    const { volume, segmentPropertyMap, mesh, annotation } = entry.subsource;
+    const keep = (subsource: DataSubsource) =>
+      subsources.push({ id: entry.id, default: entry.default, subsource });
+    const placement = [
+      entry.subsourceToModelSubspaceTransform,
       moving.modelTransform,
       field,
       geometry,
-    );
-    subsources.push({
-      id: entry.id,
-      default: entry.default,
-      subsource: { volume: warped },
-    });
+    ] as const;
+    if (annotation !== undefined) {
+      const warped = geometry.isSpatial3d
+        ? await makeWarpedAnnotationSource(
+            chunkManager,
+            annotation,
+            ...placement,
+          )
+        : undefined;
+      if (warped === undefined) {
+        messages.push(
+          "warp: annotations are not warped (only 3-d precomputed-style " +
+            "annotation sources, in a field that displaces the 3 spatial " +
+            "dimensions, are)",
+        );
+      } else {
+        keep({ annotation: warped });
+      }
+    } else if (mesh !== undefined) {
+      // Meshes and skeletons move point by point through the field, which
+      // needs the 3 spatial dimensions displaced.
+      const isSkeleton = mesh instanceof SkeletonSource;
+      if (!geometry.isSpatial3d) {
+        messages.push(
+          `warp: ${isSkeleton ? "skeletons" : "meshes"} are not warped (the ` +
+            "field does not displace exactly the 3 spatial dimensions of the " +
+            "source)",
+        );
+        continue;
+      }
+      const warped = isSkeleton
+        ? makeWarpedSkeletonSource(chunkManager, mesh, ...placement)
+        : makeWarpedMeshSource(chunkManager, mesh, ...placement);
+      if (warped !== undefined) keep({ mesh: warped });
+    } else if (volume !== undefined) {
+      keep({
+        volume: new WarpedMultiscaleVolumeChunkSource(
+          chunkManager,
+          volume,
+          moving.modelTransform,
+          field,
+          geometry,
+        ),
+      });
+    } else if (segmentPropertyMap !== undefined) {
+      keep({ segmentPropertyMap });
+    }
   }
-  if (!subsources.some((s) => s.subsource.volume !== undefined)) {
-    throw new Error("warp: the data source has no volume to warp");
+  if (
+    !subsources.some(
+      (s) =>
+        s.subsource.volume !== undefined ||
+        s.subsource.mesh !== undefined ||
+        s.subsource.annotation !== undefined,
+    )
+  ) {
+    throw new Error("warp: the data source has nothing that can be warped");
   }
   return {
     source: {

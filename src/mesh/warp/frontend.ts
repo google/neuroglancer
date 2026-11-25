@@ -30,22 +30,9 @@ import type {
   WarpGeometry,
 } from "#src/sliceview/volume/warp/field.js";
 import {
-  canonicalSourceOptions,
-  getWarpGeometry,
-  movingModelToOutput,
-  mul4,
-  fieldLevelAccess,
-  rowMajorFromColumnMajor,
-} from "#src/sliceview/volume/warp/field.js";
-import type { FieldLevelAccess } from "#src/sliceview/volume/warp/field_sampler.js";
-
-// The finest field level used for meshes is the coarsest one whose measured
-// interpolation error is at most this.
-const MESH_FIELD_TOLERANCE_METERS = 10e-6;
-const COARSE_ITERATIONS = 8;
-const FINE_ITERATIONS = 8;
-// Newton iterations stop when the largest vertex step is below this.
-const TOLERANCE_METERS = 0.05e-6;
+  attachDependencies,
+  makePointWarpSetup,
+} from "#src/sliceview/volume/warp/point_warp_frontend.js";
 
 class WarpedMeshSource extends WithParameters(
   MeshSource,
@@ -68,66 +55,22 @@ export function makeWarpedMeshSource(
   lod = 0,
 ): MeshSource | undefined {
   if (!(mesh instanceof MultiscaleMeshSource)) return undefined;
-  const identity = Float32Array.from([
-    1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
-  ]);
-  const storedToOutput = mul4(
-    movingModelToOutput(movingTransform, geometry),
-    rowMajorFromColumnMajor(subsourceToModel ?? identity, 3),
+  const { storedToOutput, warp, dependencies } = makePointWarpSetup(
+    mesh,
+    subsourceToModel,
+    movingTransform,
+    field,
+    geometry,
   );
-  // With the field of the inverse transformation, vertices move directly;
-  // otherwise p + u(p) = v is solved on this field.
-  const inverse = field.inverse;
-  const fineField = inverse ?? field;
-  const fineGeometry =
-    inverse === undefined
-      ? geometry
-      : getWarpGeometry(movingTransform, inverse);
-  const pickFine = (levels: WarpGeometry["levels"]) => {
-    let level = 0;
-    while (
-      level + 1 < levels.length &&
-      (levels[level + 1].maxErrorMeters ?? Infinity) <=
-        MESH_FIELD_TOLERANCE_METERS
-    ) {
-      ++level;
-    }
-    return level;
-  };
-  const dependencies: ChunkSource[] = [];
-  const access = (
-    f: DisplacementField,
-    g: WarpGeometry,
-    level: number,
-  ): FieldLevelAccess => {
-    const volume = f.levels[level].volume;
-    const entry = volume.getSources(canonicalSourceOptions(f.modelRank))[0][0];
-    dependencies.push(entry.chunkSource);
-    return fieldLevelAccess(g, level, entry);
-  };
-  const coarse = access(field, geometry, geometry.levels.length - 1);
-  const fine = access(fineField, fineGeometry, pickFine(fineGeometry.levels));
-  mesh.addRef();
-  dependencies.push(mesh);
   const source = chunkManager.getChunkSource(WarpedMeshSource, {
     parameters: {
       meshSource: mesh.rpcId!,
       format: mesh.format,
       storedToOutput,
       lod,
-      coarse,
-      fine,
-      coarseIterations: COARSE_ITERATIONS,
-      fineIterations: FINE_ITERATIONS,
-      tolerance: TOLERANCE_METERS / Math.max(...geometry.scales),
-      direct: inverse !== undefined,
+      warp,
     },
   });
-  if (source.dependencies === undefined) {
-    source.dependencies = dependencies;
-    for (const d of dependencies) source.registerDisposer(d);
-  } else {
-    for (const d of dependencies) d.dispose();
-  }
+  attachDependencies(source, dependencies);
   return source;
 }

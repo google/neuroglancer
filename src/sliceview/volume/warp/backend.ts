@@ -18,8 +18,8 @@
  * @file Worker side of warped volumes.
  *
  * A warped chunk is a computational chunk: it is never downloaded, it is
- * computed from chunks of other sources (the displacement field, its block
- * bounds, and the moving volume). Those dependencies are ordinary chunks of
+ * computed from chunks of other sources (the displacement field and the
+ * moving volume). Those dependencies are ordinary chunks of
  * their own sources, requested through the chunk manager and kept in worker
  * memory (`SYSTEM_MEMORY_WORKER`), so:
  *  - they are fetched once and shared by every warped chunk that needs them;
@@ -35,186 +35,32 @@ import {
   VolumeChunk,
   VolumeChunkSource,
 } from "#src/sliceview/volume/backend.js";
-import type {
-  FieldAccess,
-  ZarrArrayAccess,
-} from "#src/sliceview/volume/warp/base.js";
+import { transformBox } from "#src/sliceview/volume/warp/affine.js";
+import type { FieldAccess } from "#src/sliceview/volume/warp/base.js";
 import {
   WarpedVolumeChunkSourceParameters,
   WarpInterpolation,
 } from "#src/sliceview/volume/warp/base.js";
 import type {
   ChunkData,
-  Dependency,
   VolumeDependency,
 } from "#src/sliceview/volume/warp/dependencies.js";
 import {
   getDependencyData,
-  getDependencyRequests,
-  isAvailable,
   volumeDependency,
+  withDependencies,
 } from "#src/sliceview/volume/warp/dependencies.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
 
-// Fetch moving chunks from the block bounds while the field is still loading.
-const PREFETCH_FROM_BOUNDS = false;
-
-// --- Small linear algebra on row-major matrices.
+// --- Kernels.
 
 function apply4(m: number[], x: number, y: number, z: number, out: number[]) {
   out[0] = m[0] * x + m[1] * y + m[2] * z + m[3];
   out[1] = m[4] * x + m[5] * y + m[6] * z + m[7];
   out[2] = m[8] * x + m[9] * y + m[10] * z + m[11];
-}
-
-/** Bounding box of an axis-aligned box [lo, hi] mapped through `m`. */
-function transformBox(
-  m: number[],
-  lo: ArrayLike<number>,
-  hi: ArrayLike<number>,
-): [number[], number[]] {
-  const outLo = [Infinity, Infinity, Infinity];
-  const outHi = [-Infinity, -Infinity, -Infinity];
-  const p = [0, 0, 0];
-  for (let c = 0; c < 8; ++c) {
-    apply4(
-      m,
-      c & 1 ? hi[0] : lo[0],
-      c & 2 ? hi[1] : lo[1],
-      c & 4 ? hi[2] : lo[2],
-      p,
-    );
-    for (let i = 0; i < 3; ++i) {
-      outLo[i] = Math.min(outLo[i], p[i]);
-      outHi[i] = Math.max(outHi[i], p[i]);
-    }
-  }
-  return [outLo, outHi];
-}
-
-/**
- * Bounding box of the axis-aligned box [lo, hi] (n dims) mapped through the
- * row-major rows x (n + 1) affine `m`.
- */
-function transformBoxN(
-  m: number[],
-  rows: number,
-  n: number,
-  lo: ArrayLike<number>,
-  hi: ArrayLike<number>,
-): [number[], number[]] {
-  const outLo = new Array<number>(rows).fill(Infinity);
-  const outHi = new Array<number>(rows).fill(-Infinity);
-  for (let i = 0; i < rows; ++i) {
-    let l = m[i * (n + 1) + n];
-    let h = l;
-    for (let j = 0; j < n; ++j) {
-      const c = m[i * (n + 1) + j];
-      if (c >= 0) {
-        l += c * lo[j];
-        h += c * hi[j];
-      } else {
-        l += c * hi[j];
-        h += c * lo[j];
-      }
-    }
-    outLo[i] = l;
-    outHi[i] = h;
-  }
-  return [outLo, outHi];
-}
-
-// --- Zarr arrays read through volume chunk sources.
-
-/**
- * Chunk-source grid positions covering the zarr index box [lo, hi] (inclusive,
- * zarr order). Neuroglancer's zarr chunk dimension d is zarr dimension
- * rank - 1 - d.
- */
-function zarrChunksInBox(
-  source: VolumeChunkSource,
-  access: ZarrArrayAccess,
-  lo: number[],
-  hi: number[],
-): { dep: VolumeDependency; grid: number[] }[] {
-  const rank = access.shape.length;
-  const gLo = lo.map((v, a) => Math.floor(v / access.chunkShape[a]));
-  const gHi = hi.map((v, a) => Math.floor(v / access.chunkShape[a]));
-  const out: { dep: VolumeDependency; grid: number[] }[] = [];
-  const g = gLo.slice();
-  while (true) {
-    const position = new Array<number>(rank);
-    for (let a = 0; a < rank; ++a) position[rank - 1 - a] = g[a];
-    out.push({ dep: volumeDependency(source, position), grid: g.slice() });
-    let a = rank - 1;
-    while (a >= 0) {
-      if (++g[a] <= gHi[a]) break;
-      g[a] = gLo[a];
-      --a;
-    }
-    if (a < 0) return out;
-  }
-}
-
-function cStrides(shape: number[]) {
-  const s = new Array<number>(shape.length).fill(1);
-  for (let i = shape.length - 2; i >= 0; --i) s[i] = s[i + 1] * shape[i + 1];
-  return s;
-}
-
-/**
- * Copies the zarr index box [lo, hi] (inclusive) of an array whose chunks
- * have been fetched into a dense C-order Float32Array; missing chunks are 0.
- */
-function assembleZarrBox(
-  access: ZarrArrayAccess,
-  chunks: { grid: number[] }[],
-  data: ChunkData[],
-  lo: number[],
-  hi: number[],
-): Float32Array {
-  const rank = lo.length;
-  const extent = lo.map((l, a) => hi[a] - l + 1);
-  const outStrides = cStrides(extent);
-  const out = new Float32Array(extent.reduce((a, b) => a * b, 1));
-  const { chunkShape } = access;
-  const chunkStrides = cStrides(chunkShape);
-  chunks.forEach(({ grid }, ci) => {
-    const d = data[ci];
-    if (d === null) return;
-    // Intersection of the chunk with the box, in zarr indices.
-    const cLo = new Array<number>(rank);
-    const cHi = new Array<number>(rank);
-    for (let a = 0; a < rank; ++a) {
-      const start = grid[a] * chunkShape[a];
-      cLo[a] = Math.max(lo[a], start);
-      cHi[a] = Math.min(hi[a], start + chunkShape[a] - 1);
-      if (cLo[a] > cHi[a]) return;
-    }
-    const idx = cLo.slice();
-    const last = rank - 1;
-    const n = cHi[last] - cLo[last] + 1;
-    while (true) {
-      let src = 0;
-      let dst = 0;
-      for (let a = 0; a < rank; ++a) {
-        src += (idx[a] - grid[a] * chunkShape[a]) * chunkStrides[a];
-        dst += (idx[a] - lo[a]) * outStrides[a];
-      }
-      for (let k = 0; k < n; ++k) out[dst + k] = d[src + k];
-      let a = last - 1;
-      while (a >= 0) {
-        if (++idx[a] <= cHi[a]) break;
-        idx[a] = cLo[a];
-        --a;
-      }
-      if (a < 0) break;
-    }
-  });
-  return out;
 }
 
 // --- Fields read through any volume chunk source (Fortran-order chunks).
@@ -395,7 +241,6 @@ export class WarpedVolumeChunkSource extends WithParameters(
 ) {
   moving: VolumeChunkSource;
   fieldSource: VolumeChunkSource;
-  boundsSource: VolumeChunkSource | undefined;
   // Non-vector field chunk dimensions, ascending.
   fieldSpatialDims: number[];
   // Moving chunk dimensions carried whole (channels), in warped order.
@@ -412,9 +257,6 @@ export class WarpedVolumeChunkSource extends WithParameters(
     const { parameters } = this;
     this.moving = rpc.get(parameters.movingSource);
     this.fieldSource = rpc.get(parameters.field.source);
-    const { bounds } = parameters.field;
-    this.boundsSource =
-      bounds === undefined ? undefined : rpc.get(bounds.array.source);
     const { spec } = this.moving;
     const { movingSpatialDims: S, movingPassDims: P, field } = parameters;
     if (spec.rank !== S.length + P.length) {
@@ -436,8 +278,8 @@ export class WarpedVolumeChunkSource extends WithParameters(
   /** Field index box [lo, hi] (all chunk dimensions) needed for the box. */
   private fieldIndexBox(warpedLo: number[], warpedHi: number[]) {
     const { field, warpedToOutput: W, numFieldDims: F } = this.parameters;
-    const [oLo, oHi] = transformBoxN(W, F, F, warpedLo, warpedHi);
-    const [iLo, iHi] = transformBoxN(
+    const [oLo, oHi] = transformBox(W, F, F, warpedLo, warpedHi);
+    const [iLo, iHi] = transformBox(
       field.outputToIndex,
       field.rank,
       F,
@@ -512,67 +354,6 @@ export class WarpedVolumeChunkSource extends WithParameters(
     return out;
   }
 
-  /**
-   * Moving voxel box from the precomputed per-block bounds of x + u(x), for
-   * requesting moving chunks before the field itself has arrived (3-d).
-   */
-  private async movingBoxFromBounds(
-    warpedLo: number[],
-    warpedHi: number[],
-    signal: AbortSignal,
-    onDeps: (deps: Dependency[]) => void,
-  ): Promise<[number[], number[]] | undefined> {
-    const { bounds } = this.parameters.field;
-    if (bounds === undefined) return undefined;
-    const { blockShape, unitToOutput, array } = bounds;
-    // Finest-level field samples under the chunk, clamped (nearest outside).
-    const [oLo, oHi] = transformBox(
-      this.parameters.warpedToOutput,
-      warpedLo,
-      warpedHi,
-    );
-    const [iLo, iHi] = transformBox(bounds.outputToIndex, oLo, oHi);
-    const fieldLo = iLo.map((v) => Math.max(Math.floor(v), 0));
-    const fieldHi = iHi.map((v) => Math.max(Math.floor(v) + 1, 0));
-    const bLo = fieldLo.map((v, a) =>
-      Math.min(Math.floor(v / blockShape[a]), array.shape[a + 1] - 1),
-    );
-    // A block covers its samples and the first sample of the next block.
-    const bHi = fieldHi.map((v, a) =>
-      Math.min(
-        Math.floor(Math.max(v - 1, 0) / blockShape[a]),
-        array.shape[a + 1] - 1,
-      ),
-    );
-    const zLo = [0, ...bLo];
-    const zHi = [5, ...bHi];
-    const chunks = zarrChunksInBox(this.boundsSource!, array, zLo, zHi);
-    onDeps(chunks.map((c) => c.dep));
-    const data = await Promise.all(
-      chunks.map((c) => getDependencyData(c.dep, signal)),
-    );
-    const box = assembleZarrBox(array, chunks, data, zLo, zHi);
-    const nBlocks = box.length / 6;
-    const lo = [Infinity, Infinity, Infinity];
-    const hi = [-Infinity, -Infinity, -Infinity];
-    for (let b = 0; b < nBlocks; ++b) {
-      for (let i = 0; i < 3; ++i) {
-        const l = box[i * nBlocks + b] * unitToOutput[i];
-        const h = box[(i + 3) * nBlocks + b] * unitToOutput[i];
-        if (!Number.isFinite(l) || !Number.isFinite(h)) continue;
-        lo[i] = Math.min(lo[i], l, h);
-        hi[i] = Math.max(hi[i], l, h);
-      }
-    }
-    if (!(lo[0] <= hi[0] && lo[1] <= hi[1] && lo[2] <= hi[2])) return undefined;
-    const [mLo, mHi] = transformBox(this.parameters.outputToMoving, lo, hi);
-    // Sample index = coordinate - 0.5; linear interpolation needs +1.
-    return [
-      mLo.map((v) => Math.floor(v - 0.5)),
-      mHi.map((v) => Math.floor(v - 0.5) + 1),
-    ];
-  }
-
   async download(chunk: VolumeChunk, signal: AbortSignal) {
     const origin = Array.from(computeChunkBounds(this, chunk as any));
     const size = Array.from(chunk.chunkDataSize!);
@@ -587,103 +368,83 @@ export class WarpedVolumeChunkSource extends WithParameters(
     const fieldChunks = chunksInBox(this.fieldSource, field, fLo, fHi);
     const fieldDeps = fieldChunks.map((c) => c.dep);
 
-    const requests = getDependencyRequests(this.chunkManager);
-    const request = requests.add(chunk, fieldDeps.slice());
-    try {
-      // If the field must still be fetched, use the block bounds to fetch
-      // the moving chunks at the same time.
-      if (
-        PREFETCH_FROM_BOUNDS &&
-        this.fast &&
-        !fieldDeps.every(isAvailable) &&
-        this.boundsSource !== undefined
-      ) {
-        const box = await this.movingBoxFromBounds(
-          warpedLo,
-          warpedHi,
-          signal,
-          (deps) => requests.set(request, [...fieldDeps, ...deps]),
+    await withDependencies(
+      this.chunkManager,
+      chunk,
+      fieldDeps,
+      async (setDependencies) => {
+        const fieldData = await Promise.all(
+          fieldDeps.map((dep) => getDependencyData(dep, signal)),
         );
-        if (box !== undefined) {
-          requests.set(request, [
-            ...fieldDeps,
-            ...this.movingChunksInBox(box[0], box[1], origin),
-          ]);
-        }
-      }
-      const fieldData = await Promise.all(
-        fieldDeps.map((dep) => getDependencyData(dep, signal)),
-      );
-      const fieldBox = assembleFieldBox(
-        field,
-        fieldChunks,
-        fieldData,
-        fLo,
-        fHi,
-      );
+        const fieldBox = assembleFieldBox(
+          field,
+          fieldChunks,
+          fieldData,
+          fLo,
+          fHi,
+        );
 
-      // Pass 1: moving sample coordinates of every voxel center.
-      const coords = this.fast
-        ? this.computeMovingCoordinates(origin, size, fLo, fHi, fieldBox)
-        : this.computeMovingCoordinatesGeneric(
+        // Pass 1: moving sample coordinates of every voxel center.
+        const coords = this.fast
+          ? this.computeMovingCoordinates(origin, size, fLo, fHi, fieldBox)
+          : this.computeMovingCoordinatesGeneric(
+              origin,
+              size,
+              fLo,
+              fHi,
+              fieldBox,
+            );
+        const m = S.length;
+        let mLo = new Array<number>(m).fill(Infinity);
+        let mHi = new Array<number>(m).fill(-Infinity);
+        for (let v = 0; v < n; ++v) {
+          for (let i = 0; i < m; ++i) {
+            const c = coords[m * v + i];
+            if (c < mLo[i]) mLo[i] = c;
+            if (c > mHi[i]) mHi[i] = c;
+          }
+        }
+        mLo = mLo.map((v) => Math.floor(v));
+        mHi = mHi.map((v) => Math.floor(v) + 1);
+
+        // Pass 2: exactly the moving chunks those samples touch.
+        const movingDeps =
+          m === 0 || Number.isFinite(mLo[0])
+            ? this.movingChunksInBox(mLo, mHi, origin)
+            : [];
+        setDependencies([...fieldDeps, ...movingDeps]);
+        const movingData = await Promise.all(
+          movingDeps.map((dep) => getDependencyData(dep, signal)),
+        );
+
+        // Pass 3: sample.
+        const nearest =
+          this.parameters.interpolation === WarpInterpolation.NEAREST ||
+          this.spec.dataType === DataType.UINT64;
+        let warped;
+        if (this.fastSampling) {
+          warped = nearest
+            ? this.sampleNearest(coords, n, movingDeps, movingData)
+            : this.resample(coords, n, movingDeps, movingData, mLo, mHi);
+        } else {
+          warped = this.resampleGeneric(
+            coords,
+            n,
+            movingDeps,
+            movingData,
+            mLo,
+            mHi,
             origin,
-            size,
-            fLo,
-            fHi,
-            fieldBox,
+            nearest,
           );
-      const m = S.length;
-      let mLo = new Array<number>(m).fill(Infinity);
-      let mHi = new Array<number>(m).fill(-Infinity);
-      for (let v = 0; v < n; ++v) {
-        for (let i = 0; i < m; ++i) {
-          const c = coords[m * v + i];
-          if (c < mLo[i]) mLo[i] = c;
-          if (c > mHi[i]) mHi[i] = c;
         }
-      }
-      mLo = mLo.map((v) => Math.floor(v));
-      mHi = mHi.map((v) => Math.floor(v) + 1);
-
-      // Pass 2: exactly the moving chunks those samples touch.
-      const movingDeps =
-        m === 0 || Number.isFinite(mLo[0])
-          ? this.movingChunksInBox(mLo, mHi, origin)
-          : [];
-      requests.set(request, [...fieldDeps, ...movingDeps]);
-      const movingData = await Promise.all(
-        movingDeps.map((dep) => getDependencyData(dep, signal)),
-      );
-
-      // Pass 3: sample.
-      const nearest =
-        this.parameters.interpolation === WarpInterpolation.NEAREST ||
-        this.spec.dataType === DataType.UINT64;
-      let warped;
-      if (this.fastSampling) {
-        warped = nearest
-          ? this.sampleNearest(coords, n, movingDeps, movingData)
-          : this.resample(coords, n, movingDeps, movingData, mLo, mHi);
-      } else {
-        warped = this.resampleGeneric(
-          coords,
-          n,
-          movingDeps,
-          movingData,
-          mLo,
-          mHi,
-          origin,
-          nearest,
-        );
-      }
-      if (this.spec.compressedSegmentationBlockSize !== undefined) {
-        await postProcessRawData(chunk, signal, warped);
-      } else {
-        chunk.data = warped;
-      }
-    } finally {
-      requests.remove(request);
-    }
+        if (this.spec.compressedSegmentationBlockSize !== undefined) {
+          await postProcessRawData(chunk, signal, warped);
+        } else {
+          chunk.data = warped;
+        }
+      },
+    );
   }
 
   /**
@@ -1018,7 +779,126 @@ export class WarpedVolumeChunkSource extends WithParameters(
   }
 
   /**
-   * Linear (or nearest) resampling of the moving volume at `coords` (spatial,
+   * Copies the moving voxels [rlo, rhi] (inclusive, in movingSpatialDims
+   * order) of every channel into `region`: one dense block per channel,
+   * dimension 0 fastest; missing chunks stay 0. `fixed` gives the moving
+   * voxel of each sliced passthrough dimension.
+   */
+  private fillRegion(
+    deps: VolumeDependency[],
+    data: ChunkData[],
+    rlo: number[],
+    rhi: number[],
+    fixed: [number, number][],
+    region: any,
+  ) {
+    const { spec } = this.moving;
+    const { movingSpatialDims: S } = this.parameters;
+    const Cd = this.channelDims;
+    const {
+      rank,
+      chunkDataSize: cds,
+      baseVoxelOffset: base,
+      lowerVoxelBound: lb,
+      upperVoxelBound: ub,
+      compressedSegmentationBlockSize: csBlock,
+    } = spec;
+    const m = S.length;
+    const rext = rlo.map((l, i) => rhi[i] - l + 1);
+    const rstr = new Array<number>(m);
+    let rsize = 1;
+    for (let i = 0; i < m; ++i) {
+      rstr[i] = rsize;
+      rsize *= rext[i];
+    }
+    const chExtent = Cd.map((d) => ub[d] - lb[d]);
+    const fullSize = cds.reduce((a: number, b: number) => a * b, 1);
+    deps.forEach((dep, ci) => {
+      const d = data[ci] as any;
+      if (d === null || d.length === 0) return;
+      const o = Array.from(
+        { length: rank },
+        (_, k) => dep.position[k] * cds[k] + base[k],
+      );
+      // Chunks may be clipped at the upper bound (zarr chunks are not).
+      const clipped = o.map((ok, k) => Math.min(cds[k], ub[k] - ok));
+      const cLo = S.map((k, i) => Math.max(rlo[i], o[k]));
+      const cHi = S.map((k, i) => Math.min(rhi[i], o[k] + clipped[k] - 1));
+      if (cLo.some((l, i) => l > cHi[i])) return;
+      if (csBlock !== undefined) {
+        // Compressed segmentation (rank 3, no channels): decode just the part
+        // of the chunk this region needs.
+        decodeCompressedSegmentationBox(
+          d,
+          clipped,
+          csBlock,
+          this.spec.dataType === DataType.UINT64,
+          cLo.map((l, i) => l - o[S[i]]),
+          cHi.map((h, i) => h - o[S[i]]),
+          region,
+          S.map((k, i) => o[k] - rlo[i]),
+          rext[0],
+          rext[1],
+        );
+        return;
+      }
+      // Strides of the chunk's data (stored at full size, or clipped).
+      const size = d.length === fullSize ? cds : clipped;
+      const stride = new Array<number>(rank);
+      for (let k = 0, s = 1; k < rank; ++k) {
+        stride[k] = s;
+        s *= size[k];
+      }
+      let fixedOffset = 0;
+      for (const [k, v] of fixed) {
+        if (v < o[k] || v >= o[k] + clipped[k]) return;
+        fixedOffset += (v - o[k]) * stride[k];
+      }
+      const chLo = Cd.map((k) => Math.max(o[k], lb[k]));
+      const chHi = Cd.map((k) => Math.min(o[k] + clipped[k], ub[k]) - 1);
+      const c = chLo.slice();
+      const w = cHi[0] - cLo[0] + 1;
+      const sx = stride[S[0]];
+      while (true) {
+        let srcBase = fixedOffset;
+        let chIndex = 0;
+        for (let i = Cd.length - 1; i >= 0; --i) {
+          srcBase += (c[i] - o[Cd[i]]) * stride[Cd[i]];
+          chIndex = chIndex * chExtent[i] + (c[i] - lb[Cd[i]]);
+        }
+        const dstBase = chIndex * rsize;
+        const idx = cLo.slice();
+        while (true) {
+          let src = srcBase;
+          let dst = dstBase;
+          for (let i = 0; i < m; ++i) {
+            src += (idx[i] - o[S[i]]) * stride[S[i]];
+            dst += (idx[i] - rlo[i]) * rstr[i];
+          }
+          if (sx === 1) {
+            for (let k = 0; k < w; ++k) region[dst + k] = d[src + k];
+          } else {
+            for (let k = 0; k < w; ++k) region[dst + k] = d[src + k * sx];
+          }
+          let i = 1;
+          while (i < m && ++idx[i] > cHi[i]) {
+            idx[i] = cLo[i];
+            ++i;
+          }
+          if (i >= m) break;
+        }
+        let i = 0;
+        while (i < Cd.length && ++c[i] > chHi[i]) {
+          c[i] = chLo[i];
+          ++i;
+        }
+        if (i === Cd.length) break;
+      }
+    });
+  }
+
+  /**
+   * Linear resampling of the moving volume at `coords` (spatial,
    * in movingSpatialDims order), through one dense region per channel
    * assembled from the moving chunks. Output: x fastest, then y, z, then the
    * channels.
@@ -1035,13 +915,7 @@ export class WarpedVolumeChunkSource extends WithParameters(
     const { dataType } = this.spec;
     const { movingSpatialDims: S } = this.parameters;
     const Cd = this.channelDims;
-    const rank = spec.rank;
-    const {
-      chunkDataSize: cds,
-      baseVoxelOffset: base,
-      lowerVoxelBound: lb,
-      upperVoxelBound: ub,
-    } = spec;
+    const { lowerVoxelBound: lb, upperVoxelBound: ub } = spec;
     const chExtent = Cd.map((d) => ub[d] - lb[d]);
     const numChannels = chExtent.reduce((a, b) => a * b, 1);
     const Ctor = DATA_TYPE_ARRAY_CONSTRUCTOR[dataType] as any;
@@ -1059,90 +933,8 @@ export class WarpedVolumeChunkSource extends WithParameters(
     const rsize = rx * ry * rz;
     // One dense region per channel, x fastest; missing chunks stay 0.
     const region = new Ctor(rsize * numChannels);
-    const fullSize = cds.reduce((a: number, b: number) => a * b, 1);
-    const csBlock = spec.compressedSegmentationBlockSize;
-    deps.forEach((dep, ci) => {
-      const d = data[ci] as any;
-      if (d === null || d.length === 0) return;
-      const o = Array.from(
-        { length: rank },
-        (_, k) => dep.position[k] * cds[k] + base[k],
-      );
-      // Chunks may be clipped at the upper bound (zarr chunks are not).
-      const clipped = o.map((ok, k) => Math.min(cds[k], ub[k] - ok));
-      const [s0, s1, s2] = S;
-      const x0 = Math.max(rlo[0], o[s0]);
-      const x1 = Math.min(rhi[0], o[s0] + clipped[s0] - 1);
-      const y0 = Math.max(rlo[1], o[s1]);
-      const y1 = Math.min(rhi[1], o[s1] + clipped[s1] - 1);
-      const z0 = Math.max(rlo[2], o[s2]);
-      const z1 = Math.min(rhi[2], o[s2] + clipped[s2] - 1);
-      if (x1 < x0 || y1 < y0 || z1 < z0) return;
-      if (csBlock !== undefined) {
-        // Compressed segmentation (rank 3, no channels): decode just the part
-        // of the chunk this region needs.
-        decodeCompressedSegmentationBox(
-          d,
-          clipped,
-          csBlock,
-          dataType === DataType.UINT64,
-          [x0 - o[0], y0 - o[1], z0 - o[2]],
-          [x1 - o[0], y1 - o[1], z1 - o[2]],
-          region,
-          [o[0] - rlo[0], o[1] - rlo[1], o[2] - rlo[2]],
-          rx,
-          ry,
-        );
-        return;
-      }
-      // Strides of the chunk's data (stored at full size, or clipped).
-      const size = d.length === fullSize ? cds : clipped;
-      const stride = new Array<number>(rank);
-      for (let k = 0, m = 1; k < rank; ++k) {
-        stride[k] = m;
-        m *= size[k];
-      }
-      const sx = stride[s0];
-      const sy = stride[s1];
-      const sz = stride[s2];
-      const w = x1 - x0 + 1;
-      // Each channel index of this chunk.
-      const cLo = Cd.map((k) => Math.max(o[k], lb[k]));
-      const cHi = Cd.map((k) => Math.min(o[k] + clipped[k], ub[k]) - 1);
-      const c = cLo.slice();
-      while (true) {
-        let srcBase = 0;
-        let chIndex = 0;
-        for (let i = Cd.length - 1; i >= 0; --i) {
-          srcBase += (c[i] - o[Cd[i]]) * stride[Cd[i]];
-          chIndex = chIndex * chExtent[i] + (c[i] - lb[Cd[i]]);
-        }
-        const dstBase = chIndex * rsize;
-        for (let z = z0; z <= z1; ++z) {
-          for (let y = y0; y <= y1; ++y) {
-            const src =
-              srcBase + (x0 - o[s0]) * sx + (y - o[s1]) * sy + (z - o[s2]) * sz;
-            const dst =
-              dstBase + x0 - rlo[0] + rx * (y - rlo[1] + ry * (z - rlo[2]));
-            if (sx === 1) {
-              for (let k = 0; k < w; ++k) region[dst + k] = d[src + k];
-            } else {
-              for (let k = 0; k < w; ++k) region[dst + k] = d[src + k * sx];
-            }
-          }
-        }
-        let i = 0;
-        while (i < Cd.length && ++c[i] > cHi[i]) {
-          c[i] = cLo[i];
-          ++i;
-        }
-        if (i === Cd.length) break;
-      }
-    });
+    this.fillRegion(deps, data, rlo, rhi, [], region);
     const integer = dataType !== DataType.FLOAT32;
-    const nearest =
-      this.parameters.interpolation === WarpInterpolation.NEAREST ||
-      dataType === DataType.UINT64;
     // Inside if within half a voxel of the samples (ITK); 0 outside.
     const loX = slb[0] - 0.5;
     const loY = slb[1] - 0.5;
@@ -1176,16 +968,6 @@ export class WarpedVolumeChunkSource extends WithParameters(
       const x = px - rlo[0];
       const y = py - rlo[1];
       const z = pz - rlo[2];
-      if (nearest) {
-        const ix = Math.min(Math.max(Math.round(x), 0), maxX);
-        const iy = Math.min(Math.max(Math.round(y), 0), maxY);
-        const iz = Math.min(Math.max(Math.round(z), 0), maxZ);
-        const at = ix + sY * iy + sZ * iz;
-        for (let ch = 0; ch < numChannels; ++ch) {
-          out[v + n * ch] = region[at + rsize * ch];
-        }
-        continue;
-      }
       const fx = Math.floor(x);
       const fy = Math.floor(y);
       const fz = Math.floor(z);
@@ -1240,13 +1022,7 @@ export class WarpedVolumeChunkSource extends WithParameters(
       numFieldDims: F,
     } = this.parameters;
     const m = S.length;
-    const {
-      chunkDataSize: cds,
-      baseVoxelOffset: base,
-      lowerVoxelBound: lb,
-      upperVoxelBound: ub,
-    } = spec;
-    const rank = spec.rank;
+    const { lowerVoxelBound: lb, upperVoxelBound: ub } = spec;
     const Cd = this.channelDims;
     const chExtent = Cd.map((d) => ub[d] - lb[d]);
     const numChannels = chExtent.reduce((a, b) => a * b, 1);
@@ -1280,67 +1056,7 @@ export class WarpedVolumeChunkSource extends WithParameters(
     }
     // One dense region per channel; missing chunks stay 0.
     const region = new Ctor(rsize * numChannels);
-    const fullSize = cds.reduce((a: number, b: number) => a * b, 1);
-    deps.forEach((dep, ci) => {
-      const d = data[ci] as any;
-      if (d === null || d.length === 0) return;
-      const o = Array.from(
-        { length: rank },
-        (_, k) => dep.position[k] * cds[k] + base[k],
-      );
-      // Chunks may be clipped at the upper bound (zarr chunks are not).
-      const clipped = o.map((ok, k) => Math.min(cds[k], ub[k] - ok));
-      const size = d.length === fullSize ? cds : clipped;
-      const stride = new Array<number>(rank);
-      for (let k = 0, s = 1; k < rank; ++k) {
-        stride[k] = s;
-        s *= size[k];
-      }
-      const cLo = S.map((k, i) => Math.max(rlo[i], o[k]));
-      const cHi = S.map((k, i) => Math.min(rhi[i], o[k] + clipped[k] - 1));
-      if (cLo.some((l, i) => l > cHi[i])) return;
-      let fixedOffset = 0;
-      for (const [k, v] of fixed) {
-        if (v < o[k] || v >= o[k] + clipped[k]) return;
-        fixedOffset += (v - o[k]) * stride[k];
-      }
-      const chLo = Cd.map((k) => Math.max(o[k], lb[k]));
-      const chHi = Cd.map((k) => Math.min(o[k] + clipped[k], ub[k]) - 1);
-      const c = chLo.slice();
-      const w = cHi[0] - cLo[0] + 1;
-      const sx = stride[S[0]];
-      while (true) {
-        let srcBase = fixedOffset;
-        let chIndex = 0;
-        for (let i = Cd.length - 1; i >= 0; --i) {
-          srcBase += (c[i] - o[Cd[i]]) * stride[Cd[i]];
-          chIndex = chIndex * chExtent[i] + (c[i] - lb[Cd[i]]);
-        }
-        const dstBase = chIndex * rsize;
-        const idx = cLo.slice();
-        while (true) {
-          let src = srcBase;
-          let dst = dstBase;
-          for (let i = 0; i < m; ++i) {
-            src += (idx[i] - o[S[i]]) * stride[S[i]];
-            dst += (idx[i] - rlo[i]) * rstr[i];
-          }
-          for (let k = 0; k < w; ++k) region[dst + k] = d[src + k * sx];
-          let i = 1;
-          while (i < m && ++idx[i] > cHi[i]) {
-            idx[i] = cLo[i];
-            ++i;
-          }
-          if (i >= m) break;
-        }
-        let i = 0;
-        while (i < Cd.length && ++c[i] > chHi[i]) {
-          c[i] = chLo[i];
-          ++i;
-        }
-        if (i === Cd.length) break;
-      }
-    });
+    this.fillRegion(deps, data, rlo, rhi, fixed, region);
     const integer = dataType !== DataType.FLOAT32;
     const offA = new Array<number>(m);
     const offB = new Array<number>(m);

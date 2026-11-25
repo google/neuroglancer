@@ -24,7 +24,7 @@ import {
   layerDataSourceSpecificationFromJson,
   layerDataSourceSpecificationToJson,
 } from "#src/layer/layer_data_source.js";
-import { coordinateMatrix } from "#src/sliceview/volume/warp/field.js";
+import { coordinateMatrix } from "#src/sliceview/volume/warp/affine.js";
 import {
   composeChainAffine,
   matchChainAxes,

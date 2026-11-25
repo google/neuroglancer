@@ -35,24 +35,18 @@ import { VertexPositionFormat } from "#src/mesh/base.js";
 import type { MultiscaleMeshManifest } from "#src/mesh/multiscale.js";
 import { WarpedMeshSourceParameters } from "#src/mesh/warp/base.js";
 import { getObjectKey } from "#src/segmentation_display_state/base.js";
-import type { VolumeChunkSource } from "#src/sliceview/volume/backend.js";
 import type { Dependency } from "#src/sliceview/volume/warp/dependencies.js";
 import {
-  getDependencyRequests,
+  objectDependency,
   waitForDependency,
+  withDependencies,
 } from "#src/sliceview/volume/warp/dependencies.js";
-import { sampleDisplacements } from "#src/sliceview/volume/warp/field_sampler.js";
+import {
+  displayedElsewhere,
+  PointWarper,
+} from "#src/sliceview/volume/warp/point_warp_backend.js";
 import type { RPC } from "#src/worker_rpc.js";
 import { registerSharedObject } from "#src/worker_rpc.js";
-
-function displayedElsewhere(): Promise<never> {
-  return Promise.reject(
-    new Error(
-      "warp: the unwarped mesh is also displayed by another layer; " +
-        "its data is not available to the warp",
-    ),
-  );
-}
 
 /** Octree rows of one level of detail, excluding empty nodes. */
 function rowsAtLod(manifest: MultiscaleMeshManifest, lod: number): number[] {
@@ -85,15 +79,13 @@ export class WarpedMeshSource extends WithParameters(
   WarpedMeshSourceParameters,
 ) {
   underlying: MultiscaleMeshSource;
-  coarseField: VolumeChunkSource;
-  fineField: VolumeChunkSource;
+  warper: PointWarper;
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     const { parameters } = this;
     this.underlying = rpc.get(parameters.meshSource);
-    this.coarseField = rpc.get(parameters.coarse.source);
-    this.fineField = rpc.get(parameters.fine.source);
+    this.warper = new PointWarper(rpc, parameters.warp);
   }
 
   // Computed from other chunks: they use the compute queue, so waiting for
@@ -110,42 +102,22 @@ export class WarpedMeshSource extends WithParameters(
     return chunk;
   }
 
-  private manifestDependency(objectId: bigint): Dependency {
-    const { underlying } = this;
-    return {
-      source: underlying,
-      key: getObjectKey(objectId),
-      get: () => underlying.getChunk(objectId),
-    };
-  }
-
-  private async withDependencies<T>(
-    requester: ManifestChunk | FragmentChunk,
-    deps: Dependency[],
-    body: () => Promise<T>,
-  ): Promise<T> {
-    const requests = getDependencyRequests(this.chunkManager);
-    const request = requests.add(requester, deps);
-    try {
-      return await body();
-    } finally {
-      requests.remove(request);
-    }
-  }
-
   private getManifest(dep: Dependency, signal: AbortSignal) {
     return waitForDependency(
       dep,
       signal,
       (chunk) => (chunk as MultiscaleManifestChunk).manifest!,
-      displayedElsewhere,
+      () => displayedElsewhere("mesh"),
     );
   }
 
   async download(chunk: ManifestChunk, signal: AbortSignal) {
-    const dep = this.manifestDependency(chunk.objectId);
-    const manifest = await this.withDependencies(chunk, [dep], () =>
-      this.getManifest(dep, signal),
+    const dep = objectDependency(this.underlying, chunk.objectId);
+    const manifest = await withDependencies(
+      this.chunkManager,
+      chunk,
+      [dep],
+      () => this.getManifest(dep, signal),
     );
     const lod = storedLod(manifest, this.parameters.lod);
     chunk.fragmentIds = rowsAtLod(manifest, lod).map(String);
@@ -155,11 +127,12 @@ export class WarpedMeshSource extends WithParameters(
     const { underlying, parameters } = this;
     const objectId = chunk.manifestChunk!.objectId;
     const row = Number(chunk.fragmentId);
-    const manifestDep = this.manifestDependency(objectId);
-    const { manifest, meshData } = await this.withDependencies(
+    const manifestDep = objectDependency(underlying, objectId);
+    const { manifest, meshData } = await withDependencies(
+      this.chunkManager,
       chunk,
       [manifestDep],
-      async () => {
+      async (setDependencies) => {
         const manifest = await this.getManifest(manifestDep, signal);
         const lod = storedLod(manifest, parameters.lod);
         const fragmentDep: Dependency = {
@@ -172,24 +145,24 @@ export class WarpedMeshSource extends WithParameters(
               row,
             ),
         };
-        const requests = getDependencyRequests(this.chunkManager);
-        const request = requests.add(chunk, [manifestDep, fragmentDep]);
-        try {
-          const meshData = await waitForDependency(
-            fragmentDep,
-            signal,
-            (c) => (c as MultiscaleFragmentChunk).meshData!,
-            displayedElsewhere,
-          );
-          return { manifest, meshData };
-        } finally {
-          requests.remove(request);
-        }
+        setDependencies([manifestDep, fragmentDep]);
+        const meshData = await waitForDependency(
+          fragmentDep,
+          signal,
+          (c) => (c as MultiscaleFragmentChunk).meshData!,
+          () => displayedElsewhere("mesh"),
+        );
+        return { manifest, meshData };
       },
     );
     const lod = storedLod(manifest, parameters.lod);
     const v = this.placeVertices(manifest, lod, row, meshData);
-    const p = await this.inverseWarp(chunk, v, signal);
+    const p = await this.warper.inverseWarp(
+      this.chunkManager,
+      chunk,
+      v,
+      signal,
+    );
     chunk.meshData = {
       vertexPositions: Float32Array.from(p),
       // The warp is smooth; the original normals are kept.
@@ -249,98 +222,5 @@ export class WarpedMeshSource extends WithParameters(
       }
     }
     return out;
-  }
-
-  /**
-   * Solves p + u(p) = v for every vertex by Newton's method,
-   * (I + du/dp) dp = v - p - u(p): first on a coarse field level, to get every
-   * vertex close, then on a fine one. Each phase stops when the largest step
-   * is below the tolerance.
-   */
-  private async inverseWarp(
-    requester: FragmentChunk,
-    v: Float64Array,
-    signal: AbortSignal,
-  ): Promise<Float64Array> {
-    const { parameters, chunkManager } = this;
-    if (parameters.direct) {
-      const { u } = await sampleDisplacements(
-        chunkManager,
-        requester,
-        this.fineField,
-        parameters.fine,
-        v,
-        signal,
-      );
-      for (let i = 0; i < u.length; ++i) u[i] += v[i];
-      return u;
-    }
-    const p = v.slice();
-    const n = p.length / 3;
-    const phases: [VolumeChunkSource, typeof parameters.coarse, number][] = [
-      [this.coarseField, parameters.coarse, parameters.coarseIterations],
-      [this.fineField, parameters.fine, parameters.fineIterations],
-    ];
-    const { tolerance } = parameters;
-    for (const [source, access, maxIterations] of phases) {
-      for (let it = 0; it < maxIterations; ++it) {
-        const { u, jacobian } = await sampleDisplacements(
-          chunkManager,
-          requester,
-          source,
-          access,
-          p,
-          signal,
-          true,
-        );
-        const J = jacobian!;
-        let maxStep = 0;
-        for (let k = 0; k < n; ++k) {
-          const r0 = v[3 * k] - p[3 * k] - u[3 * k];
-          const r1 = v[3 * k + 1] - p[3 * k + 1] - u[3 * k + 1];
-          const r2 = v[3 * k + 2] - p[3 * k + 2] - u[3 * k + 2];
-          // Solve (I + J) s = r by Cramer's rule.
-          const j = 9 * k;
-          const a = 1 + J[j];
-          const b = J[j + 1];
-          const c = J[j + 2];
-          const d = J[j + 3];
-          const e = 1 + J[j + 4];
-          const f = J[j + 5];
-          const g = J[j + 6];
-          const h = J[j + 7];
-          const i = 1 + J[j + 8];
-          const det =
-            a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
-          let s0 = r0;
-          let s1 = r1;
-          let s2 = r2;
-          // A degenerate (folded) cell falls back to a fixed-point step.
-          if (Math.abs(det) > 1e-6) {
-            s0 =
-              (r0 * (e * i - f * h) -
-                b * (r1 * i - f * r2) +
-                c * (r1 * h - e * r2)) /
-              det;
-            s1 =
-              (a * (r1 * i - f * r2) -
-                r0 * (d * i - f * g) +
-                c * (d * r2 - r1 * g)) /
-              det;
-            s2 =
-              (a * (e * r2 - r1 * h) -
-                b * (d * r2 - r1 * g) +
-                r0 * (d * h - e * g)) /
-              det;
-          }
-          p[3 * k] += s0;
-          p[3 * k + 1] += s1;
-          p[3 * k + 2] += s2;
-          maxStep = Math.max(maxStep, Math.abs(s0), Math.abs(s1), Math.abs(s2));
-        }
-        if (maxStep < tolerance) break;
-      }
-    }
-    return p;
   }
 }
