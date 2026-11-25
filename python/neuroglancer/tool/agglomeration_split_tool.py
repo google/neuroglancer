@@ -17,6 +17,8 @@ import numpy as np
 import neuroglancer
 import neuroglancer.cli
 
+logger = logging.getLogger(__name__)
+
 debug_graph = False
 verbose_merging = False
 
@@ -185,7 +187,7 @@ def load_split_seeds(path):
 
 
 def build_graph(edges):
-    logging.info("Building graph with %d edges", len(edges))
+    logger.info("Building graph with %d edges", len(edges))
 
     def combine_edges(a, b):
         return a + b
@@ -282,12 +284,12 @@ def do_split(graph, split_seeds, agglo_id=None, supervoxels=None):
         agglo_id = max(agglo_ids, key=lambda x: agglo_id_counts[x])
 
         if len(agglo_ids) > 1:
-            logging.info(
-                "Warning: more than one agglomerated component.  "
-                + "Choosing component %d with maximum number of seed points.",
+            logger.warning(
+                "More than one agglomerated component.  "
+                "Choosing component %d with maximum number of seed points.",
                 agglo_id,
             )
-            logging.info("agglo_id_counts = %r", agglo_id_counts)
+            logger.info("agglo_id_counts = %r", agglo_id_counts)
 
     input_edges = graph.get_agglo_edges(agglo_id)
     if supervoxels is not None:
@@ -301,17 +303,17 @@ def do_split(graph, split_seeds, agglo_id=None, supervoxels=None):
         graph.check_consistency()
 
     cur_eqs = neuroglancer.EquivalenceMap()
-    logging.info("Agglomerating")
+    logger.info("Agglomerating")
     threshold = float("inf")
     while True:
         entry = graph.get_next_edge()
         if entry is None:
             if verbose_merging:
-                logging.info("Stopping because entry is None")
+                logger.info("Stopping because entry is None")
             break
         if entry[0] > threshold:
             if verbose_merging:
-                logging.info(
+                logger.info(
                     "Stopping because edge score %r is > threshold %r",
                     entry[0],
                     threshold,
@@ -326,7 +328,7 @@ def do_split(graph, split_seeds, agglo_id=None, supervoxels=None):
             or (seeds_a is not None and seeds_b is not None and seeds_a != seeds_b)
         ):
             if verbose_merging:
-                logging.info(
+                logger.info(
                     "Excluding edge %r because of seeds: %r %r",
                     segment_ids,
                     seeds_a,
@@ -335,7 +337,7 @@ def do_split(graph, split_seeds, agglo_id=None, supervoxels=None):
             graph.remove_edge_from_heap(segment_ids)
             continue
         if verbose_merging:
-            logging.info("Merging %r with score %r", segment_ids, entry[0])
+            logger.info("Merging %r with score %r", segment_ids, entry[0])
         graph.merge(segment_ids)
         if debug_graph:
             graph.check_consistency()
