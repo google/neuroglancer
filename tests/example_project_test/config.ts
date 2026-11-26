@@ -69,6 +69,9 @@ const CLIENTS = [ROOT_CLIENT, ...EXAMPLE_PROJECTS];
 
 type ClientTestProject = Project<ClientTestOptions>;
 
+// Set longer than the data load timeout with some extra leeway
+const SCREENSHOT_TEST_TIMEOUT = 40000;
+
 export default defineConfig<ClientTestOptions>({
   projects: [
     {
@@ -104,6 +107,7 @@ export default defineConfig<ClientTestOptions>({
         name: `${name}:capture_build_screenshot`,
         testDir: "tests/example_project_test",
         testMatch: /capture_build_screenshot\.ts/,
+        timeout: SCREENSHOT_TEST_TIMEOUT,
         use: { clientDir: path.join(clientDir, distDir) },
         dependencies: [`${name}:build_client`, "reset_screenshots"],
         teardown: "compare_screenshots",
@@ -119,6 +123,7 @@ export default defineConfig<ClientTestOptions>({
         name: `${name}:capture_dev_server_screenshot`,
         testDir: "tests/example_project_test",
         testMatch: /capture_dev_server_screenshot\.ts/,
+        timeout: SCREENSHOT_TEST_TIMEOUT,
         use: { clientDir, clientBuildOptions },
         dependencies: [
           ...(installNodeModulesDependencies ?? []),
