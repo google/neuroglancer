@@ -18,7 +18,10 @@ from . import (  # noqa: I001
     server,  # noqa: F401
     skeleton,  # noqa: F401
 )
-from .default_credentials_manager import set_boss_token  # noqa: F401
+from .default_credentials_manager import (  # noqa: F401
+    set_boss_token,
+    set_catmaid_token,
+)
 from .equivalence_map import EquivalenceMap  # noqa: F401
 from .local_volume import LocalVolume  # noqa: F401
 from .screenshot import ScreenshotSaver  # noqa: F401
@@ -91,6 +94,7 @@ from .viewer_state import (
     InvlerpParameters,  # noqa: F401
     TransferFunctionParameters,  # noqa: F401
     ImageLayer,  # noqa: F401
+    SkeletonNodeFilterType,  # noqa: F401
     SkeletonRenderingOptions,  # noqa: F401
     StarredSegments,  # noqa: F401
     VisibleSegments,  # noqa: F401

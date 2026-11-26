@@ -16,7 +16,11 @@
 
 import { defineConfig } from "@playwright/test";
 import exampleProjectTestConfig from "#tests/example_project_test/config.js";
+import skeletonEditTestConfig from "#tests/skeleton_edit/config.js";
 
 export default defineConfig({
-  projects: exampleProjectTestConfig.projects,
+  projects: [
+    ...exampleProjectTestConfig.projects!,
+    ...skeletonEditTestConfig.projects!,
+  ],
 });

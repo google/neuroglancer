@@ -135,3 +135,22 @@ export interface IndexedSegmentProperty {
   type: "string";
   description: string | undefined;
 }
+
+export class Uint64MapEntry {
+  constructor(
+    public key: bigint,
+    public value?: bigint,
+    public label?: string | undefined,
+  ) {}
+  toString() {
+    const { key, value, label } = this;
+    let baseString: string;
+    if (value === undefined) {
+      baseString = `${key}`;
+    } else {
+      baseString = `${key}→${value}`;
+    }
+    if (label === undefined) return baseString;
+    return `${baseString} ${label}`;
+  }
+}

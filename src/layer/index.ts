@@ -493,6 +493,8 @@ export class UserLayer extends RefCounted {
     const selectionState = (this.selectionState = {} as any);
     this.initializeSelectionState(selectionState);
     this.decrementLoadingCounter();
+    // Layers can be published before initialization, including while sources load.
+    this.layersChanged.dispatch();
   }
 
   getLegacyDataSourceSpecifications(
@@ -619,6 +621,12 @@ export class UserLayer extends RefCounted {
 
   transformPickedValue(value: any) {
     return value;
+  }
+
+  getMissingAnnotationToolMessage(): string {
+    return `The selected layer (${JSON.stringify(
+      this.managedLayer.name,
+    )}) does not have an active annotation tool.`;
   }
 
   toJSON(): any {
@@ -1129,10 +1137,17 @@ export class LayerManager extends RefCounted {
   }
 }
 
+export interface PickedSpatialSkeletonState {
+  nodeId?: bigint;
+  segmentId?: bigint;
+  position?: Float32Array;
+}
+
 export interface PickState {
   pickedRenderLayer: RenderLayer | null;
   pickedValue: bigint;
   pickedOffset: number;
+  pickedSpatialSkeleton: PickedSpatialSkeletonState | undefined;
   pickedAnnotationLayer: AnnotationLayerState | undefined;
   pickedAnnotationId: string | undefined;
   pickedAnnotationBuffer: ArrayBuffer | undefined;
@@ -1154,6 +1169,7 @@ export class MouseSelectionState implements PickState {
   pickedRenderLayer: RenderLayer | null = null;
   pickedValue = 0n;
   pickedOffset = 0;
+  pickedSpatialSkeleton: PickedSpatialSkeletonState | undefined = undefined;
   pickedAnnotationLayer: AnnotationLayerState | undefined = undefined;
   pickedAnnotationId: string | undefined = undefined;
   pickedAnnotationBuffer: ArrayBuffer | undefined = undefined;
@@ -1250,6 +1266,7 @@ export class LayerSelectedValues extends RefCounted {
         const userLayer = layer.layer;
         if (layer.visible && userLayer !== null) {
           const { selectionState } = userLayer;
+          if (selectionState === undefined) continue;
           userLayer.resetSelectionState(selectionState);
           selectionState.generation = generation;
           userLayer.captureSelectionState(selectionState, mouseState);
@@ -1261,7 +1278,7 @@ export class LayerSelectedValues extends RefCounted {
   get<T extends UserLayer>(userLayer: T): T["selectionState"] | undefined {
     this.update();
     const { selectionState } = userLayer;
-    if (selectionState.generation !== this.changed.count) return undefined;
+    if (selectionState?.generation !== this.changed.count) return undefined;
     return selectionState;
   }
 

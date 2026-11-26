@@ -29,7 +29,10 @@
     "build-python:watch": "node ./build_tools/cli.ts --python build --watch",
     "test": "vitest --run",
     "test:watch": "vitest watch",
-    "example-project-test": "playwright test",
+    "test:skeleton:browser": "playwright test --project=skeleton-browser-integration --workers=1",
+    "test:skeleton:e2e": "playwright test --project=skeleton-e2e --workers=1",
+    "example-mock-catmaid": "vite-node tests/skeleton_edit/harness/serve_mock_catmaid.ts",
+    "example-project-test": "playwright test tests/example_project_test",
     "benchmark": "vitest bench --run",
     "benchmark:watch": "vitest bench",
     "lint:check": "oxlint && eslint . --cache --format codeframe",
@@ -184,6 +187,25 @@
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
       "neuroglancer/datasource/brainmaps:disabled": "./src/util/false.ts",
       "default": "./src/datasource/brainmaps/register_credentials_provider.ts"
+    },
+    "#datasource/catmaid/backend": {
+      "neuroglancer/datasource/catmaid:enabled": "./src/datasource/catmaid/backend.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/catmaid:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/catmaid/backend.ts"
+    },
+    "#datasource/catmaid/register_default": {
+      "neuroglancer/datasource/catmaid:enabled": "./src/datasource/catmaid/register_default.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/catmaid:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/catmaid/register_default.ts"
+    },
+    "#datasource/catmaid/register_credentials_provider": {
+      "neuroglancer/python": "./src/util/false.ts",
+      "neuroglancer/datasource/catmaid:enabled": "./src/datasource/catmaid/register_credentials_provider.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/catmaid:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/catmaid/register_credentials_provider.ts"
     },
     "#datasource/deepzoom/backend": {
       "neuroglancer/datasource/deepzoom:enabled": "./src/datasource/deepzoom/backend.ts",

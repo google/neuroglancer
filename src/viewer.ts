@@ -904,11 +904,17 @@ export class Viewer extends RefCounted implements ViewerState {
         return;
       }
       const userLayer = selectedLayer.layer;
-      if (userLayer === null || userLayer.tool.value === undefined) {
+      if (userLayer === null) {
         StatusMessage.showTemporaryMessage(
           `The selected layer (${JSON.stringify(
             selectedLayer.name,
           )}) does not have an active annotation tool.`,
+        );
+        return;
+      }
+      if (userLayer.tool.value === undefined) {
+        StatusMessage.showTemporaryMessage(
+          userLayer.getMissingAnnotationToolMessage(),
         );
         return;
       }
