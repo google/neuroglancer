@@ -23,7 +23,11 @@ import "#src/ui/tool.css";
 import { debounce } from "lodash-es";
 import type { MouseSelectionState, UserLayer } from "#src/layer/index.js";
 import { StatusMessage } from "#src/status.js";
-import type { TrackableValueInterface } from "#src/trackable_value.js";
+import type {
+  TrackableValueInterface,
+  WatchableValueInterface,
+} from "#src/trackable_value.js";
+import { WatchableValue } from "#src/trackable_value.js";
 import { popDragStatus, pushDragStatus } from "#src/ui/drag_and_drop.js";
 import type { ToolDragSource } from "#src/ui/tool_drag_and_drop.js";
 import { beginToolDrag, endToolDrag } from "#src/ui/tool_drag_and_drop.js";
@@ -61,6 +65,12 @@ export type InputEventMapBinder = (
 ) => void;
 
 export class ToolActivation<ToolType extends Tool = Tool> extends RefCounted {
+  /**
+   * The input event maps that the tool bound, in the order of the binds. For
+   * a tool that implements `renderActivation()`, the chrome shows the maps
+   * that the tool bound in `activate()` under the status panel.
+   */
+  readonly inputEventMaps: EventActionMap[] = [];
   constructor(
     public tool: ToolType,
     public inputEventMapBinder: InputEventMapBinder,
@@ -74,6 +84,7 @@ export class ToolActivation<ToolType extends Tool = Tool> extends RefCounted {
     this.registerDisposer(registerActionListener(window, action, listener));
   }
   bindInputEventMap(inputEventMap: EventActionMap) {
+    this.inputEventMaps.push(inputEventMap);
     this.inputEventMapBinder(inputEventMap, this);
   }
   cancel() {
@@ -106,6 +117,26 @@ export abstract class Tool<Context extends object = object> extends RefCounted {
     super();
   }
   abstract activate(activation: ToolActivation<this>): void;
+
+  /**
+   * Builds the status panel of an activation of this tool.
+   *
+   * The chrome calls this method after `activate()` returns, and disposes
+   * `context` when the activation ends. A viewer with no chrome does not call
+   * it. The panel only shows state. The key bindings and the state changes of
+   * the tool stay in `activate()`. Bind each input event map in `activate()`,
+   * because the chrome reads `activation.inputEventMaps` only when it builds
+   * the panel.
+   *
+   * Use `makeToolStatusContent()` or `makeToolStatusContentWithHeader()` to
+   * build the element. A tool that does not implement this method can build
+   * its own panel in `activate()` with `makeToolActivationStatusMessage()`.
+   */
+  renderActivation?(
+    activation: ToolActivation<this>,
+    context: RefCounted,
+  ): HTMLElement | undefined;
+
   renderInPalette(context: RefCounted): HTMLElement | undefined {
     context;
     const content = document.createElement("div");
@@ -313,6 +344,9 @@ export class GlobalToolBinder extends RefCounted {
   bindings = new Map<string, Borrowed<Tool>>();
   changed = new Signal();
   activeTool_: Owned<ToolActivation> | undefined; // For internal use only- should only be called by ToolBinder and ToolActivation.cancel()
+  private activeActivation_ = new WatchableValue<
+    Borrowed<ToolActivation> | undefined
+  >(undefined);
   private queuedTool: Tool | undefined;
   private debounceDeactivate = this.registerCancellable(
     debounce(() => {
@@ -337,6 +371,23 @@ export class GlobalToolBinder extends RefCounted {
 
   isActive(tool: Tool | undefined) {
     return tool !== undefined && this.activeTool_?.tool === tool;
+  }
+
+  /**
+   * The activation of the active tool. The value changes after `activate()` of
+   * the tool returns, and before the binder disposes the activation.
+   */
+  get activeActivation(): Readonly<
+    WatchableValueInterface<Borrowed<ToolActivation> | undefined>
+  > {
+    return this.activeActivation_;
+  }
+
+  private publishActivation(activation: ToolActivation) {
+    // A tool can cancel its activation from `activate()`.
+    if (this.activeTool_ === activation) {
+      this.activeActivation_.value = activation;
+    }
   }
 
   private deleteBinding(tool: Tool) {
@@ -464,6 +515,7 @@ export class GlobalToolBinder extends RefCounted {
       });
     }
     tool.activate(activation);
+    this.publishActivation(activation);
     return tool;
   }
 
@@ -476,6 +528,7 @@ export class GlobalToolBinder extends RefCounted {
       this.activeTool_ = activation;
       this.queuedTool.activate(activation);
       this.queuedTool = undefined;
+      this.publishActivation(activation);
     }
   }
 
@@ -503,6 +556,7 @@ export class GlobalToolBinder extends RefCounted {
     const activation = this.activeTool_;
     if (activation === undefined) return;
     this.activeTool_ = undefined;
+    this.activeActivation_.value = undefined;
     activation.dispose();
   }
 
@@ -531,6 +585,7 @@ export class GlobalToolBinder extends RefCounted {
     activation.registerDisposer(tool);
     this.activeTool_ = activation;
     tool.activate(activation);
+    this.publishActivation(activation);
     this.changed.dispatch();
   }
 }
@@ -857,20 +912,59 @@ export function makeToolButton(
   return element;
 }
 
+function makeToolStatusMessage() {
+  const message = new StatusMessage(
+    /*delay=*/ false,
+    /*modal=*/ false,
+    /*insertAtBottom=*/ true,
+  );
+  message.element.classList.add("neuroglancer-tool-status");
+  return message;
+}
+
+function makeToolStatusBindings(inputEventMap: EventActionMap) {
+  const bindingHelp = document.createElement("div");
+  bindingHelp.textContent = inputEventMap.describe();
+  bindingHelp.classList.add("neuroglancer-tool-status-bindings");
+  return bindingHelp;
+}
+
+/**
+ * Makes the content element of a tool status panel.
+ */
+export function makeToolStatusContent() {
+  const content = document.createElement("div");
+  content.classList.add("neuroglancer-tool-status-content");
+  return content;
+}
+
+/**
+ * Makes the content element of a tool status panel, with a header and a body.
+ */
+export function makeToolStatusContentWithHeader() {
+  const content = makeToolStatusContent();
+  return { content, ...addToolStatusHeader(content) };
+}
+
+function addToolStatusHeader(content: HTMLElement) {
+  const header = document.createElement("div");
+  header.classList.add("neuroglancer-tool-status-header");
+  const headerContainer = document.createElement("div");
+  headerContainer.classList.add("neuroglancer-tool-status-header-container");
+  headerContainer.appendChild(header);
+  content.appendChild(headerContainer);
+  const body = document.createElement("div");
+  body.classList.add("neuroglancer-tool-status-body");
+  content.appendChild(body);
+  return { header, body };
+}
+
 export function makeToolActivationStatusMessage(
   activation: ToolActivation,
   options: { showBindings?: boolean } = {},
 ) {
-  const message = activation.registerDisposer(
-    new StatusMessage(
-      /*delay=*/ false,
-      /*modal=*/ false,
-      /*insertAtBottom=*/ true,
-    ),
-  );
-  message.element.classList.add("neuroglancer-tool-status");
-  const content = document.createElement("div");
-  content.classList.add("neuroglancer-tool-status-content");
+  const message = activation.registerDisposer(makeToolStatusMessage());
+  const content = makeToolStatusContent();
   message.element.appendChild(content);
   if (options.showBindings !== false) {
     const { inputEventMapBinder } = activation;
@@ -878,10 +972,7 @@ export function makeToolActivationStatusMessage(
       inputEventMap: EventActionMap,
       context: RefCounted,
     ) => {
-      const bindingHelp = document.createElement("div");
-      bindingHelp.textContent = inputEventMap.describe();
-      bindingHelp.classList.add("neuroglancer-tool-status-bindings");
-      message.element.appendChild(bindingHelp);
+      message.element.appendChild(makeToolStatusBindings(inputEventMap));
       inputEventMapBinder(inputEventMap, context);
     };
   }
@@ -896,16 +987,54 @@ export function makeToolActivationStatusMessageWithHeader(
     activation,
     options,
   );
-  const header = document.createElement("div");
-  header.classList.add("neuroglancer-tool-status-header");
-  const headerContainer = document.createElement("div");
-  headerContainer.classList.add("neuroglancer-tool-status-header-container");
-  headerContainer.appendChild(header);
-  content.appendChild(headerContainer);
-  const body = document.createElement("div");
-  body.classList.add("neuroglancer-tool-status-body");
-  content.appendChild(body);
+  const { header, body } = addToolStatusHeader(content);
   return { message, body, header };
+}
+
+/**
+ * Shows the status panel of the active tool, for a tool that implements
+ * `Tool.renderActivation()`.
+ *
+ * The panel holds the element from `renderActivation()`, and then a
+ * description of each input event map that the activation bound.
+ */
+export class ToolActivationStatus extends RefCounted {
+  private panel: RefCounted | undefined;
+
+  constructor(public globalBinder: Borrowed<GlobalToolBinder>) {
+    super();
+    this.registerDisposer(
+      globalBinder.activeActivation.changed.add(() => this.update()),
+    );
+    this.update();
+  }
+
+  private update() {
+    this.panel?.dispose();
+    this.panel = undefined;
+    const activation = this.globalBinder.activeActivation.value;
+    if (activation === undefined) return;
+    const { tool } = activation;
+    if (tool.renderActivation === undefined) return;
+    const panel = new RefCounted();
+    const content = tool.renderActivation(activation, panel);
+    if (content === undefined) {
+      panel.dispose();
+      return;
+    }
+    const message = panel.registerDisposer(makeToolStatusMessage());
+    message.element.appendChild(content);
+    for (const inputEventMap of activation.inputEventMaps) {
+      message.element.appendChild(makeToolStatusBindings(inputEventMap));
+    }
+    this.panel = panel;
+  }
+
+  disposed() {
+    this.panel?.dispose();
+    this.panel = undefined;
+    super.disposed();
+  }
 }
 
 function* getToolsFromListerMatchingTerms(

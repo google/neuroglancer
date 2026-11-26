@@ -30,14 +30,16 @@ import {
   VisibleSegmentEquivalencePolicy,
 } from "#src/segmentation_graph/segment_id.js";
 import { StatusMessage } from "#src/status.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
 import { WatchableValue } from "#src/trackable_value.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import {
   LayerTool,
-  makeToolActivationStatusMessageWithHeader,
+  makeToolStatusContentWithHeader,
   registerTool,
 } from "#src/ui/tool.js";
 import { animationFrameDebounce } from "#src/util/animation_frame_debounce.js";
+import type { RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
 import { EventActionMap } from "#src/util/keyboard_bindings.js";
 
@@ -55,8 +57,123 @@ const SPLIT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
   "at:shift?+mousedown2": { action: "set-anchor" },
 });
 
+/**
+ * The status of an active merge or split tool.
+ */
+export interface SegmentPairToolStatus {
+  /**
+   * The anchor segment. For a merge with a valid anchor, the value is the base
+   * segment of the anchor that was last under the pointer. For a split that
+   * the graph can compute, the value holds the part that stays.
+   */
+  anchorSegment: Uint64MapEntry | undefined;
+  /**
+   * The segment to merge with the anchor segment. For a split, the value holds
+   * the excluded part, and only when the graph can compute the split.
+   */
+  otherSegment: Uint64MapEntry | undefined;
+  /**
+   * The reason that the tool cannot merge or split now.
+   */
+  error: string | undefined;
+}
+
+function segmentEntriesEqual(
+  a: Uint64MapEntry | undefined,
+  b: Uint64MapEntry | undefined,
+) {
+  if (a === undefined || b === undefined) return a === b;
+  return a.key === b.key && a.value === b.value && a.label === b.label;
+}
+
+// Write the status only when it changes. Then a listener gets no change event
+// for a value that it already has.
+function setSegmentPairToolStatus(
+  status: WatchableValue<SegmentPairToolStatus | undefined>,
+  value: SegmentPairToolStatus | undefined,
+) {
+  const current = status.value;
+  if (
+    current !== undefined &&
+    value !== undefined &&
+    segmentEntriesEqual(current.anchorSegment, value.anchorSegment) &&
+    segmentEntriesEqual(current.otherSegment, value.otherSegment) &&
+    current.error === value.error
+  ) {
+    return;
+  }
+  status.value = value;
+}
+
+function renderSegmentPairToolStatus(
+  layer: SegmentationUserLayer,
+  status: Readonly<WatchableValueInterface<SegmentPairToolStatus | undefined>>,
+  context: RefCounted,
+  title: string,
+  verb: string,
+) {
+  const { displayState } = layer;
+  const { content, header, body } = makeToolStatusContentWithHeader();
+  header.textContent = title;
+  body.classList.add("neuroglancer-merge-segments-status");
+  context.registerDisposer(bindSegmentListWidth(displayState, body));
+  const makeWidget = (id: Uint64MapEntry) => {
+    const row = makeSegmentWidget(displayState, id);
+    row.classList.add("neuroglancer-segment-list-entry-double-line");
+    return row;
+  };
+  const updateView = () => {
+    removeChildren(body);
+    const value = status.value;
+    if (value === undefined) return;
+    const { anchorSegment, otherSegment, error } = value;
+    if (anchorSegment !== undefined) {
+      body.appendChild(makeWidget(anchorSegment));
+    }
+    if (error !== undefined) {
+      const msg = document.createElement("span");
+      msg.textContent = error;
+      body.appendChild(msg);
+    }
+    if (otherSegment !== undefined) {
+      const msg = document.createElement("span");
+      msg.textContent = ` ${verb} `;
+      body.appendChild(msg);
+      body.appendChild(makeWidget(otherSegment));
+    }
+  };
+  updateView();
+  context.registerDisposer(status.changed.add(updateView));
+  // A segment widget keeps the color and the visibility that the segment had
+  // when the panel made it. Make the widgets again when the display state
+  // changes.
+  const debouncedUpdateView = context.registerCancellable(
+    animationFrameDebounce(updateView),
+  );
+  registerCallbackWhenSegmentationDisplayStateChanged(
+    displayState,
+    context,
+    debouncedUpdateView,
+  );
+  return content;
+}
+
 export class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
   lastAnchorBaseSegment = new WatchableValue<bigint | undefined>(undefined);
+
+  private status_ = new WatchableValue<SegmentPairToolStatus | undefined>(
+    undefined,
+  );
+
+  /**
+   * The status of the active merge. The value is `undefined` when the tool is
+   * not active.
+   */
+  get status(): Readonly<
+    WatchableValueInterface<SegmentPairToolStatus | undefined>
+  > {
+    return this.status_;
+  }
 
   constructor(layer: SegmentationUserLayer) {
     super(layer);
@@ -180,42 +297,26 @@ export class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
       };
     };
 
-    const { body, header } =
-      makeToolActivationStatusMessageWithHeader(activation);
-    header.textContent = "Merge segments";
-    body.classList.add("neuroglancer-merge-segments-status");
     activation.bindInputEventMap(MERGE_SEGMENTS_INPUT_EVENT_MAP);
     activation.registerDisposer(() => {
       resetTemporaryVisibleSegmentsState(segmentationGroupState);
+      this.status_.value = undefined;
     });
     const updateStatus = () => {
-      removeChildren(body);
       const { displayState } = this.layer;
       const { anchorSegment, otherSegment, anchorSegmentValid, error } =
         getMergeRequest();
-      const makeWidget = (id: Uint64MapEntry) => {
-        const row = makeSegmentWidget(this.layer.displayState, id);
-        row.classList.add("neuroglancer-segment-list-entry-double-line");
-        return row;
-      };
-      if (anchorSegment !== undefined) {
-        body.appendChild(
-          makeWidget(augmentSegmentId(displayState, anchorSegment)),
-        );
-      }
-      if (error !== undefined) {
-        const msg = document.createElement("span");
-        msg.textContent = error;
-        body.appendChild(msg);
-      }
-      if (otherSegment !== undefined) {
-        const msg = document.createElement("span");
-        msg.textContent = " merge ";
-        body.appendChild(msg);
-        body.appendChild(
-          makeWidget(augmentSegmentId(displayState, otherSegment)),
-        );
-      }
+      setSegmentPairToolStatus(this.status_, {
+        anchorSegment:
+          anchorSegment === undefined
+            ? undefined
+            : augmentSegmentId(displayState, anchorSegment),
+        otherSegment:
+          otherSegment === undefined
+            ? undefined
+            : augmentSegmentId(displayState, otherSegment),
+        error,
+      });
       const { segmentEquivalences } = segmentationGroupState;
       if (!anchorSegmentValid) {
         resetTemporaryVisibleSegmentsState(segmentationGroupState);
@@ -231,9 +332,6 @@ export class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
       }
     };
     updateStatus();
-    activation.registerDisposer(
-      bindSegmentListWidth(this.layer.displayState, body),
-    );
     const debouncedUpdateStatus = activation.registerCancellable(
       animationFrameDebounce(updateStatus),
     );
@@ -285,12 +383,36 @@ export class MergeSegmentsTool extends LayerTool<SegmentationUserLayer> {
     });
   }
 
+  renderActivation(_activation: ToolActivation<this>, context: RefCounted) {
+    return renderSegmentPairToolStatus(
+      this.layer,
+      this.status,
+      context,
+      "Merge segments",
+      "merge",
+    );
+  }
+
   get description() {
     return "merge";
   }
 }
 
 export class SplitSegmentsTool extends LayerTool<SegmentationUserLayer> {
+  private status_ = new WatchableValue<SegmentPairToolStatus | undefined>(
+    undefined,
+  );
+
+  /**
+   * The status of the active split. The value is `undefined` when the tool is
+   * not active.
+   */
+  get status(): Readonly<
+    WatchableValueInterface<SegmentPairToolStatus | undefined>
+  > {
+    return this.status_;
+  }
+
   toJSON() {
     return ANNOTATE_SPLIT_SEGMENTS_TOOL_ID;
   }
@@ -322,10 +444,6 @@ export class SplitSegmentsTool extends LayerTool<SegmentationUserLayer> {
       return { anchorSegment, error: undefined };
     };
 
-    const { body, header } =
-      makeToolActivationStatusMessageWithHeader(activation);
-    header.textContent = "Split segments";
-    body.classList.add("neuroglancer-merge-segments-status");
     activation.bindInputEventMap(SPLIT_SEGMENTS_INPUT_EVENT_MAP);
     const getSplitRequest = (): {
       anchorSegment: bigint | undefined;
@@ -366,9 +484,9 @@ export class SplitSegmentsTool extends LayerTool<SegmentationUserLayer> {
     };
     activation.registerDisposer(() => {
       resetTemporaryVisibleSegmentsState(segmentationGroupState);
+      this.status_.value = undefined;
     });
     const updateStatus = () => {
-      removeChildren(body);
       const { displayState } = this.layer;
       const { anchorSegment, otherSegment, anchorSegmentValid, error } =
         getSplitRequest();
@@ -425,34 +543,16 @@ export class SplitSegmentsTool extends LayerTool<SegmentationUserLayer> {
         tempVisibleSegments.add(segmentEquivalences.get(anchorSegment!));
       };
       updateTemporaryState();
-      const makeWidget = (id: Uint64MapEntry) => {
-        const row = makeSegmentWidget(this.layer.displayState, id);
-        row.classList.add("neuroglancer-segment-list-entry-double-line");
-        return row;
-      };
-      if (anchorSegment !== undefined) {
-        body.appendChild(
-          makeWidget(
-            anchorSegmentAugmented ??
-              augmentSegmentId(displayState, anchorSegment),
-          ),
-        );
-      }
-      if (error !== undefined) {
-        const msg = document.createElement("span");
-        msg.textContent = error;
-        body.appendChild(msg);
-      }
-      if (otherSegmentAugmented !== undefined) {
-        const msg = document.createElement("span");
-        msg.textContent = " split ";
-        body.appendChild(msg);
-        body.appendChild(makeWidget(otherSegmentAugmented));
-      }
+      setSegmentPairToolStatus(this.status_, {
+        anchorSegment:
+          anchorSegment === undefined
+            ? undefined
+            : (anchorSegmentAugmented ??
+              augmentSegmentId(displayState, anchorSegment)),
+        otherSegment: otherSegmentAugmented,
+        error,
+      });
     };
-    activation.registerDisposer(
-      bindSegmentListWidth(this.layer.displayState, body),
-    );
     updateStatus();
     const debouncedUpdateStatus = activation.registerCancellable(
       animationFrameDebounce(updateStatus),
@@ -512,6 +612,16 @@ export class SplitSegmentsTool extends LayerTool<SegmentationUserLayer> {
         return;
       }
     });
+  }
+
+  renderActivation(_activation: ToolActivation<this>, context: RefCounted) {
+    return renderSegmentPairToolStatus(
+      this.layer,
+      this.status,
+      context,
+      "Split segments",
+      "split",
+    );
   }
 
   get description() {
