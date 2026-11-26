@@ -194,6 +194,12 @@ export interface SingleChannelMetadata {
   coefficient?: number;
 }
 
+// Another data source that belongs with this one, unlike a subsource, which is part of it.
+export interface RelatedDataSource {
+  readonly name: string;
+  readonly url: string;
+}
+
 export interface DataSource {
   subsources: DataSubsourceEntry[];
   modelTransform: CoordinateSpaceTransform;
@@ -201,6 +207,7 @@ export interface DataSource {
   state?: Trackable;
   canonicalUrl?: string;
   channelMetadata?: ChannelMetadata;
+  relatedSources?: RelatedDataSource[];
 }
 
 export interface DataSourceRedirect {

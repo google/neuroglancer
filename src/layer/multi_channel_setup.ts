@@ -19,13 +19,17 @@ import {
   makeCoordinateSpace,
   permuteCoordinateSpace,
 } from "#src/coordinate_transform.js";
-import type { SingleChannelMetadata } from "#src/datasource/index.js";
+import type {
+  RelatedDataSource,
+  SingleChannelMetadata,
+} from "#src/datasource/index.js";
 import type { ImageUserLayer } from "#src/layer/image/index.js";
-import {
-  type LayerListSpecification,
-  type ManagedUserLayer,
-  type UserLayer,
+import type {
+  LayerListSpecification,
+  ManagedUserLayer,
+  UserLayer,
 } from "#src/layer/index.js";
+import { SELECTED_ALPHA_JSON_KEY } from "#src/layer/segmentation/json_keys.js";
 import { BLEND_MODES } from "#src/trackable_blend.js";
 import { arraysEqual } from "#src/util/array.js";
 import type { Borrowed } from "#src/util/disposable.js";
@@ -66,6 +70,7 @@ const DEFAULT_ARRAY_COLORS = new Map([
 ]);
 
 const DEFAULT_VOLUME_RENDERING_SAMPLES = 256;
+const MAX_INITIALLY_VISIBLE_LAYERS = 4;
 
 /**
  * Rename each output dim with ^ to be ' instead.
@@ -168,6 +173,50 @@ function getLayerChannelMetadata(
   return channels?.[channelIndex];
 }
 
+export function getRelatedSources(
+  layer: ManagedUserLayer,
+): RelatedDataSource[] {
+  const loadState = getLoadState(layer);
+  if (!loadState || loadState.error) return [];
+  return loadState.dataSource.relatedSources ?? [];
+}
+
+// Also resolves when an auto layer finishes loading without a detected type.
+function whenLayerTypeDetected(managedLayer: ManagedUserLayer) {
+  return new Promise<void>((resolve) => {
+    const check = () => {
+      if (managedLayer.layer?.type === "auto" && !managedLayer.isReady()) {
+        return;
+      }
+      removeLayerChangedHandler();
+      removeReadyStateChangedHandler();
+      resolve();
+    };
+    const removeLayerChangedHandler = managedLayer.layerChanged.add(check);
+    const removeReadyStateChangedHandler =
+      managedLayer.readyStateChanged.add(check);
+    check();
+  });
+}
+
+function getPaletteToolsJson(layers: readonly ManagedUserLayer[]): object[] {
+  const toolsByLayerType: Partial<Record<string, object[]>> = {
+    image: [
+      { type: "shaderControl", control: "contrast" },
+      { type: "shaderControl", control: "color" },
+    ],
+    segmentation: [{ type: SELECTED_ALPHA_JSON_KEY }],
+  };
+  return layers
+    .filter((layer) => !layer.archived)
+    .flatMap((layer) =>
+      (toolsByLayerType[layer.layer?.type ?? ""] ?? []).map((toolJson) => ({
+        layer: layer.name,
+        ...toolJson,
+      })),
+    );
+}
+
 function checkLayerInputMetadataForErrors(layer: ManagedUserLayer): boolean {
   // If all the ranges are the same and the colors are black, then we can
   // assume that the input metadata is not set up correctly
@@ -205,7 +254,7 @@ function setupLayerPostCreation(
   const userImageLayer = addedLayer.layer as ImageUserLayer;
   userImageLayer.fragmentMain.value = MULTICHANNEL_FRAGMENT_MAIN;
 
-  const active = channel?.active ?? channelIndex <= 3;
+  const active = channel?.active ?? channelIndex < MAX_INITIALLY_VISIBLE_LAYERS;
   addedLayer.setArchived(!active);
 
   const shaderControlState = userImageLayer.shaderControlState;
@@ -405,26 +454,73 @@ export function createImageLayerAsMultiChannel(
       ignoreInputMetadata,
     );
   }
-  // Propagate new channel layers to all layer group subsets that contain the original managed layer
+  const parentIndex =
+    managedLayer.manager.layerManager.managedLayers.indexOf(managedLayer);
+  const openUrls = new Set(
+    managedLayer.manager.root.layerManager.managedLayers.flatMap(
+      (otherLayer) =>
+        otherLayer.layer?.dataSources.map(
+          (dataSource) => dataSource.spec.url,
+        ) ?? [],
+    ),
+  );
+  const unopenedRelatedSources = getRelatedSources(managedLayer).filter(
+    (relatedSource) => !openUrls.has(relatedSource.url),
+  );
+  const newRelatedLayers = unopenedRelatedSources.map((relatedSource, i) => {
+    const newLayer = makeLayer(
+      managedLayer.manager,
+      `${startingName} ${relatedSource.name}`,
+      { type: "auto", source: relatedSource.url },
+    );
+    managedLayer.manager.add(
+      newLayer,
+      parentIndex !== -1 ? parentIndex + totalLocalChannels + i : undefined,
+    );
+    newLayer.setArchived(i >= MAX_INITIALLY_VISIBLE_LAYERS);
+    return newLayer;
+  });
+  const newLayers = [...newChannelLayers, ...newRelatedLayers];
+
+  // Propagate new layers to all layer group subsets that contain the original managed layer
   // The initial manager.add() above only adds to the layer's own manager and its owner
   // Update other subsets referencing the original layer
   const { root } = managedLayer.manager;
-  if (newChannelLayers.length > 0) {
+  if (newLayers.length > 0) {
     for (const subset of root.subsets) {
       // Skip the subset that is the current manager
       if (subset === managedLayer.manager) continue;
       const subsetIndex =
         subset.layerManager.managedLayers.indexOf(managedLayer);
       if (subsetIndex === -1) continue;
-      for (let j = 0; j < newChannelLayers.length; j++) {
+      for (let j = 0; j < newLayers.length; j++) {
         subset.layerManager.addManagedLayer(
-          newChannelLayers[j].addRef(),
+          newLayers[j].addRef(),
           subsetIndex + 1 + j,
         );
       }
     }
   }
-  root.display.multiChannelSetupFinished.dispatch();
+  Promise.all(newRelatedLayers.map(whenLayerTypeDetected)).then(() => {
+    root.display.multiChannelSetupFinished.dispatch(
+      `${startingName} controls`,
+      getPaletteToolsJson([managedLayer, ...newLayers]),
+    );
+  });
   postCreationSetupFunctions.forEach((fn) => fn());
   reverseGlobalDimOrderIfNeeded(managedLayer);
+}
+
+// Runs only once, so that a later edit of the data source does not repeat the setup.
+export function createImageLayerAsMultiChannelWhenReady(
+  managedLayer: Borrowed<ManagedUserLayer>,
+  makeLayer: MakeLayerFn,
+) {
+  managedLayer.readyStateChanged.addOnce(() => {
+    if (managedLayer.isReady()) {
+      // If you want to restore the old auto image setup, pass true here
+      // This will then make the previous image layer setup
+      createImageLayerAsMultiChannel(managedLayer, makeLayer);
+    }
+  });
 }

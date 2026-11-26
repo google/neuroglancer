@@ -24,7 +24,7 @@ import { RefCounted } from "#src/util/disposable.js";
 import { FramerateMonitor } from "#src/util/framerate.js";
 import type { mat4 } from "#src/util/geom.js";
 import { parseFixedLengthArray, verifyFloat01 } from "#src/util/json.js";
-import { NullarySignal } from "#src/util/signal.js";
+import { NullarySignal, Signal } from "#src/util/signal.js";
 import {
   TrackableScreenshotMode,
   ScreenshotMode,
@@ -435,7 +435,9 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
   updateFinished = new NullarySignal();
   continuousCameraMotionStarted = new NullarySignal();
   continuousCameraMotionFinished = new NullarySignal();
-  multiChannelSetupFinished = new NullarySignal();
+  multiChannelSetupFinished = new Signal<
+    (paletteName: string, paletteToolsJson: readonly object[]) => void
+  >();
   changed = this.updateFinished;
   panels = new Set<RenderedPanel>();
   canvasRect: DOMRect | undefined;
