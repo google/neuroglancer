@@ -304,15 +304,22 @@ class ViewerCommonBase:
                     origin = domain.origin
                     grid_origin = info.grid_origin
                     chunk_shape = info.chunk_shape
+                    # The domain is clipped to the volume bounds, so it may start inside a chunk.
                     chunk_pos = [
-                        (origin[i] - grid_origin[i]) / chunk_shape[i]
+                        (origin[i] - grid_origin[i]) // chunk_shape[i]
+                        for i in range(domain.rank)
+                    ]
+                    chunk_origin = [
+                        grid_origin[i] + chunk_pos[i] * chunk_shape[i]
                         for i in range(domain.rank)
                     ]
 
                     def chunk_done(chunk_future):
                         try:
                             chunk = chunk_future.result()
-                            array[...] = chunk[domain.translate_to[0].index_exp]
+                            array[...] = chunk[
+                                domain.translate_backward_by[chunk_origin].index_exp
+                            ]
                             read_promise.set_result(None)
                         except Exception as e:
                             read_promise.set_exception(e)
@@ -333,7 +340,10 @@ class ViewerCommonBase:
                             exclusive_max=info.upper_bound,
                         ),
                         dimension_units=dimension_units,
-                        chunk_layout=ts.ChunkLayout(read_chunk_shape=info.chunk_shape),
+                        chunk_layout=ts.ChunkLayout(
+                            read_chunk_shape=info.chunk_shape,
+                            grid_origin=info.grid_origin,
+                        ),
                     )
                 )
             except Exception as e:
