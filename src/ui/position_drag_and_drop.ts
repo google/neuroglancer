@@ -60,11 +60,15 @@ export function setupPositionDropHandlers(
           },
           value: coordinates,
         } = position;
+        let moved = false;
         for (let i = 0; i < rank; ++i) {
           const dim = names.indexOf(dimensions[i]);
           if (dim === -1) continue;
+          const previousCoordinate = coordinates[dim];
           coordinates[dim] = positionVec[i];
+          if (coordinates[dim] !== previousCoordinate) moved = true;
         }
+        if (moved) position.markMoved();
         position.changed.dispatch();
       }
     },
