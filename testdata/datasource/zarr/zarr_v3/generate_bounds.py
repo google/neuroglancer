@@ -1,5 +1,6 @@
 """Writes `examples/bounds`: a 6 x 7 array grown in front by 3 rows and 2 columns, so that its
-metadata carries `bounds` in place of `shape` (ZEP 12).
+metadata carries `bounds` in place of `shape` (ZEP 12), and `examples/bounds_sharded`, the same
+array with 8 x 10 shards of 4 x 5 chunks.
 
 Also writes `examples/offset_grid` and `examples/offset_grid_transpose`: a 3 x 4 array whose
 first element is at (-1, 0) on an `offset` chunk grid (zarr-extensions#81) whose chunk 0 begins
@@ -17,19 +18,21 @@ from zarr.codecs import TransposeCodec
 
 examples = pathlib.Path(__file__).parent / "examples"
 
-out = examples / "bounds"
-shutil.rmtree(out, ignore_errors=True)
-z = zarr.create_array(
-    store=str(out),
-    shape=(6, 7),
-    chunks=(4, 5),
-    dtype="uint16",
-    fill_value=0,
-    compressors=None,
-)
-z[:] = np.arange(42, dtype="uint16").reshape(6, 7) + 100
-z.prepend(np.arange(21, dtype="uint16").reshape(3, 7) + 1, axis=0)
-z.prepend(np.full((9, 2), 900, dtype="uint16"), axis=1)
+for name, shards in (("bounds", None), ("bounds_sharded", (8, 10))):
+    out = examples / name
+    shutil.rmtree(out, ignore_errors=True)
+    z = zarr.create_array(
+        store=str(out),
+        shape=(6, 7),
+        chunks=(4, 5),
+        shards=shards,
+        dtype="uint16",
+        fill_value=0,
+        compressors=None,
+    )
+    z[:] = np.arange(42, dtype="uint16").reshape(6, 7) + 100
+    z.prepend(np.arange(21, dtype="uint16").reshape(3, 7) + 1, axis=0)
+    z.prepend(np.full((9, 2), 900, dtype="uint16"), axis=1)
 
 
 def offset_grid(name, filters):

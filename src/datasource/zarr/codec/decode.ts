@@ -194,12 +194,16 @@ export function applySharding(
       ) {
         const subChunkDim =
           physicalToLogicalDimension[rank - 1 - fOrderPhysicalDim];
+        const gridShape = subChunkGridShape[subChunkDim];
         subChunk[subChunkDim] =
-          Math.floor(
+          ((Math.floor(
             (chunkGridPosition[fOrderPhysicalDim] *
               readChunkShape[subChunkDim]) /
               subChunkShape[subChunkDim],
-          ) % subChunkGridShape[subChunkDim];
+          ) %
+            gridShape) +
+            gridShape) %
+          gridShape;
       }
       key = { base: key, subChunk };
       curCodecs = subChunkCodecs;

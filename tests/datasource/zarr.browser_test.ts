@@ -25,6 +25,7 @@ datasourceMetadataSnapshotTests("zarr", [
   "zarr_v3/examples/single_res",
   "zarr_v3/examples/transpose",
   "zarr_v3/examples/bounds",
+  "zarr_v3/examples/bounds_sharded",
   "zarr_v3/examples/offset_grid",
   "zarr_v3/examples/offset_grid_transpose",
   "ome_zarr/simple_0.4",

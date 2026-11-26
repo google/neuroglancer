@@ -287,6 +287,41 @@ def test_data(driver: str, data_dir: pathlib.Path, static_file_server, webdriver
     np.testing.assert_equal(a, b)
 
 
+def _grown_in_front():
+    # `examples/bounds`: a 6 x 7 array grown in front by 3 rows and 2 columns.
+    a = np.zeros((9, 9), dtype=np.uint16)
+    a[:, :2] = 900
+    a[:3, 2:] = np.arange(21, dtype=np.uint16).reshape(3, 7) + 1
+    a[3:, 2:] = np.arange(42, dtype=np.uint16).reshape(6, 7) + 100
+    return a
+
+
+_OFFSET_GRID = np.arange(12, dtype=np.uint16).reshape(3, 4) + 1
+
+BOUNDS_CASES = [
+    ("zarr_v3/examples/bounds", (-3, -2), _grown_in_front()),
+    ("zarr_v3/examples/bounds_sharded", (-3, -2), _grown_in_front()),
+    ("zarr_v3/examples/offset_grid", (-1, 0), _OFFSET_GRID),
+    ("zarr_v3/examples/offset_grid_transpose", (-1, 0), _OFFSET_GRID),
+]
+
+
+@pytest.mark.parametrize(
+    "name,origin,expected", BOUNDS_CASES, ids=[c[0] for c in BOUNDS_CASES]
+)
+def test_bounds_data(name, origin, expected, static_file_server, webdriver):
+    """Reads arrays whose chunk grid positions are negative: `bounds` with a lower bound below
+    zero, with and without sharding, and the `offset` chunk grid."""
+    server_url = static_file_server(TEST_DATA_DIR / name)
+    with webdriver.viewer.txn() as s:
+        s.layers.append(
+            name="a", layer=neuroglancer.ImageLayer(source=f"zarr://{server_url}")
+        )
+    vol = webdriver.viewer.volume("a").result()
+    assert tuple(vol.domain.origin) == origin
+    np.testing.assert_equal(vol.read().result(), expected)
+
+
 ## OME-ZARR 0.6 tests
 """Simplified OME-ZARR 0.6 transform tests.
 
