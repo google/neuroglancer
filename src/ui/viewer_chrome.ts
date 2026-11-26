@@ -31,6 +31,7 @@ import { LayerSidePanelManager } from "#src/ui/layer_side_panel.js";
 import { SelectionDetailsPanel } from "#src/ui/selection_details.js";
 import { SidePanelManager } from "#src/ui/side_panel.js";
 import { StatisticsPanel } from "#src/ui/statistics.js";
+import { ToolActivationStatus } from "#src/ui/tool.js";
 import {
   MultiToolPaletteDropdownButton,
   MultiToolPaletteManager,
@@ -57,8 +58,8 @@ interface CreditLink {
 declare let NEUROGLANCER_CREDIT_LINK: CreditLink | CreditLink[] | undefined;
 
 /**
- * Builds the chrome of a viewer: the top bar, the side panels and the tool
- * palettes.
+ * Builds the chrome of a viewer: the top bar, the side panels, the tool
+ * palettes and the status panel of the active tool.
  *
  * The chrome is a view of the viewer state. The `Viewer` constructor attaches
  * one unless the `chrome` option is false. A viewer with no chrome keeps the
@@ -143,6 +144,8 @@ export class ViewerChrome extends RefCounted {
         annotationToolStatus.element,
       ),
     );
+
+    this.registerDisposer(new ToolActivationStatus(viewer.globalToolBinder));
 
     if (stateShareEnabled) {
       const stateShare = this.registerDisposer(new StateShare(viewer));

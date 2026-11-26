@@ -20,12 +20,15 @@
  */
 
 import type { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+import type { WatchableValueInterface } from "#src/trackable_value.js";
+import { WatchableValue } from "#src/trackable_value.js";
 import type { ToolActivation } from "#src/ui/tool.js";
 import {
-  makeToolActivationStatusMessageWithHeader,
+  makeToolStatusContentWithHeader,
   registerTool,
   LayerTool,
 } from "#src/ui/tool.js";
+import type { RefCounted } from "#src/util/disposable.js";
 import { removeChildren } from "#src/util/dom.js";
 import type { ActionEvent } from "#src/util/event_action_map.js";
 import { EventActionMap, Modifiers } from "#src/util/event_action_map.js";
@@ -39,63 +42,54 @@ const SELECT_SEGMENTS_INPUT_EVENT_MAP = EventActionMap.fromObject({
   [`at:alt?+shift?+${selectEvent}`]: "drag-select-segments",
 });
 
-enum ToolState {
+export enum SelectSegmentsMode {
   IDLE = 0,
   SELECT = 1,
   DESELECT = 2,
 }
 
 export class SelectSegmentsTool extends LayerTool<SegmentationUserLayer> {
+  private mode_ = new WatchableValue(SelectSegmentsMode.IDLE);
+
+  /**
+   * The mode of the active drag. The value is `IDLE` when the tool is not
+   * active or no drag is in progress.
+   */
+  get mode(): Readonly<WatchableValueInterface<SelectSegmentsMode>> {
+    return this.mode_;
+  }
+
   toJSON() {
     return SELECT_SEGMENTS_TOOLS_ID;
   }
 
   activate(activation: ToolActivation<this>) {
-    const { layer } = this;
-    const { body, header } =
-      makeToolActivationStatusMessageWithHeader(activation);
-    let currentState = ToolState.IDLE;
+    const { layer, mode_: mode } = this;
+    let currentState = SelectSegmentsMode.IDLE;
     let painting = false;
     activation.bindInputEventMap(SELECT_SEGMENTS_INPUT_EVENT_MAP);
+    activation.registerDisposer(() => {
+      mode.value = SelectSegmentsMode.IDLE;
+    });
 
     const getNewState = () => {
       return globalModifiers.value & Modifiers.ALT
-        ? ToolState.DESELECT
-        : ToolState.SELECT;
+        ? SelectSegmentsMode.DESELECT
+        : SelectSegmentsMode.SELECT;
     };
-    const setCurrentState = (state: ToolState) => {
+    const setCurrentState = (state: SelectSegmentsMode) => {
       if (currentState !== state) {
         currentState = state;
         painting = false;
-        updateStatus();
+        // A drag can end after the activation ends.
+        if (!activation.wasDisposed) {
+          mode.value = state;
+        }
       }
     };
-
-    const updateStatus = () => {
-      removeChildren(body);
-      const msg = document.createElement("span");
-      switch (currentState) {
-        case ToolState.IDLE:
-          header.textContent = "Select/Deselect segments";
-          msg.textContent = `${selectEvent} to select segments; alt+${selectEvent} to deselect segments.`;
-          break;
-        case ToolState.SELECT:
-        case ToolState.DESELECT:
-          header.textContent = `${
-            currentState === ToolState.SELECT ? "Select" : "Deselect"
-          } segments`;
-          msg.textContent = `Drag to ${
-            currentState === ToolState.SELECT ? "select" : "deselect"
-          } segments (${
-            layer.displayState.segmentationGroupState.value.visibleSegments.size
-          } selected).`;
-      }
-      body.appendChild(msg);
-    };
-    updateStatus();
 
     const trySelectSegment = () => {
-      if (currentState === ToolState.IDLE) {
+      if (currentState === SelectSegmentsMode.IDLE) {
         return;
       }
       const { segmentSelectionState } = layer.displayState;
@@ -104,11 +98,11 @@ export class SelectSegmentsTool extends LayerTool<SegmentationUserLayer> {
         const { selectedSegments, visibleSegments } =
           layer.displayState.segmentationGroupState.value;
         switch (currentState) {
-          case ToolState.SELECT:
+          case SelectSegmentsMode.SELECT:
             selectedSegments.add(segment);
             visibleSegments.add(segment);
             break;
-          case ToolState.DESELECT:
+          case SelectSegmentsMode.DESELECT:
             selectedSegments.delete(segment);
             break;
         }
@@ -123,13 +117,8 @@ export class SelectSegmentsTool extends LayerTool<SegmentationUserLayer> {
       }),
     );
     activation.registerDisposer(
-      layer.displayState.segmentationGroupState.value.visibleSegments.changed.add(
-        updateStatus,
-      ),
-    );
-    activation.registerDisposer(
       globalModifiers.changed.add(() => {
-        if (currentState !== ToolState.IDLE) {
+        if (currentState !== SelectSegmentsMode.IDLE) {
           setCurrentState(getNewState());
         }
       }),
@@ -137,7 +126,7 @@ export class SelectSegmentsTool extends LayerTool<SegmentationUserLayer> {
 
     const startSelecting = (
       event: ActionEvent<MouseEvent>,
-      state: ToolState,
+      state: SelectSegmentsMode,
     ) => {
       event.stopPropagation();
       setCurrentState(state);
@@ -161,7 +150,7 @@ export class SelectSegmentsTool extends LayerTool<SegmentationUserLayer> {
         },
         (_event) => {
           painting = false;
-          setCurrentState(ToolState.IDLE);
+          setCurrentState(SelectSegmentsMode.IDLE);
         },
       );
     };
@@ -170,6 +159,41 @@ export class SelectSegmentsTool extends LayerTool<SegmentationUserLayer> {
       "drag-select-segments",
       (event: ActionEvent<MouseEvent>) => startSelecting(event, getNewState()),
     );
+  }
+
+  renderActivation(_activation: ToolActivation<this>, context: RefCounted) {
+    const { layer, mode } = this;
+    const { content, header, body } = makeToolStatusContentWithHeader();
+    const updateStatus = () => {
+      removeChildren(body);
+      const msg = document.createElement("span");
+      const currentState = mode.value;
+      switch (currentState) {
+        case SelectSegmentsMode.IDLE:
+          header.textContent = "Select/Deselect segments";
+          msg.textContent = `${selectEvent} to select segments; alt+${selectEvent} to deselect segments.`;
+          break;
+        case SelectSegmentsMode.SELECT:
+        case SelectSegmentsMode.DESELECT:
+          header.textContent = `${
+            currentState === SelectSegmentsMode.SELECT ? "Select" : "Deselect"
+          } segments`;
+          msg.textContent = `Drag to ${
+            currentState === SelectSegmentsMode.SELECT ? "select" : "deselect"
+          } segments (${
+            layer.displayState.segmentationGroupState.value.visibleSegments.size
+          } selected).`;
+      }
+      body.appendChild(msg);
+    };
+    updateStatus();
+    context.registerDisposer(mode.changed.add(updateStatus));
+    context.registerDisposer(
+      layer.displayState.segmentationGroupState.value.visibleSegments.changed.add(
+        updateStatus,
+      ),
+    );
+    return content;
   }
 
   get description() {
