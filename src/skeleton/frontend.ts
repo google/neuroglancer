@@ -296,7 +296,9 @@ const glsl_circleEmitter = `
 void emitRGBA(vec4 color) {
   color.a *= getSegmentAlpha();
   if (color.a <= 0.0) discard;
-  emit(premultiplyAlpha(getCircleColor(color, color)), vPickID);
+  // Keep the circle color in a local to avoid an ANGLE D3D11 compiler error.
+  vec4 nodeColor = getCircleColor(color, color);
+  emit(premultiplyAlpha(nodeColor), vPickID);
 }
 `;
 
