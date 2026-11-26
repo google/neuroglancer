@@ -437,7 +437,11 @@ export async function makeWarpedDataSource(
       const warped = isSkeleton
         ? makeWarpedSkeletonSource(chunkManager, mesh, ...placement)
         : makeWarpedMeshSource(chunkManager, mesh, ...placement);
-      if (warped !== undefined) keep({ mesh: warped });
+      if (warped !== undefined) {
+        keep({ mesh: warped });
+      } else {
+        messages.push("warp: meshes of this kind are not warped");
+      }
     } else if (volume !== undefined) {
       keep({
         volume: new WarpedMultiscaleVolumeChunkSource(

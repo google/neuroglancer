@@ -464,15 +464,16 @@ skeletons and annotations are stored as points instead, so each point ``v`` is
 moved to the point ``p`` of the output with ``p + u(p) = v``: the inverse of
 the volume's warp, so that they stay on the warped image.
 
-- **Meshes**: multiscale meshes are warped at their finest level of detail.
+- **Meshes**: multiscale meshes are warped at their finest level of detail;
+  single-resolution meshes as they are. Vertices move; the normals are kept.
 - **Skeletons**: vertices move; edges and vertex attributes are kept.
 - **Annotations** (precomputed annotation sources, 3-d): points, line and
   polyline vertices, and ellipsoid centres move exactly. A bounding box becomes
   the axis-aligned box around its 8 moved corners. Ellipsoid radii follow only
   the linear part. Properties, relationships (segment filtering) and selection
   by id work as on the unwarped source. The source is read-only.
-- **Not warped**: local (editable) annotations and single-resolution meshes.
-  They are left out of the warped source.
+- **Not warped**: local (editable) annotations. They are left out of the
+  warped source.
 
 All of these need a field that displaces exactly the 3 spatial dimensions of
 the source.

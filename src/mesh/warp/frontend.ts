@@ -15,16 +15,20 @@
  */
 
 /**
- * @file Warped meshes, frontend side: a multiscale mesh subsource of a warped
- * data source becomes a single-resolution mesh source in the field's space
- * (one level of detail), computed in the worker by `warp/backend.ts`.
+ * @file Warped meshes, frontend side: a mesh subsource of a warped data
+ * source becomes a single-resolution mesh source in the field's space (for a
+ * multiscale source, one level of detail), computed in the worker by
+ * `warp/backend.ts`.
  */
 
 import type { ChunkManager, ChunkSource } from "#src/chunk_manager/frontend.js";
 import { WithParameters } from "#src/chunk_manager/frontend.js";
 import type { CoordinateSpaceTransform } from "#src/coordinate_transform.js";
 import { MeshSource, MultiscaleMeshSource } from "#src/mesh/frontend.js";
-import { WarpedMeshSourceParameters } from "#src/mesh/warp/base.js";
+import {
+  WarpedMeshSourceParameters,
+  WarpedSingleResolutionMeshSourceParameters,
+} from "#src/mesh/warp/base.js";
 import type {
   DisplacementField,
   WarpGeometry,
@@ -41,9 +45,16 @@ class WarpedMeshSource extends WithParameters(
   dependencies: ChunkSource[] | undefined;
 }
 
+class WarpedSingleResolutionMeshSource extends WithParameters(
+  MeshSource,
+  WarpedSingleResolutionMeshSourceParameters,
+) {
+  dependencies: ChunkSource[] | undefined;
+}
+
 /**
- * A warped version of a multiscale mesh source, or undefined if the mesh
- * cannot be warped.
+ * A warped version of a mesh source (multiscale or single-resolution), or
+ * undefined if the mesh cannot be warped.
  */
 export function makeWarpedMeshSource(
   chunkManager: ChunkManager,
@@ -54,7 +65,9 @@ export function makeWarpedMeshSource(
   geometry: WarpGeometry,
   lod = 0,
 ): MeshSource | undefined {
-  if (!(mesh instanceof MultiscaleMeshSource)) return undefined;
+  if (!(mesh instanceof MultiscaleMeshSource || mesh instanceof MeshSource)) {
+    return undefined;
+  }
   const { storedToOutput, warp, dependencies } = makePointWarpSetup(
     mesh,
     subsourceToModel,
@@ -62,15 +75,20 @@ export function makeWarpedMeshSource(
     field,
     geometry,
   );
-  const source = chunkManager.getChunkSource(WarpedMeshSource, {
-    parameters: {
-      meshSource: mesh.rpcId!,
-      format: mesh.format,
-      storedToOutput,
-      lod,
-      warp,
-    },
-  });
+  const source =
+    mesh instanceof MultiscaleMeshSource
+      ? chunkManager.getChunkSource(WarpedMeshSource, {
+          parameters: {
+            meshSource: mesh.rpcId!,
+            format: mesh.format,
+            storedToOutput,
+            lod,
+            warp,
+          },
+        })
+      : chunkManager.getChunkSource(WarpedSingleResolutionMeshSource, {
+          parameters: { meshSource: mesh.rpcId!, storedToOutput, warp },
+        });
   attachDependencies(source, dependencies);
   return source;
 }

@@ -33,8 +33,12 @@ import { MeshSource } from "#src/mesh/backend.js";
 import type { EncodedMeshData } from "#src/mesh/base.js";
 import { VertexPositionFormat } from "#src/mesh/base.js";
 import type { MultiscaleMeshManifest } from "#src/mesh/multiscale.js";
-import { WarpedMeshSourceParameters } from "#src/mesh/warp/base.js";
+import {
+  WarpedMeshSourceParameters,
+  WarpedSingleResolutionMeshSourceParameters,
+} from "#src/mesh/warp/base.js";
 import { getObjectKey } from "#src/segmentation_display_state/base.js";
+import { applyAffine3 } from "#src/sliceview/volume/warp/affine.js";
 import type { Dependency } from "#src/sliceview/volume/warp/dependencies.js";
 import {
   objectDependency,
@@ -73,23 +77,11 @@ function storedLod(manifest: MultiscaleMeshManifest, lod: number) {
   return l;
 }
 
-@registerSharedObject()
-export class WarpedMeshSource extends WithParameters(
-  MeshSource,
-  WarpedMeshSourceParameters,
-) {
-  underlying: MultiscaleMeshSource;
-  warper: PointWarper;
-
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    const { parameters } = this;
-    this.underlying = rpc.get(parameters.meshSource);
-    this.warper = new PointWarper(rpc, parameters.warp);
-  }
-
-  // Computed from other chunks: they use the compute queue, so waiting for
-  // their dependencies never blocks downloads.
+/**
+ * A mesh source computed from another: its chunks use the compute queue, so
+ * waiting for their dependencies never blocks downloads.
+ */
+class ComputedMeshSource extends MeshSource {
   getChunk(objectId: bigint) {
     const chunk = super.getChunk(objectId);
     chunk.isComputational = true;
@@ -100,6 +92,36 @@ export class WarpedMeshSource extends WithParameters(
     const chunk = super.getFragmentChunk(manifestChunk, fragmentId);
     chunk.isComputational = true;
     return chunk;
+  }
+}
+
+/** The finished fragment: the moved vertices, with the original normals. */
+function warpedMeshData(
+  vertexPositions: Float64Array,
+  meshData: EncodedMeshData,
+): EncodedMeshData {
+  return {
+    vertexPositions: Float32Array.from(vertexPositions),
+    // The warp is smooth; the original normals are kept.
+    vertexNormals: meshData.vertexNormals.slice(),
+    indices: meshData.indices.slice(),
+    strips: meshData.strips,
+  };
+}
+
+@registerSharedObject()
+export class WarpedMeshSource extends WithParameters(
+  ComputedMeshSource,
+  WarpedMeshSourceParameters,
+) {
+  underlying: MultiscaleMeshSource;
+  warper: PointWarper;
+
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+    const { parameters } = this;
+    this.underlying = rpc.get(parameters.meshSource);
+    this.warper = new PointWarper(rpc, parameters.warp);
   }
 
   private getManifest(dep: Dependency, signal: AbortSignal) {
@@ -163,13 +185,7 @@ export class WarpedMeshSource extends WithParameters(
       v,
       signal,
     );
-    chunk.meshData = {
-      vertexPositions: Float32Array.from(p),
-      // The warp is smooth; the original normals are kept.
-      vertexNormals: meshData.vertexNormals.slice(),
-      indices: meshData.indices.slice(),
-      strips: meshData.strips,
-    };
+    chunk.meshData = warpedMeshData(p, meshData);
   }
 
   /** Vertices of a fragment, dequantized and in output coordinates. */
@@ -222,5 +238,78 @@ export class WarpedMeshSource extends WithParameters(
       }
     }
     return out;
+  }
+}
+
+/**
+ * A single-resolution mesh source warped: the moving source's manifests and
+ * fragments, with each fragment's (float32) vertices placed in the output
+ * space and inverse-warped.
+ */
+@registerSharedObject()
+export class WarpedSingleResolutionMeshSource extends WithParameters(
+  ComputedMeshSource,
+  WarpedSingleResolutionMeshSourceParameters,
+) {
+  underlying: MeshSource;
+  warper: PointWarper;
+
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+    const { parameters } = this;
+    this.underlying = rpc.get(parameters.meshSource);
+    this.warper = new PointWarper(rpc, parameters.warp);
+  }
+
+  async download(chunk: ManifestChunk, signal: AbortSignal) {
+    const dep = objectDependency(this.underlying, chunk.objectId);
+    chunk.fragmentIds = await withDependencies(
+      this.chunkManager,
+      chunk,
+      [dep],
+      () =>
+        waitForDependency(
+          dep,
+          signal,
+          (c) => (c as ManifestChunk).fragmentIds!.slice(),
+          () => displayedElsewhere("mesh"),
+        ),
+    );
+  }
+
+  async downloadFragment(chunk: FragmentChunk, signal: AbortSignal) {
+    const { underlying } = this;
+    const objectId = chunk.manifestChunk!.objectId;
+    const fragmentId = chunk.fragmentId!;
+    const manifestDep = objectDependency(underlying, objectId);
+    const fragmentDep: Dependency = {
+      source: underlying.fragmentSource,
+      key: underlying.getFragmentKey(getObjectKey(objectId), fragmentId).key,
+      get: () =>
+        underlying.getFragmentChunk(underlying.getChunk(objectId), fragmentId),
+    };
+    const meshData = await withDependencies(
+      this.chunkManager,
+      chunk,
+      [manifestDep, fragmentDep],
+      () =>
+        waitForDependency(
+          fragmentDep,
+          signal,
+          (c) => (c as FragmentChunk).meshData!,
+          () => displayedElsewhere("mesh"),
+        ),
+    );
+    const { vertexPositions } = meshData;
+    if (!(vertexPositions instanceof Float32Array)) {
+      throw new Error("warp: only float32 mesh vertices can be warped");
+    }
+    const p = await this.warper.inverseWarp(
+      this.chunkManager,
+      chunk,
+      applyAffine3(this.parameters.storedToOutput, vertexPositions),
+      signal,
+    );
+    chunk.meshData = warpedMeshData(p, meshData);
   }
 }

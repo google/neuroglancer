@@ -15,7 +15,8 @@
  */
 
 /**
- * @file Shared definitions for warped meshes: the meshes of a moving source,
+ * @file Shared definitions for warped meshes: the meshes of a moving source
+ * (multiscale, shown at one level of detail, or single-resolution),
  * shown in the space of a displacement field. Vertices move through the field
  * as described in `sliceview/volume/warp/point_warp.ts`.
  */
@@ -33,4 +34,13 @@ export class WarpedMeshSourceParameters {
   lod: number;
   warp: PointWarpParameters;
   static RPC_ID = "warp/WarpedMeshSource";
+}
+
+export class WarpedSingleResolutionMeshSourceParameters {
+  // rpcId of the moving single-resolution mesh source.
+  meshSource: number;
+  // Stored mesh coordinates -> output coordinates (row-major 4x4).
+  storedToOutput: number[];
+  warp: PointWarpParameters;
+  static RPC_ID = "warp/WarpedSingleResolutionMeshSource";
 }
