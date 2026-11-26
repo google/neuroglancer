@@ -55,10 +55,18 @@ function defaultNodeProject(): ViteUserConfig {
   };
 }
 
+// On GitHub Actions macOS and Windows runners, the S3 fixture can take more
+// than the default 10 s to start.
+const S3_FIXTURE_HOOK_TIMEOUT = 120000;
+
 const KVSTORE_TESTS_WITH_CUSTOM_CONDITIONS = [
   { name: "zip" },
   { name: "ocdbt" },
-  { name: "icechunk", conditions: ["neuroglancer/kvstore/s3:enabled"] },
+  {
+    name: "icechunk",
+    conditions: ["neuroglancer/kvstore/s3:enabled"],
+    hookTimeout: S3_FIXTURE_HOOK_TIMEOUT,
+  },
 ];
 
 export default defineWorkspace([
@@ -72,32 +80,32 @@ export default defineWorkspace([
       benchmark: {
         include: ["src/**/*.benchmark.ts"],
       },
-      // On Github actions macos runners, s3 fixture can take a long time for
-      // some reason.
-      hookTimeout: 120000,
+      hookTimeout: S3_FIXTURE_HOOK_TIMEOUT,
     },
   }),
-  ...KVSTORE_TESTS_WITH_CUSTOM_CONDITIONS.map(({ name, conditions = [] }) =>
-    mergeConfig(defaultNodeProject(), {
-      resolve: {
-        conditions: [
-          "neuroglancer/datasource:none_by_default",
-          "neuroglancer/kvstore:none_by_default",
-          "neuroglancer/layer:none_by_default",
-          `neuroglancer/kvstore/${name}:enabled`,
-          "neuroglancer/kvstore/http:enabled",
-          ...conditions,
-        ],
-      },
-      test: {
-        name: `kvstore/${name}`,
-        include: [`tests/kvstore/${name}.spec.ts`],
-        setupFiles: ["#src/kvstore/enabled_frontend_modules.js"],
-        benchmark: {
-          include: [],
+  ...KVSTORE_TESTS_WITH_CUSTOM_CONDITIONS.map(
+    ({ name, conditions = [], hookTimeout }) =>
+      mergeConfig(defaultNodeProject(), {
+        resolve: {
+          conditions: [
+            "neuroglancer/datasource:none_by_default",
+            "neuroglancer/kvstore:none_by_default",
+            "neuroglancer/layer:none_by_default",
+            `neuroglancer/kvstore/${name}:enabled`,
+            "neuroglancer/kvstore/http:enabled",
+            ...conditions,
+          ],
         },
-      },
-    }),
+        test: {
+          name: `kvstore/${name}`,
+          include: [`tests/kvstore/${name}.spec.ts`],
+          setupFiles: ["#src/kvstore/enabled_frontend_modules.js"],
+          hookTimeout,
+          benchmark: {
+            include: [],
+          },
+        },
+      }),
   ),
   {
     define: browserDefines,
