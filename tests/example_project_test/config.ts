@@ -69,8 +69,8 @@ const CLIENTS = [ROOT_CLIENT, ...EXAMPLE_PROJECTS];
 
 type ClientTestProject = Project<ClientTestOptions>;
 
-// Longer than the page load, dev server start and data load waits together.
-const SCREENSHOT_TEST_TIMEOUT = 120000;
+// Set longer than the data load timeout with some extra leeway
+const SCREENSHOT_TEST_TIMEOUT = 40000;
 
 export default defineConfig<ClientTestOptions>({
   projects: [
