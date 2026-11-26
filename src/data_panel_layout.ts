@@ -94,6 +94,7 @@ export interface ViewerUIState
   selectionDetailsState: TrackableDataSelectionState;
   showPerspectiveSliceViews: TrackableBoolean;
   showAxisLines: TrackableBoolean;
+  showCrossSectionHoverPosition: TrackableBoolean;
   wireFrame: TrackableBoolean;
   enableAdaptiveDownsampling: TrackableBoolean;
   showScaleBar: TrackableBoolean;
@@ -181,6 +182,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     mouseState: viewer.mouseState,
     layerManager: viewer.layerManager,
     showAxisLines: viewer.showAxisLines,
+    showCrossSectionHoverPosition: viewer.showCrossSectionHoverPosition,
     wireFrame: viewer.wireFrame,
     enableAdaptiveDownsampling: viewer.enableAdaptiveDownsampling,
     visibleLayerRoles: viewer.visibleLayerRoles,

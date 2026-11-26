@@ -33,6 +33,7 @@ export interface ViewerState extends VisibilityPrioritySpecification {
   navigationState: NavigationState;
   mouseState: MouseSelectionState;
   showAxisLines: TrackableBoolean;
+  showCrossSectionHoverPosition: TrackableBoolean;
   layerManager: LayerManager;
   selectedLayer: SelectedLayerState;
   selectionDetailsState: TrackableDataSelectionState;

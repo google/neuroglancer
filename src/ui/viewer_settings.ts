@@ -116,6 +116,10 @@ export class ViewerSettingsPanel extends SidePanel {
       scroll.appendChild(labelElement);
     };
     addCheckbox("Show axis lines", viewer.showAxisLines);
+    addCheckbox(
+      "Show hover position in all cross-sections",
+      viewer.showCrossSectionHoverPosition,
+    );
     addCheckbox("Show scale bar", viewer.showScaleBar);
     addCheckbox("Show cross sections in 3-d", viewer.showPerspectiveSliceViews);
     addCheckbox(
