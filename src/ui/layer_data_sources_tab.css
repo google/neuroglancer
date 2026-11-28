@@ -130,3 +130,30 @@ li.neuroglancer-message-info {
 .neuroglancer-layer-data-sources-tab .neuroglancer-progress > li {
   color: #ccc;
 }
+
+.neuroglancer-layer-data-source-transform-source {
+  margin: 4px 0 2px 0;
+}
+
+.neuroglancer-layer-data-source-transform-source-url {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+}
+
+.neuroglancer-layer-data-source-transform-source-label {
+  color: #aaa;
+  flex: none;
+}
+
+.neuroglancer-layer-data-source-transform-source-url
+  > .neuroglancer-multiline-autocomplete {
+  flex: 1;
+  min-width: 0;
+}
+
+.neuroglancer-layer-data-source-transform-source-prepend {
+  display: block;
+  color: #aaa;
+  margin-top: 2px;
+}

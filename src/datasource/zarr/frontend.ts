@@ -38,6 +38,7 @@ import "#src/datasource/zarr/codec/crc32c/resolve.js";
 import "#src/datasource/zarr/codec/gzip/resolve.js";
 import "#src/datasource/zarr/codec/sharding_indexed/resolve.js";
 import "#src/datasource/zarr/codec/transpose/resolve.js";
+import "#src/datasource/zarr/codec/warpfield/resolve.js";
 import type {
   ArrayMetadata,
   DimensionSeparator,
@@ -74,6 +75,7 @@ import {
   MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource,
   VolumeChunkSource,
 } from "#src/sliceview/volume/frontend.js";
+import type { TransformChain } from "#src/sliceview/volume/warp/transform_source.js";
 import { transposeNestedArrays } from "#src/util/array.js";
 import {
   applyCompletionOffset,
@@ -517,6 +519,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
           explicitDimensionSeparator: dimensionSeparator,
         });
         let channelMetadata: ChannelMetadata | undefined;
+        let transformChain: TransformChain | undefined;
         if (metadata === undefined) {
           throw new Error("No zarr metadata found");
         }
@@ -532,6 +535,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
             throw new Error("Neither array nor OME multiscale metadata found");
           }
           channelMetadata = omeMetadata.channels;
+          transformChain = omeMetadata.multiscale.transformChain;
           multiscaleInfo = await resolveOmeMultiscale(
             sharedKvStoreContext,
             omeMetadata.multiscale,
@@ -572,6 +576,7 @@ export class ZarrDataSource implements KvStoreBasedDataSourceProvider {
           canonicalUrl: `${kvStoreUrl}|zarr${metadata.zarrVersion}:`,
           modelTransform,
           channelMetadata,
+          transformChain,
           subsources: [
             {
               id: "default",

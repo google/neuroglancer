@@ -81,6 +81,11 @@ space<global-coordinate-space>`.
 The data source provides a default value for the coordinate transform,
 normally an identity matrix.
 
+A data source may also have a :ref:`transform source<transform-sources>`: a
+transformation loaded from a URL (or from the source's own OME-Zarr metadata)
+that may include a displacement field. The coordinate transform is then
+applied after it, and defaults to its last linear part.
+
 The user can configure the coordinate transform in three ways:
 
 1. The affine transformation matrix scaling and translation coefficients may be

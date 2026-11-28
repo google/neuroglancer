@@ -25,6 +25,8 @@ import {
   registerAutoDetectV2,
   registerAutoDetectV3,
 } from "#src/datasource/zarr/frontend.js";
+// Transform sources ("transformSource" on a layer source) read their displacement fields as zarr.
+import "#src/sliceview/volume/warp/frontend.js";
 
 for (const provider of [
   new ZarrDataSource(),

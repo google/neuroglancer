@@ -44,6 +44,10 @@ import type { SegmentationGraphSource } from "#src/segmentation_graph/source.js"
 import type { SingleMeshSource } from "#src/single_mesh/frontend.js";
 import type { SkeletonSource } from "#src/skeleton/frontend.js";
 import type { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
+import type {
+  TransformChain,
+  TransformSourceSpecification,
+} from "#src/sliceview/volume/warp/transform_source.js";
 import type { WatchableValueInterface } from "#src/trackable_value.js";
 import type {
   BasicCompletionResult,
@@ -201,6 +205,11 @@ export interface DataSource {
   state?: Trackable;
   canonicalUrl?: string;
   channelMetadata?: ChannelMetadata;
+  // A transformation from the source's own metadata that has a displacement
+  // field (e.g. an OME-Zarr image's transformation to its output system),
+  // applied when the data source specification gives no transform source.
+  // `modelTransform` then maps to the chain's input system.
+  transformChain?: TransformChain;
 }
 
 export interface DataSourceRedirect {
@@ -230,6 +239,15 @@ export interface DataSourceSpecification {
   enableDefaultSubsources: boolean;
   subsources: Map<string, DataSubsourceSpecification>;
   state?: any;
+
+  // A transform source: a transformation (linear, or with a displacement
+  // field through which the source's volumes and meshes are warped without
+  // copying data) between the source's space and the layer's. The source's
+  // `transform` is applied after it (see `prependTransform`).
+  transformSource?: TransformSourceSpecification;
+
+  // Applies `transform` before the transform source instead of after it.
+  prependTransform?: boolean;
 
   // Indicates that the spec was set manually in the UI.
   setManually?: boolean;

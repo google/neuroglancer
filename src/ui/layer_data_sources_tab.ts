@@ -136,6 +136,152 @@ class SourceUrlAutocomplete extends AutocompleteTextInput {
   }
 }
 
+/**
+ * The data source's transform source ("transformSource"): the URL of an
+ * OME-Zarr transformation (a scene, a group of transformations, an image, or
+ * a JSON file of such metadata) or of a displacement field. Shown and wrapped
+ * like the source URL. Committing a new value (Enter or leaving the field)
+ * reloads the source; an empty value removes it. Escape reverts to the
+ * current value.
+ */
+class TransformSourceUrlInput extends AutocompleteTextInput {
+  row = document.createElement("div");
+
+  constructor(public source: Borrowed<LayerDataSource>) {
+    super({
+      completer: () => null,
+      syntaxHighlighter: dataSourceUrlSyntaxHighlighter,
+      delay: 0,
+    });
+    this.placeholder = "Transform source URL (none)";
+    const { row, element } = this;
+    row.classList.add("neuroglancer-layer-data-source-transform-source-url");
+    row.title =
+      "The transformation from this source's space to the layer's: the URL " +
+      "of an OME-Zarr transformation (a scene, a group of transformations, " +
+      "an image, or a JSON file of OME-Zarr metadata) of linear " +
+      "transformations and at most one displacement field, or of a " +
+      'displacement field alone (the layer JSON source "transformSource"). ' +
+      "Its last linear part becomes the transform below. Leave empty for " +
+      "none.";
+    const label = document.createElement("span");
+    label.classList.add(
+      "neuroglancer-layer-data-source-transform-source-label",
+    );
+    label.textContent = "transform";
+    row.appendChild(label);
+    element.classList.add("neuroglancer-layer-data-source-url-input");
+    row.appendChild(element);
+    this.onCommit.add((value) => this.commit(value));
+    this.registerDisposer(() => removeFromParent(row));
+    this.updateView();
+  }
+
+  private commit(value: string) {
+    const trimmed = value.trim();
+    const { source } = this;
+    const spec = source.spec;
+    if ((spec.transformSource?.url ?? "") === trimmed) return;
+    const prepend = spec.prependTransform === true;
+    source.spec = {
+      ...spec,
+      transformSource: trimmed.length === 0 ? undefined : { url: trimmed },
+      // The transform starts as the new transform source's last linear part;
+      // a prepended one places the source and is kept.
+      transform: prepend ? spec.transform : undefined,
+      prependTransform:
+        trimmed.length === 0 ? undefined : spec.prependTransform,
+    };
+  }
+
+  cancel() {
+    this.value = this.source.spec.transformSource?.url ?? "";
+    this.inputElement.blur();
+    return true;
+  }
+
+  updateView() {
+    const { spec } = this.source;
+    // A transformation from the source's own metadata applies unless one is
+    // given.
+    const ownChain = getOwnTransformChain(this.source);
+    this.placeholder =
+      ownChain === undefined
+        ? "Transform source URL (none)"
+        : `${ownChain.field?.url ?? "linear transformation"} (from the ` +
+          "source's metadata)";
+    if (document.activeElement !== this.inputElement) {
+      this.value = spec.transformSource?.url ?? "";
+    }
+  }
+}
+
+function getOwnTransformChain(source: LayerDataSource) {
+  const { loadState } = source;
+  return loadState !== undefined && loadState.error === undefined
+    ? loadState.dataSource.transformChain
+    : undefined;
+}
+
+/**
+ * The transform source's URL and whether the source's transform is applied
+ * before it ("prependTransform") instead of after. Placed just above the
+ * transform.
+ */
+class TransformSourceView extends RefCounted {
+  element = document.createElement("div");
+  urlInput: TransformSourceUrlInput;
+  private prependLabel = document.createElement("label");
+  private prependCheckbox = document.createElement("input");
+
+  constructor(public source: Borrowed<LayerDataSource>) {
+    super();
+    const { element, prependLabel, prependCheckbox } = this;
+    element.classList.add("neuroglancer-layer-data-source-transform-source");
+    this.urlInput = this.registerDisposer(new TransformSourceUrlInput(source));
+    element.appendChild(this.urlInput.row);
+    prependCheckbox.type = "checkbox";
+    prependLabel.classList.add(
+      "neuroglancer-layer-data-source-transform-source-prepend",
+    );
+    prependLabel.title =
+      "Apply the transform below before the transform source (to the " +
+      "source's own coordinates), instead of after it. The transform then " +
+      "starts as the source's own placement, and the transform source's " +
+      "last linear part is applied as is. Changing this resets the " +
+      "transform.";
+    prependLabel.appendChild(prependCheckbox);
+    prependLabel.appendChild(
+      document.createTextNode("Prepend the transform (apply it first)"),
+    );
+    element.appendChild(prependLabel);
+    prependCheckbox.addEventListener("change", () => {
+      const { spec } = this.source;
+      const prepend = prependCheckbox.checked;
+      if ((spec.prependTransform === true) === prepend) return;
+      this.source.spec = {
+        ...spec,
+        prependTransform: prepend ? true : undefined,
+        transform: undefined,
+      };
+    });
+    this.registerDisposer(() => removeFromParent(element));
+    this.updateView();
+  }
+
+  updateView() {
+    const { spec } = this.source;
+    this.element.style.display = spec.url.length === 0 ? "none" : "";
+    this.urlInput.updateView();
+    this.prependCheckbox.checked = spec.prependTransform === true;
+    this.prependLabel.style.display =
+      spec.transformSource !== undefined ||
+      getOwnTransformChain(this.source) !== undefined
+        ? ""
+        : "none";
+  }
+}
+
 export class MessagesView extends RefCounted {
   element = document.createElement("ul");
   generation = -1;
@@ -308,6 +454,8 @@ export class DataSourceSubsourceView extends RefCounted {
 
 export class LoadedDataSourceView extends RefCounted {
   element = document.createElement("div");
+  // The transform's widget, if shown: the transform source goes above it.
+  transformElement: HTMLElement | null = null;
 
   constructor(public source: Borrowed<LoadedLayerDataSource>) {
     super();
@@ -348,8 +496,23 @@ export class LoadedDataSourceView extends RefCounted {
           .element,
       );
     }
-    const { transform } = source;
-    if (transform.mutableSourceRank || transform.value.sourceRank !== 0) {
+    const { transform, movingTransform } = source;
+    if (movingTransform !== undefined) {
+      // A prepended transform: the editable transform places the source
+      // before the transform source (the layer JSON "transform").
+      const transformWidget = this.registerDisposer(
+        new CoordinateSpaceTransformWidget(
+          movingTransform,
+          source.layer.localCoordinateSpaceCombiner,
+          source.layer.manager.root.coordinateSpaceCombiner,
+        ),
+      );
+      this.element.appendChild(transformWidget.element);
+      this.transformElement = transformWidget.element;
+    } else if (
+      transform.mutableSourceRank ||
+      transform.value.sourceRank !== 0
+    ) {
       const transformWidget = this.registerDisposer(
         new CoordinateSpaceTransformWidget(
           source.transform,
@@ -358,6 +521,7 @@ export class LoadedDataSourceView extends RefCounted {
         ),
       );
       this.element.appendChild(transformWidget.element);
+      this.transformElement = transformWidget.element;
     }
     this.registerDisposer(() => removeFromParent(this.element));
   }
@@ -366,6 +530,7 @@ export class LoadedDataSourceView extends RefCounted {
 export class DataSourceView extends RefCounted {
   element = document.createElement("div");
   urlInput: SourceUrlAutocomplete;
+  transformSourceView: TransformSourceView;
 
   seenGeneration = 0;
   generation = -1;
@@ -414,6 +579,9 @@ export class DataSourceView extends RefCounted {
     const { element } = this;
     element.classList.add("neuroglancer-layer-data-source");
     element.appendChild(urlInput.element);
+    this.transformSourceView = this.registerDisposer(
+      new TransformSourceView(source),
+    );
     element.appendChild(
       this.registerDisposer(new MessagesView(source.messages)).element,
     );
@@ -432,6 +600,7 @@ export class DataSourceView extends RefCounted {
     this.generation = generation;
     this.urlInput.value = this.source.spec.url;
     this.urlInput.dirty.value = false;
+    this.transformSourceView.updateView();
     const { loadState } = this.source;
     let { loadedView } = this;
     if (loadedView !== undefined) {
@@ -441,9 +610,19 @@ export class DataSourceView extends RefCounted {
       loadedView.dispose();
       loadedView = this.loadedView = undefined;
     }
+    // The transform source goes just above the transform, or at the end
+    // while the source is not loaded (so that it can be changed when it
+    // fails to load).
+    const transformSourceElement = this.transformSourceView.element;
     if (loadState instanceof LoadedLayerDataSource) {
       loadedView = this.loadedView = new LoadedDataSourceView(loadState);
       this.element.appendChild(loadedView.element);
+      loadedView.element.insertBefore(
+        transformSourceElement,
+        loadedView.transformElement,
+      );
+    } else {
+      this.element.appendChild(transformSourceElement);
     }
   }
 
