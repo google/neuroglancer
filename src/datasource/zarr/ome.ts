@@ -430,9 +430,12 @@ export function parseOmeCoordinateTransforms(
 // sequence[affine, inverseOf(displacements), affine]. It is split into
 //   input -> output = post ∘ W ∘ pre,
 // with `pre` and `post` linear and W the field's map, in the field's own
-// coordinates. Rendering pulls output points back into the source, so W must
-// be given by its inverse D(p) = p + u(p) (the field sampled on the output
-// side): inverseOf(displacements), or a bijection whose inverse is one. The
+// coordinates. Rendering pulls output points back into the source, so it uses
+// W's inverse D(p) = p + u(p) (a field sampled on the output side):
+// inverseOf(displacements), or a bijection whose inverse is one. A field that
+// maps the other way (W itself) is marked "derive": its inverse is derived
+// from it where needed (`warp/derived_field.ts`). A bijection's other field,
+// if it is D⁻¹ in D's coordinates, is kept for moving points. The
 // split is found by inverting the transformation symbolically into
 //   input <- after ∘ D ∘ before <- output,
 // so that pre = after⁻¹ and post = before⁻¹. Without a field, pre is the
@@ -464,6 +467,14 @@ export interface OmeTransformChain {
     // The axes (indices into the chain's axes) the field acts on, in order:
     // the field's own spatial axes.
     spaceAxes: number[];
+    // The field maps the input's points to the output (W, not D): drawing
+    // uses its derived inverse.
+    derive?: boolean;
+    // A stored field of D's inverse (the other field of a bijection), for
+    // moving points: D⁻¹ = P ∘ D' ∘ P⁻¹, with D' the field at `url` and P
+    // (`placement`, homogeneous (rank + 1)^2 column-major, acting on the space
+    // axes) its placement in D's coordinates.
+    inverse?: { url: string; placement: Float64Array };
   };
 }
 
@@ -654,6 +665,10 @@ interface FieldForm {
   before: Float64Array;
   url: string;
   after: Float64Array;
+  // D is the inverse of the field's map (see OmeTransformChain).
+  derive?: boolean;
+  // A stored field of D⁻¹ (see OmeTransformChain).
+  inverse?: { url: string; placement: Float64Array };
 }
 
 /**
@@ -714,7 +729,64 @@ function combineFieldForm(
     before: homogeneousMultiply(rank, field.before, before),
     url: field.url,
     after: homogeneousMultiply(rank, after, field.after),
+    derive: field.derive,
+    inverse: field.inverse,
   };
+}
+
+function isHomogeneousIdentity(rank: number, m: Float64Array) {
+  for (let i = 0; i <= rank; ++i) {
+    for (let j = 0; j <= rank; ++j) {
+      if (Math.abs(m[j * (rank + 1) + i] - (i === j ? 1 : 0)) > 1e-6) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * A bijection's member `t` (as `form`) with the other member's field, when it
+ * is D⁻¹ placed by an affine. With t = a ∘ D ∘ b and the other member
+ * t⁻¹ = a' ∘ D' ∘ b', D⁻¹ = (b ∘ a') ∘ D' ∘ (b' ∘ a) = P ∘ D' ∘ Q: the
+ * other field, placed by P, is D⁻¹ when Q = P⁻¹ (e.g. two fields sampled on
+ * different grids, each between translations). P must not mix the space axes
+ * with the others.
+ */
+function withBijectionInverse(
+  ctx: ChainContext,
+  form: FieldForm,
+  other: unknown,
+): FieldForm {
+  let o: FieldForm;
+  try {
+    o = forwardFieldForm(ctx, other);
+  } catch {
+    return form;
+  }
+  const { rank, spaceAxes } = ctx;
+  const placement = homogeneousMultiply(rank, form.before, o.after);
+  const q = homogeneousMultiply(rank, o.before, form.after);
+  if (
+    form.derive ||
+    o.derive ||
+    !isHomogeneousIdentity(rank, homogeneousMultiply(rank, placement, q))
+  ) {
+    return form;
+  }
+  const isSpace = (i: number) => spaceAxes.includes(i);
+  for (let i = 0; i < rank; ++i) {
+    for (let j = 0; j <= rank; ++j) {
+      const v = placement[j * (rank + 1) + i];
+      const identity = i === j ? 1 : 0;
+      // Space rows may mix space columns (and translate); others must be
+      // the identity.
+      if (isSpace(i) ? j < rank && !isSpace(j) && v !== 0 : v !== identity) {
+        return form;
+      }
+    }
+  }
+  return { ...form, inverse: { url: o.url, placement } };
 }
 
 function parseFieldMembers(t: unknown) {
@@ -762,9 +834,13 @@ function forwardFieldForm(ctx: ChainContext, t: unknown): FieldForm {
         ),
       );
     case "bijection":
-      return forwardFieldForm(
+      return withBijectionInverse(
         ctx,
-        verifyObjectProperty(t, "forward", (x) => x),
+        forwardFieldForm(
+          ctx,
+          verifyObjectProperty(t, "forward", (x) => x),
+        ),
+        verifyObjectProperty(t, "inverse", (x) => x),
       );
     case "inverseOf":
       return inverseFieldForm(
@@ -782,15 +858,10 @@ function forwardFieldForm(ctx: ChainContext, t: unknown): FieldForm {
 function inverseFieldForm(ctx: ChainContext, t: unknown): FieldForm {
   const type = verifyObjectProperty(t, "type", verifyString);
   switch (type) {
-    case "displacements": {
-      const path = verifyObjectProperty(t, "path", verifyString);
-      throw new Error(
-        `The displacement field ${JSON.stringify(path)} maps the image's ` +
-          "points to the output space, and drawing the image needs the " +
-          "inverse: give the field of the inverse direction (sampled on the " +
-          'output side) with "inverseOf", or both fields with "bijection"',
-      );
-    }
+    case "displacements":
+      // The field maps the image's points to the output space; drawing
+      // needs its inverse, which is derived from it.
+      return { ...forwardFieldForm(ctx, t), derive: true };
     case "sequence":
       // (m_k ∘ ... ∘ m_0)⁻¹ = m_0⁻¹ ∘ ... ∘ m_k⁻¹: the inverses in reverse.
       return combineFieldForm(
@@ -805,9 +876,13 @@ function inverseFieldForm(ctx: ChainContext, t: unknown): FieldForm {
           }),
       );
     case "bijection":
-      return forwardFieldForm(
+      return withBijectionInverse(
         ctx,
-        verifyObjectProperty(t, "inverse", (x) => x),
+        forwardFieldForm(
+          ctx,
+          verifyObjectProperty(t, "inverse", (x) => x),
+        ),
+        verifyObjectProperty(t, "forward", (x) => x),
       );
     case "inverseOf":
       return forwardFieldForm(
@@ -870,7 +945,13 @@ export function parseOmeTransformChain(
     };
   }
   // The pull-back (output -> input) is after ∘ D ∘ before.
-  const { before, url, after } = inverse
+  const {
+    before,
+    url,
+    after,
+    derive,
+    inverse: inverseField,
+  } = inverse
     ? forwardFieldForm(ctx, transformation)
     : inverseFieldForm(ctx, transformation);
   const pre = homogeneousInverse(rank, after);
@@ -890,7 +971,18 @@ export function parseOmeTransformChain(
       }
     }
   }
-  return { inputAxes, outputAxes, pre, post, field: { url, spaceAxes } };
+  return {
+    inputAxes,
+    outputAxes,
+    pre,
+    post,
+    field: {
+      url,
+      spaceAxes,
+      ...(derive ? { derive } : {}),
+      ...(inverseField !== undefined ? { inverse: inverseField } : {}),
+    },
+  };
 }
 
 /** pre and post of a chain without a field, as one matrix. */

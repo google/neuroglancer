@@ -57,8 +57,9 @@ export function makePointWarp(
   field: DisplacementField,
   geometry: WarpGeometry,
 ): { parameters: PointWarpParameters; dependencies: ChunkSource[] } {
-  // With the field of the inverse transformation, points move directly;
-  // otherwise p + u(p) = v is solved on this field.
+  // With the field of the inverse transformation (stored, or derived for
+  // OME-Zarr fields), points move directly; otherwise (other formats)
+  // p + u(p) = v is solved on this field.
   const inverse = field.inverse;
   const fineField = inverse ?? field;
   const fineGeometry =

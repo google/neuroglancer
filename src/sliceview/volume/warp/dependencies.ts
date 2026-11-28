@@ -84,19 +84,32 @@ class DependencyRequests {
 
   private update() {
     const { chunkManager } = this;
-    for (const { requester, deps } of this.requests) {
-      const tier = requester.newPriorityTier;
-      if (tier === ChunkPriorityTier.RECENT) continue;
-      // Slightly ahead of the chunks that are not yet being computed.
-      const priority = requester.newPriority + 1;
-      for (const dep of deps) {
-        chunkManager.requestChunk(
-          dep.get(),
-          tier,
-          priority,
-          ChunkState.SYSTEM_MEMORY_WORKER,
-        );
+    // A requester may itself be a dependency (a warped mesh fragment needs a
+    // derived field chunk, which needs stored field chunks), requested only
+    // later in this pass: passes repeat until no more requesters are.
+    let pending = Array.from(this.requests);
+    while (pending.length > 0) {
+      const waiting: DependencyRequest[] = [];
+      for (const request of pending) {
+        const { requester, deps } = request;
+        const tier = requester.newPriorityTier;
+        if (tier === ChunkPriorityTier.RECENT) {
+          waiting.push(request);
+          continue;
+        }
+        // Slightly ahead of the chunks that are not yet being computed.
+        const priority = requester.newPriority + 1;
+        for (const dep of deps) {
+          chunkManager.requestChunk(
+            dep.get(),
+            tier,
+            priority,
+            ChunkState.SYSTEM_MEMORY_WORKER,
+          );
+        }
       }
+      if (waiting.length === pending.length) break;
+      pending = waiting;
     }
   }
 

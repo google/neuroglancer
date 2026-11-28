@@ -218,17 +218,23 @@ export interface DisplacementFieldMetadata {
   scales: {
     path: string;
     indexToOutput: number[][];
+    // Row-major: spatial array index -> field system (rows and columns:
+    // spatialAxes, then the translation column).
+    indexToSystem: number[][];
     // Deviation from the finest level when linearly interpolated, in field
-    // units, if known.
+    // units, if known (the 99th percentile if given: for choosing levels).
     maxError?: number;
+    // How far the finest field can be from this level's interpolation, in
+    // field units: the maximum interpolation error plus the codec error
+    // bounds of this level and the finest. Undefined if the maximum is not
+    // given. Bounds where the field maps to (`derived_field.ts`).
+    maxErrorBound?: number;
   }[];
   // Row-major: field system displacement (columns: spatialAxes) -> output
   // displacement (rows: output axes).
   systemToOutput: number[][];
   // The displaced axes (names of field system axes), if the metadata says.
   displacedAxes?: string[];
-  // URL of the field of the inverse transformation (from the scene).
-  inverse?: string;
 }
 
 /**
@@ -370,8 +376,22 @@ export function parseDisplacementFieldMetadata(
     {},
   );
   const levelErrors = new Map<string, number>();
+  const levelMaxErrors = new Map<string, number>();
+  const levelCodecBounds = new Map<string, number>();
+  const codecBound =
+    verifyOptionalObjectProperty(extras, "error_bound", verifyFiniteFloat) ?? 0;
   verifyOptionalObjectProperty(extras, "levels", (x) =>
     parseArray(x, (l) => {
+      const path = verifyObjectProperty(l, "path", verifyString);
+      const max = verifyOptionalObjectProperty(l, "interpolation_error", (e) =>
+        verifyOptionalObjectProperty(e, "max", verifyFiniteFloat),
+      );
+      if (max !== undefined) levelMaxErrors.set(path, max);
+      levelCodecBounds.set(
+        path,
+        verifyOptionalObjectProperty(l, "error_bound", verifyFiniteFloat) ??
+          codecBound,
+      );
       // The level choice is global, so it uses the 99th percentile when the
       // store gives one: the max is set by the worst sample anywhere (a fold,
       // or an unconstrained field outside the tissue) and would force the
@@ -384,7 +404,7 @@ export function parseDisplacementFieldMetadata(
           verifyObjectProperty(e, "max", verifyFiniteFloat),
       );
       if (err !== undefined) {
-        levelErrors.set(verifyObjectProperty(l, "path", verifyString), err);
+        levelErrors.set(path, err);
       }
     }),
   );
@@ -396,7 +416,19 @@ export function parseDisplacementFieldMetadata(
       d[rank * (rank + 1) + r],
     ]);
     const indexToOutput = composeAffine(affine, indexToSystem);
-    return { path, indexToOutput, maxError: levelErrors.get(path) };
+    const max = levelMaxErrors.get(path);
+    return {
+      path,
+      indexToOutput,
+      indexToSystem,
+      maxError: levelErrors.get(path),
+      maxErrorBound:
+        max === undefined
+          ? undefined
+          : max +
+            (levelCodecBounds.get(path) ?? codecBound) +
+            (levelCodecBounds.get(datasets[0].path) ?? codecBound),
+    };
   });
   return {
     path: scales[0].path,
@@ -459,8 +491,20 @@ export interface DisplacementField {
   // The field's own placement (model -> output), which the warp
   // specification's transform modifies.
   defaultTransform?: CoordinateSpaceTransform;
-  // The field of the inverse transformation, if the metadata names one.
+  // The field of the inverse transformation, for moving points: the stored
+  // one (the other field of a bijection), else, on a derived field, the
+  // stored field it inverts; without one, the warped data source derives it
+  // when it has points to move.
   inverse?: DisplacementField;
+  // Makes the field of the inverse transformation from this one, chunk by
+  // chunk where it is needed (OME-Zarr displacement fields).
+  deriveInverse?: (options: {
+    signal?: AbortSignal;
+  }) => Promise<DisplacementField>;
+  // Set on a derived field: the stored field it inverts.
+  derivedFrom?: DisplacementField;
+  // Warnings to show with the layers the field warps.
+  messages?: string[];
 }
 
 export interface GetDisplacementFieldOptions extends Partial<ProgressOptions> {
@@ -542,10 +586,12 @@ function displacementsPath(t: unknown): string | undefined {
 }
 
 /**
- * The URL of the field of the inverse transformation: looks for an OME-Zarr
- * scene in the field's parent or grandparent group (RFC-5 keeps transformation
- * arrays in a "coordinateTransformations" group next to the images) with a
- * "bijection" whose forward or inverse transformation uses this field.
+ * The URL of the field of the inverse transformation, for a field opened by
+ * its URL alone: looks for an OME-Zarr scene in the field's parent or
+ * grandparent group (RFC-5 keeps transformation arrays in a
+ * "coordinateTransformations" group next to the images) with a "bijection"
+ * whose forward or inverse transformation uses this field. (In a
+ * transformation chain, the chain names the bijection's other field.)
  */
 async function findInverseInScene(
   registry: DataSourceRegistry,
@@ -576,6 +622,24 @@ async function findInverseInScene(
     }
   }
   return undefined;
+}
+
+/**
+ * The stored field of the inverse transformation, for moving points directly
+ * (faster than deriving it); undefined, with a warning, if it cannot be
+ * opened, so that it is derived instead.
+ */
+export async function getStoredInverseField(
+  registry: DataSourceRegistry,
+  spec: WarpSpecification,
+  options: GetDisplacementFieldOptions,
+): Promise<DisplacementField | undefined> {
+  try {
+    return await getDisplacementField(registry, spec, options, false);
+  } catch (e) {
+    console.warn(`warp: could not open the inverse field ${spec.url}: ${e}`);
+    return undefined;
+  }
 }
 
 /** Index of the largest |value| (ties: the first). */
@@ -671,7 +735,6 @@ async function getWarpfieldDisplacementField(
   metadata: DisplacementFieldMetadata,
   spec: WarpSpecification,
   options: GetDisplacementFieldOptions,
-  loadInverse: boolean,
 ): Promise<DisplacementField> {
   const openArray = async (path: string) => {
     const source = await registry.get({
@@ -698,22 +761,41 @@ async function getWarpfieldDisplacementField(
       );
     }
   }
-  // The inverse field moves points (mesh vertices) directly; it is optional.
-  let inverse: DisplacementField | undefined;
-  if (loadInverse && metadata.inverse !== undefined) {
-    try {
-      inverse = await getDisplacementField(
-        registry,
-        { url: metadata.inverse },
-        options,
-        false,
-      );
-    } catch (e) {
-      console.warn(`warp: could not load the inverse field: ${e}`);
-    }
-  }
-  const { vectorAxis, spatialAxes, outputAxes } = metadata;
   const shape = Array.from(zarrFields[0].multiscale.scales[0].metadata.shape);
+  const field = assembleWarpfieldField(
+    groupUrl,
+    metadata,
+    spec,
+    zarrFields,
+    shape,
+  );
+  // The derived field's own inverse is this field.
+  field.deriveInverse = async (deriveOptions) => ({
+    ...(await getDerivedFieldFactory()({
+      url: groupUrl,
+      metadata,
+      spec,
+      volumes: zarrFields,
+      options: deriveOptions,
+    })),
+    inverse: field,
+    derivedFrom: field,
+  });
+  return field;
+}
+
+/**
+ * A field from its metadata and one volume per level (in the metadata's
+ * order); `shape` is the finest level's array shape.
+ */
+export function assembleWarpfieldField(
+  groupUrl: string,
+  metadata: DisplacementFieldMetadata,
+  spec: WarpSpecification,
+  volumes: MultiscaleVolumeChunkSource[],
+  shape: number[],
+): DisplacementField {
+  const { vectorAxis, spatialAxes, outputAxes } = metadata;
   const rank = shape.length;
   const numOutput = outputAxes.length;
   // Output dimensions: the output axes, then the vector axis.
@@ -724,7 +806,7 @@ async function getWarpfieldDisplacementField(
     vectorAxis,
   ];
   const levels: DisplacementFieldLevel[] = metadata.scales.map((s, l) => ({
-    volume: zarrFields[l],
+    volume: volumes[l],
     indexToOutput: [
       ...s.indexToOutput.map((row) => {
         const out = new Array<number>(rank + 1).fill(0);
@@ -786,7 +868,6 @@ async function getWarpfieldDisplacementField(
         ),
       );
     },
-    inverse,
   };
   // A default transform for the warp's transform to modify: model
   // coordinates (voxel n spans [n, n + 1)) -> output coordinates.
@@ -928,7 +1009,9 @@ export async function getDisplacementField(
   registry: DataSourceRegistry,
   spec: WarpSpecification,
   options: GetDisplacementFieldOptions,
-  loadInverse = true,
+  // Look for the stored field of the inverse transformation in the field's
+  // scene (a field opened by its URL alone).
+  findInverse = true,
 ): Promise<DisplacementField> {
   if (isNonZarrUrl(spec.url)) {
     return getGenericDisplacementField(registry, spec, options);
@@ -956,18 +1039,25 @@ export async function getDisplacementField(
     return getGenericDisplacementField(registry, spec, options);
   }
   const metadata = parseDisplacementFieldMetadata(attributes, spec.placement);
-  // A scene's inverse field is in the scene's spaces, not in a placement's.
-  if (loadInverse && spec.placement === undefined) {
-    metadata.inverse = await findInverseInScene(registry, groupUrl, options);
-  }
-  return getWarpfieldDisplacementField(
+  const field = await getWarpfieldDisplacementField(
     registry,
     groupUrl,
     metadata,
     spec,
     options,
-    loadInverse,
   );
+  // A scene's inverse field is in the scene's spaces, not in a placement's.
+  if (findInverse && spec.placement === undefined) {
+    const url = await findInverseInScene(registry, groupUrl, options);
+    if (url !== undefined) {
+      field.inverse = await getStoredInverseField(
+        registry,
+        { ...spec, url },
+        options,
+      );
+    }
+  }
+  return field;
 }
 
 export function canonicalSourceOptions(rank: number): VolumeSourceOptions {
@@ -1408,4 +1498,33 @@ export function getWarpedDataSourceFactory(): WarpedDataSourceFactory {
     );
   }
   return warpedDataSourceFactory;
+}
+
+/**
+ * Derives the field of the inverse transformation from a stored OME-Zarr
+ * displacement field. Registered by `warp/derived_field_frontend.ts` (loaded
+ * with the warped volumes), for the same reason as the warped data source
+ * factory.
+ */
+export type DerivedFieldFactory = (stored: {
+  url: string;
+  metadata: DisplacementFieldMetadata;
+  spec: WarpSpecification;
+  volumes: MultiscaleVolumeChunkSource[];
+  options: { signal?: AbortSignal };
+}) => Promise<DisplacementField>;
+
+let derivedFieldFactory: DerivedFieldFactory | undefined;
+
+export function registerDerivedFieldFactory(factory: DerivedFieldFactory) {
+  derivedFieldFactory = factory;
+}
+
+export function getDerivedFieldFactory(): DerivedFieldFactory {
+  if (derivedFieldFactory === undefined) {
+    throw new Error(
+      "Derived displacement fields are not available: the zarr data source is not enabled",
+    );
+  }
+  return derivedFieldFactory;
 }

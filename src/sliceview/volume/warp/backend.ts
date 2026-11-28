@@ -50,6 +50,10 @@ import {
   volumeDependency,
   withDependencies,
 } from "#src/sliceview/volume/warp/dependencies.js";
+import {
+  assembleFieldBox,
+  chunkGridsInBox,
+} from "#src/sliceview/volume/warp/field_box.js";
 import { DATA_TYPE_ARRAY_CONSTRUCTOR } from "#src/util/data_type.js";
 import type { vec3 } from "#src/util/geom.js";
 import type { RPC } from "#src/worker_rpc.js";
@@ -72,85 +76,10 @@ function chunksInBox(
   lo: number[],
   hi: number[],
 ): { dep: VolumeDependency; grid: number[] }[] {
-  const { rank, chunkDataSize: cds, baseVoxelOffset: base } = access;
-  const gLo = lo.map((v, d) => Math.floor((v - base[d]) / cds[d]));
-  const gHi = hi.map((v, d) => Math.floor((v - base[d]) / cds[d]));
-  const out: { dep: VolumeDependency; grid: number[] }[] = [];
-  const g = gLo.slice();
-  while (true) {
-    out.push({ dep: volumeDependency(source, g), grid: g.slice() });
-    let d = 0;
-    while (d < rank && ++g[d] > gHi[d]) {
-      g[d] = gLo[d];
-      ++d;
-    }
-    if (d === rank) return out;
-  }
-}
-
-/**
- * Copies the index box [lo, hi] (inclusive) of a field whose chunks have
- * been fetched into a dense Fortran-order (dimension 0 fastest)
- * Float32Array; missing chunks are 0.
- */
-function assembleFieldBox(
-  access: FieldAccess,
-  chunks: { grid: number[] }[],
-  data: ChunkData[],
-  lo: number[],
-  hi: number[],
-): Float32Array {
-  const { rank, chunkDataSize: cds, baseVoxelOffset: base } = access;
-  const ub = access.upperVoxelBound;
-  const extent = lo.map((l, d) => hi[d] - l + 1);
-  const outStrides = new Array<number>(rank);
-  for (let d = 0, m = 1; d < rank; ++d) {
-    outStrides[d] = m;
-    m *= extent[d];
-  }
-  const out = new Float32Array(extent.reduce((a, b) => a * b, 1));
-  const fullSize = cds.reduce((a, b) => a * b, 1);
-  chunks.forEach(({ grid }, ci) => {
-    const d0 = data[ci] as ArrayLike<number> | null;
-    if (d0 === null || d0.length === 0) return;
-    const origin = grid.map((g, d) => g * cds[d] + base[d]);
-    // Chunks may be stored clipped at the upper bound.
-    const stored =
-      d0.length === fullSize
-        ? cds
-        : origin.map((o, d) => Math.min(cds[d], ub[d] - o));
-    const strides = new Array<number>(rank);
-    for (let d = 0, m = 1; d < rank; ++d) {
-      strides[d] = m;
-      m *= stored[d];
-    }
-    const cLo = new Array<number>(rank);
-    const cHi = new Array<number>(rank);
-    for (let d = 0; d < rank; ++d) {
-      cLo[d] = Math.max(lo[d], origin[d]);
-      cHi[d] = Math.min(hi[d], origin[d] + stored[d] - 1);
-      if (cLo[d] > cHi[d]) return;
-    }
-    const idx = cLo.slice();
-    const w = cHi[0] - cLo[0] + 1;
-    while (true) {
-      let src = 0;
-      let dst = 0;
-      for (let d = 0; d < rank; ++d) {
-        src += (idx[d] - origin[d]) * strides[d];
-        dst += (idx[d] - lo[d]) * outStrides[d];
-      }
-      const s0 = strides[0];
-      for (let k = 0; k < w; ++k) out[dst + k] = d0[src + k * s0];
-      let d = 1;
-      while (d < rank && ++idx[d] > cHi[d]) {
-        idx[d] = cLo[d];
-        ++d;
-      }
-      if (d >= rank) break;
-    }
-  });
-  return out;
+  return chunkGridsInBox(access, lo, hi).map((grid) => ({
+    dep: volumeDependency(source, grid),
+    grid,
+  }));
 }
 
 // --- Compressed segmentation.

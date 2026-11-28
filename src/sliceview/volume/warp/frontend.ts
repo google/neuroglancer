@@ -73,6 +73,8 @@ import {
   splitChunkDims,
 } from "#src/sliceview/volume/warp/field.js";
 import { attachDependencies } from "#src/sliceview/volume/warp/point_warp_frontend.js";
+// Registers the derived field factory (fields of inverse transformations).
+import "#src/sliceview/volume/warp/derived_field_frontend.js";
 
 // Coarser warped scales are added until the warped grid is at most this many
 // voxels across.
@@ -393,7 +395,21 @@ export async function makeWarpedDataSource(
   field: DisplacementField,
 ): Promise<{ source: DataSource; messages: string[] }> {
   const geometry = getWarpGeometry(moving.modelTransform, field);
-  const messages = geometry.messages.slice();
+  // Points (meshes, skeletons, annotations) move through the field of the
+  // inverse transformation: the stored one (read directly, the fastest), or
+  // the one a derived field inverts, or else one derived from this field.
+  if (
+    field.inverse === undefined &&
+    field.deriveInverse !== undefined &&
+    geometry.isSpatial3d &&
+    moving.subsources.some(
+      (e) =>
+        e.subsource.mesh !== undefined || e.subsource.annotation !== undefined,
+    )
+  ) {
+    field = { ...field, inverse: await field.deriveInverse({}) };
+  }
+  const messages = [...geometry.messages, ...(field.messages ?? [])];
   const subsources: DataSubsourceEntry[] = [];
   for (const entry of moving.subsources) {
     const { volume, segmentPropertyMap, mesh, annotation } = entry.subsource;

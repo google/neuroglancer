@@ -60,15 +60,17 @@ first instead, before ``pre``.
 To draw the source, Neuroglancer pulls each output point back through the
 transformation, so it needs the field in the output-to-source direction. A
 displacement field holds vectors :math:`u` sampled on one side, and
-:math:`p \mapsto p + u(p)` maps that side to the other. The transformation must
-therefore give the field of the inverse direction, sampled on the output side,
-in one of two ways:
+:math:`p \mapsto p + u(p)` maps that side to the other. The field of that
+direction, sampled on the output side, is used as it is when the
+transformation gives it:
 
 - as ``inverseOf`` a ``displacements``;
 - as a ``bijection`` whose ``inverse`` holds it.
 
-A ``displacements`` alone, in the forward direction, is refused with a message
-saying so.
+A ``displacements`` in the forward direction is used too: Neuroglancer derives
+its inverse, chunk by chunk where the view needs it (see
+:ref:`transform-source-derived`). So one stored field is enough; a stored
+field of each direction saves that work, and is used whenever it is given.
 
 1. A source without a transform source
 --------------------------------------
@@ -335,10 +337,17 @@ A field given alone has these options:
 - ``vectorUnit``: the unit of the vectors;
 - ``fieldTransform``: places the field. This is JSON only.
 
-When a warpfield group belongs to an OME-Zarr scene, a field of the inverse
-transformation found in the scene is used to move points (mesh and skeleton
-vertices, annotations) directly. Without one, they are found by solving on the
-field.
+Points (mesh and skeleton vertices, annotations) move through the field of
+the inverse transformation. When the scene stores it (the other field of a
+``bijection``, or a scene's ``bijection`` using a field given alone), it is read
+directly: that is the fastest. Otherwise it is derived from the field the
+volume is drawn with (see :ref:`transform-source-derived`). For fields that are
+not OME-Zarr (NIfTI), points are found by solving on the field (Newton's
+method).
+
+A stored pair is trusted to be consistent: if the two fields disagree, points
+follow the inverse field while the volume follows the other, and they drift
+apart by as much. Storing one field avoids that, at the cost of deriving.
 
 .. _transform-source-prepend:
 
@@ -477,6 +486,34 @@ the volume's warp, so that they stay on the warped image.
 
 All of these need a field that displaces exactly the 3 spatial dimensions of
 the source.
+
+.. _transform-source-derived:
+
+Deriving the inverse of a field
+-------------------------------
+
+When a field is needed in the direction opposite to the one stored, and the
+scene does not store that direction too (to draw a volume through a forward
+``displacements``, or to move points when only the volume's field is stored),
+Neuroglancer derives it:
+
+- **Exactly, without iteration.** Each cell of the stored field is split into
+  five tetrahedra (Ashburner, Andersson & Friston, NeuroImage 1999 and Human
+  Brain Mapping 2000). On a tetrahedron the field's map is affine, so it is
+  inverted exactly. Where the field folds, the solution with the smallest
+  displacement is kept. Points the field does not reach are empty.
+- **Chunk by chunk.** The derived field has the stored field's levels. A
+  derived chunk is computed when the view needs it, from only the stored chunks
+  that can map into it.
+- **Found through the pyramid.** Those stored chunks are found by walking the
+  stored field's levels from the coarsest down: a coarse cell maps within the
+  range of its corner displacements, plus how far the finest level can be from
+  that level's interpolation. ``attributes.warpfield.levels[].interpolation_error.max``
+  (with the codec ``error_bound``) gives that exactly. Without it, each level is
+  assumed to be within one of its samples, and the layer says so: where a field
+  deviates more (tears, folds), the inverse may then have small gaps.
+- **A field with one level** has no pyramid to search: each derived chunk reads
+  all of it, and the layer warns when it is large.
 
 The spatial index of an annotation source keeps the source's grid, placed by
 the linear part of the transformation and extended to where the source's

@@ -20,7 +20,8 @@
  * in the space of the field. A point v (moving space) is placed at the point
  * p of the field's space with p + u(p) = v, the inverse of the volume warp
  * W(x) = M(x + u(x)), so that points stay on the warped image: directly with
- * the field of the inverse transformation when one is given, otherwise by
+ * the field of the inverse transformation (stored, or for an OME-Zarr field
+ * derived from it: `derived_field.ts`), otherwise (other formats, e.g. NIfTI) by
  * Newton's method on the field itself.
  */
 

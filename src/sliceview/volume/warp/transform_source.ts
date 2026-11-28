@@ -69,6 +69,7 @@ import type {
 } from "#src/sliceview/volume/warp/field.js";
 import {
   getDisplacementField,
+  getStoredInverseField,
   getWarpedDataSourceFactory,
   isDisplacementField,
   isNonZarrUrl,
@@ -452,19 +453,50 @@ export async function applyTransformSource(
   // axes; its own units.
   const { spaceAxes } = chain.field;
   const n = spaceAxes.length;
-  const field = await getDisplacementField(
+  const placement = {
+    affine: spaceAxes.map((_, r) =>
+      Array.from({ length: n + 1 }, (_, c) => (c === r ? 1 : 0)),
+    ),
+    axes: spaceAxes.map((i) => ({ name: outputDims[i].name })),
+  };
+  const stored = await getDisplacementField(
     registry,
-    {
-      url: chain.field.url,
-      placement: {
-        affine: spaceAxes.map((_, r) =>
-          Array.from({ length: n + 1 }, (_, c) => (c === r ? 1 : 0)),
-        ),
-        axes: spaceAxes.map((i) => ({ name: outputDims[i].name })),
-      },
-    },
+    { url: chain.field.url, placement },
     options,
   );
+  // A bijection's other field moves points directly (else its inverse is
+  // derived from the field, see `makeWarpedDataSource`), placed in this
+  // field's coordinates.
+  const inverseField = chain.field.inverse;
+  if (inverseField !== undefined) {
+    const m = inverseField.placement;
+    const rank = chain.outputAxes.length;
+    stored.inverse = await getStoredInverseField(
+      registry,
+      {
+        url: inverseField.url,
+        placement: {
+          affine: spaceAxes.map((r) => [
+            ...spaceAxes.map((c) => m[c * (rank + 1) + r]),
+            m[rank * (rank + 1) + r],
+          ]),
+          axes: placement.axes,
+        },
+      },
+      options,
+    );
+  }
+  // A field that maps the other way is drawn with its derived inverse.
+  let field = stored;
+  if (chain.field.derive) {
+    if (stored.deriveInverse === undefined) {
+      throw new Error(
+        `warp: ${chain.field.url} maps the other way, and its inverse can ` +
+          "only be derived for an OME-Zarr displacement field",
+      );
+    }
+    field = await stored.deriveInverse(options);
+  }
   const fieldDims = outputDims.map((d, i) => {
     if (!spaceAxes.includes(i)) return d;
     const f = field.outputNames.indexOf(d.name);

@@ -1517,10 +1517,21 @@ describe("OME-Zarr 0.6 transformations with a displacement field (RFC-5)", () =>
       inverse: field("inv"),
     });
     expect(parse(t).field?.url).toBe("http://host/data/img.zarr/inv/");
+    // The other field moves points.
+    const identity = plain(
+      homogeneous([
+        [1, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+      ]),
+    );
+    expect(parse(t).field?.inverse?.url).toBe("http://host/data/img.zarr/fwd/");
+    expect(plain(parse(t).field!.inverse!.placement)).toEqual(identity);
     // Inverted: drawn from the output system into the input system, so the
     // pull-back is the transformation itself.
     const inverted = parse(t, zyx, true);
     expect(inverted.field?.url).toBe("http://host/data/img.zarr/fwd/");
+    expect(inverted.field?.inverse?.url).toBe("http://host/data/img.zarr/inv/");
     // pre: (mirror ∘ swap)⁻¹ = swap ∘ mirror; post: translation⁻¹ ∘ swap:
     // (z, y, x) -> (z - 1, x + 2, y - 1.5).
     expect(plain(inverted.pre)).toEqual(
@@ -1541,6 +1552,59 @@ describe("OME-Zarr 0.6 transformations with a displacement field (RFC-5)", () =>
         ]),
       ),
     );
+  });
+
+  it("places a bijection's other field, if it is the inverse", () => {
+    // inv = swap ∘ D ∘ swap, fwd = D': D⁻¹ = swap ∘ D' ∘ swap, D' placed by
+    // the swap.
+    const t = chain({
+      type: "bijection",
+      forward: { type: "displacements", path: "fwd" },
+      inverse: field("inv"),
+    });
+    const { inverse } = parse(t).field!;
+    expect(inverse?.url).toBe("http://host/data/img.zarr/fwd/");
+    expect(plain(inverse!.placement)).toEqual(plain(homogeneous(swapYX)));
+    // Fields between translations (sampled on different grids).
+    const shifted = (path: string, s: number[]) => ({
+      type: "sequence",
+      transformations: [
+        { type: "translation", translation: s },
+        { type: "displacements", path },
+        { type: "translation", translation: s.map((x) => -x) },
+      ],
+    });
+    const u = parse({
+      type: "bijection",
+      forward: shifted("fwd", [250, 250, 250]),
+      inverse: shifted("inv", [1325, 75, -475]),
+    }).field!;
+    expect(u.url).toBe("http://host/data/img.zarr/inv/");
+    expect(plain(u.inverse!.placement)).toEqual(
+      plain(
+        homogeneous([
+          [1, 0, 0, 1075],
+          [0, 1, 0, -175],
+          [0, 0, 1, -725],
+        ]),
+      ),
+    );
+    // Not a placement: D⁻¹ = D' ∘ scale.
+    const v = parse({
+      type: "bijection",
+      forward: {
+        type: "sequence",
+        transformations: [
+          { type: "scale", scale: [2, 2, 2] },
+          { type: "displacements", path: "fwd" },
+        ],
+      },
+      inverse: { type: "displacements", path: "inv" },
+    }).field!;
+    expect(v).toEqual({
+      url: "http://host/data/img.zarr/inv/",
+      spaceAxes: [0, 1, 2],
+    });
   });
 
   it("keeps the last linear part after the field as post", () => {
@@ -1637,10 +1701,33 @@ describe("OME-Zarr 0.6 transformations with a displacement field (RFC-5)", () =>
     );
   });
 
-  it("refuses a forward field, two fields, and coordinates", () => {
-    expect(() => parse({ type: "displacements", path: "f" })).toThrow(
-      /needs the inverse/,
+  it("derives the inverse of a field that maps the other way", () => {
+    // The same placement as with inverseOf: only the field's direction
+    // differs, and drawing derives its inverse.
+    const viaInverse = parse(
+      chain({ type: "inverseOf", transformation: field("../f.zarr") }),
     );
+    const direct = parse(chain(field("../f.zarr")));
+    expect(plain(direct.pre)).toEqual(plain(viaInverse.pre));
+    expect(plain(direct.post)).toEqual(plain(viaInverse.post));
+    expect(direct.field).toEqual({
+      url: "http://host/data/f.zarr/",
+      spaceAxes: [0, 1, 2],
+      derive: true,
+    });
+    // Inverted, an inverseOf field is the one that maps the other way.
+    const inverted = parse(
+      chain({ type: "inverseOf", transformation: field("../f.zarr") }),
+      zyx,
+      true,
+    );
+    expect(inverted.field?.derive).toBe(true);
+    expect(parse(chain(field("../f.zarr")), zyx, true).field?.derive).toBe(
+      undefined,
+    );
+  });
+
+  it("refuses two fields, and coordinates", () => {
     expect(() =>
       parse({
         type: "sequence",
